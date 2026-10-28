@@ -17,7 +17,149 @@ import {
   vehicles,
 } from './schema.ts';
 
-// --- USUÁRIOS ---
+// --- USUÁRIOS & AUTENTICAÇÃO ---
+export async function authenticateUser(email: string, passwordAttempt: string) {
+  try {
+    const result = await db.select().from(users).where(eq(users.email, email.trim().toLowerCase()));
+    if (result.length === 0) {
+      throw new Error('E-mail não cadastrado no sistema.');
+    }
+    const user = result[0];
+    if (!user.isActive) {
+      throw new Error('Usuário inativo. Entre em contato com a administração.');
+    }
+    if (user.password !== passwordAttempt) {
+      throw new Error('Senha incorreta.');
+    }
+    // Retorna dados do usuário sem expor senha desnecessariamente
+    return {
+      id: user.id,
+      uid: user.uid,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      permissions: user.permissions,
+      isActive: user.isActive,
+    };
+  } catch (error) {
+    console.error('authenticateUser failed:', error);
+    throw new Error(error instanceof Error ? error.message : 'Falha na autenticação.', { cause: error });
+  }
+}
+
+export async function getUsersList() {
+  try {
+    return await db
+      .select({
+        id: users.id,
+        uid: users.uid,
+        email: users.email,
+        name: users.name,
+        role: users.role,
+        permissions: users.permissions,
+        isActive: users.isActive,
+        createdAt: users.createdAt,
+      })
+      .from(users)
+      .orderBy(desc(users.createdAt));
+  } catch (error) {
+    console.error('getUsersList failed:', error);
+    throw new Error('Falha ao listar usuários do sistema.', { cause: error });
+  }
+}
+
+export async function createSystemUser(data: {
+  name: string;
+  email: string;
+  password: string;
+  role: string;
+  permissions?: string;
+}) {
+  try {
+    const cleanEmail = data.email.trim().toLowerCase();
+    const existing = await db.select().from(users).where(eq(users.email, cleanEmail));
+    if (existing.length > 0) {
+      throw new Error('Já existe um usuário cadastrado com este e-mail.');
+    }
+
+    const uid = `usr-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const res = await db
+      .insert(users)
+      .values({
+        uid,
+        email: cleanEmail,
+        password: data.password,
+        name: data.name.trim(),
+        role: data.role,
+        permissions: data.permissions || (data.role === 'sindico' ? '["all"]' : '["portaria","encomendas","acessos","veiculos"]'),
+        isActive: true,
+      })
+      .returning();
+
+    return {
+      id: res[0].id,
+      uid: res[0].uid,
+      email: res[0].email,
+      name: res[0].name,
+      role: res[0].role,
+      permissions: res[0].permissions,
+      isActive: res[0].isActive,
+    };
+  } catch (error) {
+    console.error('createSystemUser failed:', error);
+    throw new Error(error instanceof Error ? error.message : 'Falha ao cadastrar usuário.', { cause: error });
+  }
+}
+
+export async function updateSystemUser(
+  id: number,
+  data: {
+    name?: string;
+    role?: string;
+    password?: string;
+    permissions?: string;
+    isActive?: boolean;
+  }
+) {
+  try {
+    const updateData: any = {};
+    if (data.name) updateData.name = data.name.trim();
+    if (data.role) updateData.role = data.role;
+    if (data.password && data.password.trim()) updateData.password = data.password.trim();
+    if (data.permissions) updateData.permissions = data.permissions;
+    if (data.isActive !== undefined) updateData.isActive = data.isActive;
+
+    const res = await db.update(users).set(updateData).where(eq(users.id, id)).returning();
+    return {
+      id: res[0].id,
+      uid: res[0].uid,
+      email: res[0].email,
+      name: res[0].name,
+      role: res[0].role,
+      permissions: res[0].permissions,
+      isActive: res[0].isActive,
+    };
+  } catch (error) {
+    console.error('updateSystemUser failed:', error);
+    throw new Error('Falha ao atualizar usuário.', { cause: error });
+  }
+}
+
+export async function deleteSystemUser(id: number) {
+  try {
+    // Proibir deletar o usuário master
+    const userToDel = await db.select().from(users).where(eq(users.id, id));
+    if (userToDel[0]?.email === 'administrativo@novabrasil.com') {
+      throw new Error('Não é permitido excluir o usuário Administrador Master do sistema.');
+    }
+    await db.delete(users).where(eq(users.id, id));
+    return { success: true };
+  } catch (error) {
+    console.error('deleteSystemUser failed:', error);
+    throw new Error(error instanceof Error ? error.message : 'Falha ao excluir usuário.', { cause: error });
+  }
+}
+
 export async function getOrCreateUser(uid: string, email: string, name: string, role: string = 'portaria') {
   try {
     const existing = await db.select().from(users).where(eq(users.uid, uid));

@@ -32,6 +32,11 @@ import {
   getIncidents,
   getOrCreateUser,
   getPolls,
+  authenticateUser,
+  getUsersList,
+  createSystemUser,
+  updateSystemUser,
+  deleteSystemUser,
   getReservations,
   getResidents,
   getUnits,
@@ -59,7 +64,70 @@ app.use(express.json({ limit: '10mb' }));
 
 // --- ROTAS DA API ---
 
-// 1. Perfil e Sincronização
+// 1. Autenticação e Login com E-mail e Senha
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ error: 'E-mail e senha são obrigatórios.' });
+    }
+    const user = await authenticateUser(email, password);
+    res.json(user);
+  } catch (error: any) {
+    res.status(401).json({ error: error.message || 'Credenciais inválidas.' });
+  }
+});
+
+// 2. Gestão de Usuários e Níveis de Acesso (Exclusivo Síndico / Administrador)
+app.get('/api/users', requireAuth, requireSindico, async (_req, res) => {
+  try {
+    const users = await getUsersList();
+    res.json(users);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/users', requireAuth, requireSindico, async (req, res) => {
+  try {
+    const { name, email, password, role, permissions } = req.body;
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: 'Nome, e-mail e senha são obrigatórios.' });
+    }
+    const newUser = await createSystemUser({
+      name,
+      email,
+      password,
+      role: role || 'portaria',
+      permissions: typeof permissions === 'string' ? permissions : JSON.stringify(permissions || []),
+    });
+    res.status(201).json(newUser);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.put('/api/users/:id', requireAuth, requireSindico, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const updated = await updateSystemUser(id, req.body);
+    res.json(updated);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.delete('/api/users/:id', requireAuth, requireSindico, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    await deleteSystemUser(id);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// 3. Perfil e Sincronização
 app.post('/api/auth/sync', requireAuth, async (req: AuthRequest, res) => {
   try {
     const { name, email, role } = req.body;

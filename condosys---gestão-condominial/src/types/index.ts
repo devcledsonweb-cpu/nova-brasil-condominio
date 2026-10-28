@@ -6,6 +6,19 @@ export interface UserProfile {
   email: string;
   name: string;
   role: UserRole;
+  permissions?: string | null;
+  isActive?: boolean;
+}
+
+export interface SystemUser {
+  id: number;
+  uid: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  permissions?: string | null;
+  isActive: boolean;
+  createdAt?: string;
 }
 
 export interface Block {

@@ -70,12 +70,12 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab, onOpenR
         </button>
       </nav>
 
-      {/* Zona 3: Ação primária (Alternador de Perfil / Acesso Administrativo) */}
+      {/* Zona 3: Ação primária (Alternador de Perfil / Acesso Administrativo e Desconectar) */}
       <div className="flex items-center gap-3 shrink-0">
         <button
           onClick={onOpenRoleModal}
           title="Alternar entre Síndico e Portaria"
-          className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-50 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+          className="hidden sm:flex items-center gap-2 px-3 py-1.5 text-xs font-medium border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-50 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
         >
           {role === 'sindico' ? (
             <ShieldCheck className="w-3.5 h-3.5 text-slate-900" />
@@ -85,24 +85,14 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab, onOpenR
           <span>{role === 'sindico' ? 'Acesso: Síndico' : 'Acesso: Portaria'}</span>
         </button>
 
-        {firebaseUser ? (
-          <button
-            onClick={() => signOut()}
-            className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-900 transition-colors whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer"
-            title="Desconectar"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Sair</span>
-          </button>
-        ) : (
-          <button
-            onClick={() => signInWithGoogle()}
-            className="px-3.5 py-1.5 text-xs font-medium text-white bg-slate-900 rounded-lg hover:bg-slate-800 transition-colors whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer"
-          >
-            <LogIn className="w-3.5 h-3.5" />
-            <span>Entrar Google</span>
-          </button>
-        )}
+        <button
+          onClick={() => signOut()}
+          className="px-3 py-1.5 text-xs font-medium text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer"
+          title="Encerrar sessão"
+        >
+          <LogOut className="w-3.5 h-3.5" />
+          <span>Sair</span>
+        </button>
       </div>
     </header>
   );

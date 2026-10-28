@@ -11,10 +11,13 @@ import {
 // 1. Usuários do sistema administrativo (Síndico e Portaria)
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
-  uid: text('uid').notNull().unique(), // Firebase Auth UID
-  email: text('email').notNull(),
+  uid: text('uid').notNull().unique(), // Auth UID ou ID único
+  email: text('email').notNull().unique(),
+  password: text('password').default(''),
   name: text('name').notNull(),
   role: text('role').notNull().default('portaria'), // 'sindico' | 'portaria'
+  permissions: text('permissions').default('["all"]'),
+  isActive: boolean('is_active').default(true),
   createdAt: timestamp('created_at').defaultNow(),
 });
 

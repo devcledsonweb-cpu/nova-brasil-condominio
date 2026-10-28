@@ -11,6 +11,8 @@ import { IncidentsView } from './components/IncidentsView.tsx';
 import { ReservationsView } from './components/ReservationsView.tsx';
 import { AccessDeliveriesView } from './components/AccessDeliveriesView.tsx';
 import { AnnouncementsView } from './components/AnnouncementsView.tsx';
+import { LoginView } from './components/LoginView.tsx';
+import { UsersManagementView } from './components/UsersManagementView.tsx';
 import {
   AccessLog,
   Announcement,
@@ -28,12 +30,12 @@ import {
 import { Loader2 } from 'lucide-react';
 
 function NovaBrasilMain() {
-  const { getAuthHeaders, role } = useAuth();
+  const { getAuthHeaders, role, isAuthenticated, loading: authLoading } = useAuth();
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // Estados dos Módulos
+  // Estados dos Módulos (Hooks chamados incondicionalmente no topo)
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
@@ -98,12 +100,29 @@ function NovaBrasilMain() {
   };
 
   useEffect(() => {
-    fetchAllData();
-  }, [role]);
+    if (isAuthenticated) {
+      fetchAllData();
+    } else {
+      setLoading(false);
+    }
+  }, [role, isAuthenticated]);
 
   const pendingDeliveries = deliveries.filter((d) => d.status === 'aguardando');
   const openIncidents = incidents.filter((i) => i.status === 'aberta');
   const activeVisitors = accessLogs.filter((l) => !l.exitTime);
+
+  // Retornos condicionais após a declaração de TODOS os hooks
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-slate-100 flex items-center justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-slate-800" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <LoginView />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-100/60 flex flex-col font-sans text-slate-900 antialiased">
@@ -203,6 +222,10 @@ function NovaBrasilMain() {
                   units={units}
                   onRefresh={fetchAllData}
                 />
+              )}
+
+              {activeTab === 'usuarios' && (
+                <UsersManagementView onRefresh={fetchAllData} />
               )}
             </>
           )}

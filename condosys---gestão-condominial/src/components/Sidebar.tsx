@@ -11,6 +11,7 @@ import {
   Megaphone,
   UserCog,
   CheckCircle2,
+  KeyRound,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -81,6 +82,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: Megaphone,
       description: 'Avisos oficiais e votações',
     },
+    ...(role === 'sindico'
+      ? [
+          {
+            id: 'usuarios',
+            label: 'Gestão de Usuários',
+            icon: KeyRound,
+            description: 'Controle de acessos e senhas',
+          },
+        ]
+      : []),
   ];
 
   return (
