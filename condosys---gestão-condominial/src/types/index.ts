@@ -1,5 +1,27 @@
 export type UserRole = 'sindico' | 'portaria';
 
+export interface Condominium {
+  id: number;
+  name: string;
+  cnpj?: string | null;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zipCode?: string | null;
+  totalUnits?: number | null;
+  sindicoName?: string | null;
+  sindicoPhone?: string | null;
+  sindicoEmail?: string | null;
+  status: 'ativo' | 'inativo' | 'implantacao';
+  createdAt?: string;
+  // Computed / aggregated counts
+  blocksCount?: number;
+  unitsCount?: number;
+  residentsCount?: number;
+  vehiclesCount?: number;
+  usersCount?: number;
+}
+
 export interface UserProfile {
   id?: number;
   uid: string;
@@ -7,6 +29,8 @@ export interface UserProfile {
   name: string;
   role: UserRole;
   permissions?: string | null;
+  condoId?: number | null;
+  condoName?: string;
   isActive?: boolean;
 }
 
@@ -17,31 +41,41 @@ export interface SystemUser {
   name: string;
   role: UserRole;
   permissions?: string | null;
+  condoId?: number | null;
+  condoName?: string;
   isActive: boolean;
   createdAt?: string;
 }
 
 export interface Block {
   id: number;
+  condoId?: number | null;
+  condoName?: string;
   name: string;
   description?: string | null;
   totalFloors?: number | null;
+  unitsCount?: number;
   createdAt?: string;
 }
 
 export interface Unit {
   id: number;
+  condoId?: number | null;
+  condoName?: string;
   blockId: number;
   blockName?: string;
   number: string;
   floor?: number | null;
   unitType?: string | null;
   notes?: string | null;
+  residentsCount?: number;
   createdAt?: string;
 }
 
 export interface Resident {
   id: number;
+  condoId?: number | null;
+  condoName?: string;
   unitId: number;
   unitNumber?: string;
   blockId?: number;
@@ -58,6 +92,8 @@ export interface Resident {
 
 export interface Vehicle {
   id: number;
+  condoId?: number | null;
+  condoName?: string;
   unitId: number;
   unitNumber?: string;
   blockId?: number;
@@ -73,6 +109,8 @@ export interface Vehicle {
 
 export interface Incident {
   id: number;
+  condoId?: number | null;
+  condoName?: string;
   unitId?: number | null;
   unitNumber?: string | null;
   blockName?: string | null;
@@ -92,6 +130,8 @@ export interface Incident {
 
 export interface CommonArea {
   id: number;
+  condoId?: number | null;
+  condoName?: string;
   name: string;
   capacity: number;
   description?: string | null;
@@ -102,6 +142,8 @@ export interface CommonArea {
 
 export interface Reservation {
   id: number;
+  condoId?: number | null;
+  condoName?: string;
   areaId: number;
   areaName?: string;
   cleaningFee?: string | null;
@@ -120,6 +162,8 @@ export interface Reservation {
 
 export interface AccessLog {
   id: number;
+  condoId?: number | null;
+  condoName?: string;
   visitorType: 'visitante' | 'prestador';
   name: string;
   document: string;
@@ -137,6 +181,8 @@ export interface AccessLog {
 
 export interface Delivery {
   id: number;
+  condoId?: number | null;
+  condoName?: string;
   unitId: number;
   unitNumber?: string;
   blockName?: string;
@@ -154,6 +200,8 @@ export interface Delivery {
 
 export interface Announcement {
   id: number;
+  condoId?: number | null;
+  condoName?: string;
   title: string;
   content: string;
   priority: 'informativo' | 'importante' | 'urgente';
@@ -181,6 +229,8 @@ export interface PollVote {
 
 export interface Poll {
   id: number;
+  condoId?: number | null;
+  condoName?: string;
   title: string;
   description?: string | null;
   active: boolean;
@@ -192,6 +242,7 @@ export interface Poll {
 }
 
 export interface DashboardStats {
+  totalCondos?: number;
   totalBlocks: number;
   totalUnits: number;
   totalResidents: number;

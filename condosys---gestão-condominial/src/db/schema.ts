@@ -8,7 +8,24 @@ import {
   timestamp,
 } from 'drizzle-orm/pg-core';
 
-// 1. Usuários do sistema administrativo (Síndico e Portaria)
+// 1. Condomínios (Empresa gerencia múltiplos condomínios)
+export const condominiums = pgTable('condominiums', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull(), // ex: "Residencial Jardins", "Edifício Solar da Serra"
+  cnpj: text('cnpj'),
+  address: text('address'),
+  city: text('city'),
+  state: text('state'),
+  zipCode: text('zip_code'),
+  totalUnits: integer('total_units').default(0),
+  sindicoName: text('sindico_name'),
+  sindicoPhone: text('sindico_phone'),
+  sindicoEmail: text('sindico_email'),
+  status: text('status').default('ativo'), // 'ativo', 'inativo', 'implantacao'
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// 2. Usuários do sistema administrativo (Administrador Geral, Síndicos e Portaria)
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
   uid: text('uid').notNull().unique(), // Auth UID ou ID único
@@ -17,22 +34,25 @@ export const users = pgTable('users', {
   name: text('name').notNull(),
   role: text('role').notNull().default('portaria'), // 'sindico' | 'portaria'
   permissions: text('permissions').default('["all"]'),
+  condoId: integer('condo_id').references(() => condominiums.id, { onDelete: 'set null' }), // null = Administrador Geral / Todos os condomínios
   isActive: boolean('is_active').default(true),
   createdAt: timestamp('created_at').defaultNow(),
 });
 
-// 2. Blocos do condomínio
+// 3. Blocos de cada condomínio
 export const blocks = pgTable('blocks', {
   id: serial('id').primaryKey(),
+  condoId: integer('condo_id').references(() => condominiums.id, { onDelete: 'cascade' }),
   name: text('name').notNull(), // ex: "Bloco A - Acácias"
   description: text('description'),
   totalFloors: integer('total_floors').default(4),
   createdAt: timestamp('created_at').defaultNow(),
 });
 
-// 3. Unidades de apartamentos
+// 4. Unidades de apartamentos
 export const units = pgTable('units', {
   id: serial('id').primaryKey(),
+  condoId: integer('condo_id').references(() => condominiums.id, { onDelete: 'cascade' }),
   blockId: integer('block_id')
     .references(() => blocks.id, { onDelete: 'cascade' })
     .notNull(),
@@ -43,9 +63,10 @@ export const units = pgTable('units', {
   createdAt: timestamp('created_at').defaultNow(),
 });
 
-// 4. Moradores
+// 5. Moradores especificamente de cada condomínio e unidade
 export const residents = pgTable('residents', {
   id: serial('id').primaryKey(),
+  condoId: integer('condo_id').references(() => condominiums.id, { onDelete: 'cascade' }),
   unitId: integer('unit_id')
     .references(() => units.id, { onDelete: 'cascade' })
     .notNull(),
@@ -59,9 +80,10 @@ export const residents = pgTable('residents', {
   createdAt: timestamp('created_at').defaultNow(),
 });
 
-// 5. Veículos e Vagas
+// 6. Veículos e Vagas
 export const vehicles = pgTable('vehicles', {
   id: serial('id').primaryKey(),
+  condoId: integer('condo_id').references(() => condominiums.id, { onDelete: 'cascade' }),
   unitId: integer('unit_id')
     .references(() => units.id, { onDelete: 'cascade' })
     .notNull(),
@@ -74,9 +96,10 @@ export const vehicles = pgTable('vehicles', {
   createdAt: timestamp('created_at').defaultNow(),
 });
 
-// 6. Livro de Ocorrências
+// 7. Livro de Ocorrências
 export const incidents = pgTable('incidents', {
   id: serial('id').primaryKey(),
+  condoId: integer('condo_id').references(() => condominiums.id, { onDelete: 'cascade' }),
   unitId: integer('unit_id').references(() => units.id, { onDelete: 'set null' }),
   title: text('title').notNull(),
   category: text('category').notNull(), // 'barulho', 'animais', 'estacionamento', 'patrimonio', 'lixo', 'convivencia', 'outros'
@@ -92,9 +115,10 @@ export const incidents = pgTable('incidents', {
   createdAt: timestamp('created_at').defaultNow(),
 });
 
-// 7. Áreas Comuns
+// 8. Áreas Comuns
 export const commonAreas = pgTable('common_areas', {
   id: serial('id').primaryKey(),
+  condoId: integer('condo_id').references(() => condominiums.id, { onDelete: 'cascade' }),
   name: text('name').notNull(), // Churrasqueira Gourmet, Salão de Festas, Quadra Poliesportiva
   capacity: integer('capacity').notNull().default(30),
   description: text('description'),
@@ -103,9 +127,10 @@ export const commonAreas = pgTable('common_areas', {
   active: boolean('active').default(true),
 });
 
-// 8. Reservas de Áreas Comuns
+// 9. Reservas de Áreas Comuns
 export const reservations = pgTable('reservations', {
   id: serial('id').primaryKey(),
+  condoId: integer('condo_id').references(() => condominiums.id, { onDelete: 'cascade' }),
   areaId: integer('area_id')
     .references(() => commonAreas.id, { onDelete: 'cascade' })
     .notNull(),
@@ -122,9 +147,10 @@ export const reservations = pgTable('reservations', {
   createdAt: timestamp('created_at').defaultNow(),
 });
 
-// 9. Controle de Portaria: Acesso de Visitantes e Prestadores
+// 10. Controle de Portaria: Acesso de Visitantes e Prestadores
 export const accessLogs = pgTable('access_logs', {
   id: serial('id').primaryKey(),
+  condoId: integer('condo_id').references(() => condominiums.id, { onDelete: 'cascade' }),
   visitorType: text('visitor_type').notNull().default('visitante'), // 'visitante' | 'prestador'
   name: text('name').notNull(),
   document: text('document').notNull(), // RG / CPF
@@ -140,9 +166,10 @@ export const accessLogs = pgTable('access_logs', {
   registeredBy: text('registered_by'),
 });
 
-// 10. Encomendas recebidas na Portaria
+// 11. Encomendas recebidas na Portaria
 export const deliveries = pgTable('deliveries', {
   id: serial('id').primaryKey(),
+  condoId: integer('condo_id').references(() => condominiums.id, { onDelete: 'cascade' }),
   unitId: integer('unit_id')
     .references(() => units.id, { onDelete: 'cascade' })
     .notNull(),
@@ -158,9 +185,10 @@ export const deliveries = pgTable('deliveries', {
   receivedByPortaria: text('received_by_portaria'),
 });
 
-// 11. Mural de Avisos e Comunicados Oficiais
+// 12. Mural de Avisos e Comunicados Oficiais
 export const announcements = pgTable('announcements', {
   id: serial('id').primaryKey(),
+  condoId: integer('condo_id').references(() => condominiums.id, { onDelete: 'cascade' }),
   title: text('title').notNull(),
   content: text('content').notNull(),
   priority: text('priority').default('informativo'), // 'informativo', 'importante', 'urgente'
@@ -169,9 +197,10 @@ export const announcements = pgTable('announcements', {
   createdAt: timestamp('created_at').defaultNow(),
 });
 
-// 12. Enquetes e Votações
+// 13. Enquetes e Votações
 export const polls = pgTable('polls', {
   id: serial('id').primaryKey(),
+  condoId: integer('condo_id').references(() => condominiums.id, { onDelete: 'cascade' }),
   title: text('title').notNull(),
   description: text('description'),
   active: boolean('active').default(true),
@@ -204,11 +233,41 @@ export const pollVotes = pgTable('poll_votes', {
 });
 
 // Relacionamentos Drizzle
-export const blocksRelations = relations(blocks, ({ many }) => ({
+export const condominiumsRelations = relations(condominiums, ({ many }) => ({
+  blocks: many(blocks),
+  units: many(units),
+  residents: many(residents),
+  vehicles: many(vehicles),
+  incidents: many(incidents),
+  commonAreas: many(commonAreas),
+  reservations: many(reservations),
+  accessLogs: many(accessLogs),
+  deliveries: many(deliveries),
+  announcements: many(announcements),
+  polls: many(polls),
+  users: many(users),
+}));
+
+export const usersRelations = relations(users, ({ one }) => ({
+  condo: one(condominiums, {
+    fields: [users.condoId],
+    references: [condominiums.id],
+  }),
+}));
+
+export const blocksRelations = relations(blocks, ({ one, many }) => ({
+  condo: one(condominiums, {
+    fields: [blocks.condoId],
+    references: [condominiums.id],
+  }),
   units: many(units),
 }));
 
 export const unitsRelations = relations(units, ({ one, many }) => ({
+  condo: one(condominiums, {
+    fields: [units.condoId],
+    references: [condominiums.id],
+  }),
   block: one(blocks, {
     fields: [units.blockId],
     references: [blocks.id],
@@ -222,6 +281,10 @@ export const unitsRelations = relations(units, ({ one, many }) => ({
 }));
 
 export const residentsRelations = relations(residents, ({ one }) => ({
+  condo: one(condominiums, {
+    fields: [residents.condoId],
+    references: [condominiums.id],
+  }),
   unit: one(units, {
     fields: [residents.unitId],
     references: [units.id],
@@ -229,6 +292,10 @@ export const residentsRelations = relations(residents, ({ one }) => ({
 }));
 
 export const vehiclesRelations = relations(vehicles, ({ one }) => ({
+  condo: one(condominiums, {
+    fields: [vehicles.condoId],
+    references: [condominiums.id],
+  }),
   unit: one(units, {
     fields: [vehicles.unitId],
     references: [units.id],
@@ -236,13 +303,29 @@ export const vehiclesRelations = relations(vehicles, ({ one }) => ({
 }));
 
 export const incidentsRelations = relations(incidents, ({ one }) => ({
+  condo: one(condominiums, {
+    fields: [incidents.condoId],
+    references: [condominiums.id],
+  }),
   unit: one(units, {
     fields: [incidents.unitId],
     references: [units.id],
   }),
 }));
 
+export const commonAreasRelations = relations(commonAreas, ({ one, many }) => ({
+  condo: one(condominiums, {
+    fields: [commonAreas.condoId],
+    references: [condominiums.id],
+  }),
+  reservations: many(reservations),
+}));
+
 export const reservationsRelations = relations(reservations, ({ one }) => ({
+  condo: one(condominiums, {
+    fields: [reservations.condoId],
+    references: [condominiums.id],
+  }),
   area: one(commonAreas, {
     fields: [reservations.areaId],
     references: [commonAreas.id],
@@ -254,6 +337,10 @@ export const reservationsRelations = relations(reservations, ({ one }) => ({
 }));
 
 export const accessLogsRelations = relations(accessLogs, ({ one }) => ({
+  condo: one(condominiums, {
+    fields: [accessLogs.condoId],
+    references: [condominiums.id],
+  }),
   unit: one(units, {
     fields: [accessLogs.unitId],
     references: [units.id],
@@ -261,13 +348,28 @@ export const accessLogsRelations = relations(accessLogs, ({ one }) => ({
 }));
 
 export const deliveriesRelations = relations(deliveries, ({ one }) => ({
+  condo: one(condominiums, {
+    fields: [deliveries.condoId],
+    references: [condominiums.id],
+  }),
   unit: one(units, {
     fields: [deliveries.unitId],
     references: [units.id],
   }),
 }));
 
-export const pollsRelations = relations(polls, ({ many }) => ({
+export const announcementsRelations = relations(announcements, ({ one }) => ({
+  condo: one(condominiums, {
+    fields: [announcements.condoId],
+    references: [condominiums.id],
+  }),
+}));
+
+export const pollsRelations = relations(polls, ({ one, many }) => ({
+  condo: one(condominiums, {
+    fields: [polls.condoId],
+    references: [condominiums.id],
+  }),
   options: many(pollOptions),
   votes: many(pollVotes),
 }));

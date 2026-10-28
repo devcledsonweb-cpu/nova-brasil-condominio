@@ -5,6 +5,7 @@ import {
   announcements,
   blocks,
   commonAreas,
+  condominiums,
   deliveries,
   incidents,
   pollOptions,
@@ -17,7 +18,155 @@ import {
   vehicles,
 } from './schema.ts';
 
+// --- GESTÃO DE CONDOMÍNIOS (MULTI-CONDOMÍNIO / MULTI-TENANT) ---
+
+export async function getCondominiums() {
+  try {
+    const list = await db
+      .select({
+        id: condominiums.id,
+        name: condominiums.name,
+        cnpj: condominiums.cnpj,
+        address: condominiums.address,
+        city: condominiums.city,
+        state: condominiums.state,
+        zipCode: condominiums.zipCode,
+        totalUnits: condominiums.totalUnits,
+        sindicoName: condominiums.sindicoName,
+        sindicoPhone: condominiums.sindicoPhone,
+        sindicoEmail: condominiums.sindicoEmail,
+        status: condominiums.status,
+        createdAt: condominiums.createdAt,
+      })
+      .from(condominiums)
+      .orderBy(condominiums.name);
+
+    // Contadores agregados para cada condomínio
+    const results = await Promise.all(
+      list.map(async (c) => {
+        const [blocksCount, unitsCount, residentsCount, usersCount] = await Promise.all([
+          db.select({ count: sql<number>`count(*)::int` }).from(blocks).where(eq(blocks.condoId, c.id)),
+          db.select({ count: sql<number>`count(*)::int` }).from(units).where(eq(units.condoId, c.id)),
+          db.select({ count: sql<number>`count(*)::int` }).from(residents).where(eq(residents.condoId, c.id)),
+          db.select({ count: sql<number>`count(*)::int` }).from(users).where(eq(users.condoId, c.id)),
+        ]);
+
+        return {
+          ...c,
+          status: (c.status as 'ativo' | 'inativo' | 'implantacao') || 'ativo',
+          blocksCount: blocksCount[0]?.count || 0,
+          unitsCount: unitsCount[0]?.count || 0,
+          residentsCount: residentsCount[0]?.count || 0,
+          usersCount: usersCount[0]?.count || 0,
+        };
+      })
+    );
+
+    return results;
+  } catch (error) {
+    console.error('getCondominiums failed:', error);
+    throw new Error('Falha ao listar condomínios.', { cause: error });
+  }
+}
+
+export async function getCondominiumById(id: number) {
+  try {
+    const res = await db.select().from(condominiums).where(eq(condominiums.id, id));
+    return res[0] || null;
+  } catch (error) {
+    console.error('getCondominiumById failed:', error);
+    throw new Error('Falha ao obter condomínio.', { cause: error });
+  }
+}
+
+export async function createCondominium(data: {
+  name: string;
+  cnpj?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  totalUnits?: number;
+  sindicoName?: string;
+  sindicoPhone?: string;
+  sindicoEmail?: string;
+  status?: string;
+}) {
+  try {
+    const res = await db
+      .insert(condominiums)
+      .values({
+        name: data.name.trim(),
+        cnpj: data.cnpj?.trim(),
+        address: data.address?.trim(),
+        city: data.city?.trim(),
+        state: data.state?.trim(),
+        zipCode: data.zipCode?.trim(),
+        totalUnits: data.totalUnits || 0,
+        sindicoName: data.sindicoName?.trim(),
+        sindicoPhone: data.sindicoPhone?.trim(),
+        sindicoEmail: data.sindicoEmail?.trim(),
+        status: data.status || 'ativo',
+      })
+      .returning();
+
+    return res[0];
+  } catch (error) {
+    console.error('createCondominium failed:', error);
+    throw new Error('Falha ao criar condomínio.', { cause: error });
+  }
+}
+
+export async function updateCondominium(
+  id: number,
+  data: {
+    name?: string;
+    cnpj?: string;
+    address?: string;
+    city?: string;
+    state?: string;
+    zipCode?: string;
+    totalUnits?: number;
+    sindicoName?: string;
+    sindicoPhone?: string;
+    sindicoEmail?: string;
+    status?: string;
+  }
+) {
+  try {
+    const updateData: any = {};
+    if (data.name) updateData.name = data.name.trim();
+    if (data.cnpj !== undefined) updateData.cnpj = data.cnpj?.trim();
+    if (data.address !== undefined) updateData.address = data.address?.trim();
+    if (data.city !== undefined) updateData.city = data.city?.trim();
+    if (data.state !== undefined) updateData.state = data.state?.trim();
+    if (data.zipCode !== undefined) updateData.zipCode = data.zipCode?.trim();
+    if (data.totalUnits !== undefined) updateData.totalUnits = data.totalUnits;
+    if (data.sindicoName !== undefined) updateData.sindicoName = data.sindicoName?.trim();
+    if (data.sindicoPhone !== undefined) updateData.sindicoPhone = data.sindicoPhone?.trim();
+    if (data.sindicoEmail !== undefined) updateData.sindicoEmail = data.sindicoEmail?.trim();
+    if (data.status !== undefined) updateData.status = data.status;
+
+    const res = await db.update(condominiums).set(updateData).where(eq(condominiums.id, id)).returning();
+    return res[0];
+  } catch (error) {
+    console.error('updateCondominium failed:', error);
+    throw new Error('Falha ao atualizar condomínio.', { cause: error });
+  }
+}
+
+export async function deleteCondominium(id: number) {
+  try {
+    await db.delete(condominiums).where(eq(condominiums.id, id));
+    return { success: true };
+  } catch (error) {
+    console.error('deleteCondominium failed:', error);
+    throw new Error('Falha ao excluir condomínio.', { cause: error });
+  }
+}
+
 // --- USUÁRIOS & AUTENTICAÇÃO ---
+
 export async function authenticateUser(email: string, passwordAttempt: string) {
   try {
     const result = await db.select().from(users).where(eq(users.email, email.trim().toLowerCase()));
@@ -31,7 +180,13 @@ export async function authenticateUser(email: string, passwordAttempt: string) {
     if (user.password !== passwordAttempt) {
       throw new Error('Senha incorreta.');
     }
-    // Retorna dados do usuário sem expor senha desnecessariamente
+
+    let condoName = undefined;
+    if (user.condoId) {
+      const condoRes = await db.select().from(condominiums).where(eq(condominiums.id, user.condoId));
+      if (condoRes.length > 0) condoName = condoRes[0].name;
+    }
+
     return {
       id: user.id,
       uid: user.uid,
@@ -39,6 +194,8 @@ export async function authenticateUser(email: string, passwordAttempt: string) {
       name: user.name,
       role: user.role,
       permissions: user.permissions,
+      condoId: user.condoId,
+      condoName,
       isActive: user.isActive,
     };
   } catch (error) {
@@ -47,9 +204,9 @@ export async function authenticateUser(email: string, passwordAttempt: string) {
   }
 }
 
-export async function getUsersList() {
+export async function getUsersList(condoId?: number) {
   try {
-    return await db
+    let query = db
       .select({
         id: users.id,
         uid: users.uid,
@@ -57,11 +214,18 @@ export async function getUsersList() {
         name: users.name,
         role: users.role,
         permissions: users.permissions,
+        condoId: users.condoId,
+        condoName: condominiums.name,
         isActive: users.isActive,
         createdAt: users.createdAt,
       })
       .from(users)
-      .orderBy(desc(users.createdAt));
+      .leftJoin(condominiums, eq(users.condoId, condominiums.id));
+
+    if (condoId) {
+      return await query.where(eq(users.condoId, condoId)).orderBy(desc(users.createdAt));
+    }
+    return await query.orderBy(desc(users.createdAt));
   } catch (error) {
     console.error('getUsersList failed:', error);
     throw new Error('Falha ao listar usuários do sistema.', { cause: error });
@@ -74,6 +238,7 @@ export async function createSystemUser(data: {
   password: string;
   role: string;
   permissions?: string;
+  condoId?: number | null;
 }) {
   try {
     const cleanEmail = data.email.trim().toLowerCase();
@@ -92,6 +257,7 @@ export async function createSystemUser(data: {
         name: data.name.trim(),
         role: data.role,
         permissions: data.permissions || (data.role === 'sindico' ? '["all"]' : '["portaria","encomendas","acessos","veiculos"]'),
+        condoId: data.condoId || null,
         isActive: true,
       })
       .returning();
@@ -103,6 +269,7 @@ export async function createSystemUser(data: {
       name: res[0].name,
       role: res[0].role,
       permissions: res[0].permissions,
+      condoId: res[0].condoId,
       isActive: res[0].isActive,
     };
   } catch (error) {
@@ -118,6 +285,7 @@ export async function updateSystemUser(
     role?: string;
     password?: string;
     permissions?: string;
+    condoId?: number | null;
     isActive?: boolean;
   }
 ) {
@@ -127,6 +295,7 @@ export async function updateSystemUser(
     if (data.role) updateData.role = data.role;
     if (data.password && data.password.trim()) updateData.password = data.password.trim();
     if (data.permissions) updateData.permissions = data.permissions;
+    if (data.condoId !== undefined) updateData.condoId = data.condoId;
     if (data.isActive !== undefined) updateData.isActive = data.isActive;
 
     const res = await db.update(users).set(updateData).where(eq(users.id, id)).returning();
@@ -137,6 +306,7 @@ export async function updateSystemUser(
       name: res[0].name,
       role: res[0].role,
       permissions: res[0].permissions,
+      condoId: res[0].condoId,
       isActive: res[0].isActive,
     };
   } catch (error) {
@@ -147,7 +317,6 @@ export async function updateSystemUser(
 
 export async function deleteSystemUser(id: number) {
   try {
-    // Proibir deletar o usuário master
     const userToDel = await db.select().from(users).where(eq(users.id, id));
     if (userToDel[0]?.email === 'administrativo@novabrasil.com') {
       throw new Error('Não é permitido excluir o usuário Administrador Master do sistema.');
@@ -178,16 +347,33 @@ export async function getOrCreateUser(uid: string, email: string, name: string, 
 }
 
 // --- ESTRUTURA: BLOCOS E UNIDADES ---
-export async function getBlocks() {
+
+export async function getBlocks(condoId?: number) {
   try {
-    return await db.select().from(blocks).orderBy(blocks.name);
+    let query = db
+      .select({
+        id: blocks.id,
+        condoId: blocks.condoId,
+        condoName: condominiums.name,
+        name: blocks.name,
+        description: blocks.description,
+        totalFloors: blocks.totalFloors,
+        createdAt: blocks.createdAt,
+      })
+      .from(blocks)
+      .leftJoin(condominiums, eq(blocks.condoId, condominiums.id));
+
+    if (condoId) {
+      return await query.where(eq(blocks.condoId, condoId)).orderBy(blocks.name);
+    }
+    return await query.orderBy(blocks.name);
   } catch (error) {
     console.error('getBlocks failed:', error);
     throw new Error('Falha ao consultar blocos.', { cause: error });
   }
 }
 
-export async function createBlock(data: { name: string; description?: string; totalFloors?: number }) {
+export async function createBlock(data: { name: string; description?: string; totalFloors?: number; condoId?: number }) {
   try {
     const res = await db.insert(blocks).values(data).returning();
     return res[0];
@@ -197,7 +383,7 @@ export async function createBlock(data: { name: string; description?: string; to
   }
 }
 
-export async function updateBlock(id: number, data: { name?: string; description?: string; totalFloors?: number }) {
+export async function updateBlock(id: number, data: { name?: string; description?: string; totalFloors?: number; condoId?: number }) {
   try {
     const res = await db.update(blocks).set(data).where(eq(blocks.id, id)).returning();
     return res[0];
@@ -217,11 +403,13 @@ export async function deleteBlock(id: number) {
   }
 }
 
-export async function getUnits() {
+export async function getUnits(condoId?: number) {
   try {
-    const rows = await db
+    let query = db
       .select({
         id: units.id,
+        condoId: units.condoId,
+        condoName: condominiums.name,
         number: units.number,
         floor: units.floor,
         unitType: units.unitType,
@@ -232,17 +420,46 @@ export async function getUnits() {
       })
       .from(units)
       .innerJoin(blocks, eq(units.blockId, blocks.id))
-      .orderBy(blocks.name, units.number);
-    return rows;
+      .leftJoin(condominiums, eq(units.condoId, condominiums.id));
+
+    if (condoId) {
+      return await query.where(eq(units.condoId, condoId)).orderBy(blocks.name, units.number);
+    }
+    return await query.orderBy(blocks.name, units.number);
   } catch (error) {
     console.error('getUnits failed:', error);
     throw new Error('Falha ao consultar unidades.', { cause: error });
   }
 }
 
-export async function createUnit(data: { blockId: number; number: string; floor?: number; unitType?: string; notes?: string }) {
+export async function createUnit(data: {
+  blockId: number;
+  number: string;
+  floor?: number;
+  unitType?: string;
+  notes?: string;
+  condoId?: number;
+}) {
   try {
-    const res = await db.insert(units).values(data).returning();
+    let finalCondoId = data.condoId;
+    if (!finalCondoId) {
+      const blockRes = await db.select().from(blocks).where(eq(blocks.id, data.blockId));
+      if (blockRes.length > 0 && blockRes[0].condoId) {
+        finalCondoId = blockRes[0].condoId;
+      }
+    }
+
+    const res = await db
+      .insert(units)
+      .values({
+        blockId: data.blockId,
+        number: data.number,
+        floor: data.floor,
+        unitType: data.unitType,
+        notes: data.notes,
+        condoId: finalCondoId,
+      })
+      .returning();
     return res[0];
   } catch (error) {
     console.error('createUnit failed:', error);
@@ -250,7 +467,17 @@ export async function createUnit(data: { blockId: number; number: string; floor?
   }
 }
 
-export async function updateUnit(id: number, data: { blockId?: number; number?: string; floor?: number; unitType?: string; notes?: string }) {
+export async function updateUnit(
+  id: number,
+  data: {
+    blockId?: number;
+    number?: string;
+    floor?: number;
+    unitType?: string;
+    notes?: string;
+    condoId?: number;
+  }
+) {
   try {
     const res = await db.update(units).set(data).where(eq(units.id, id)).returning();
     return res[0];
@@ -270,12 +497,15 @@ export async function deleteUnit(id: number) {
   }
 }
 
-// --- MORADORES ---
-export async function getResidents() {
+// --- CADASTRO DE MORADORES ---
+
+export async function getResidents(condoId?: number) {
   try {
-    return await db
+    let query = db
       .select({
         id: residents.id,
+        condoId: residents.condoId,
+        condoName: condominiums.name,
         name: residents.name,
         cpf: residents.cpf,
         email: residents.email,
@@ -292,7 +522,12 @@ export async function getResidents() {
       .from(residents)
       .innerJoin(units, eq(residents.unitId, units.id))
       .innerJoin(blocks, eq(units.blockId, blocks.id))
-      .orderBy(residents.name);
+      .leftJoin(condominiums, eq(residents.condoId, condominiums.id));
+
+    if (condoId) {
+      return await query.where(eq(residents.condoId, condoId)).orderBy(residents.name);
+    }
+    return await query.orderBy(residents.name);
   } catch (error) {
     console.error('getResidents failed:', error);
     throw new Error('Falha ao consultar moradores.', { cause: error });
@@ -307,9 +542,31 @@ export async function createResident(data: {
   phone: string;
   emergencyContact?: string;
   residentType: string;
+  condoId?: number;
 }) {
   try {
-    const res = await db.insert(residents).values(data).returning();
+    let finalCondoId = data.condoId;
+    if (!finalCondoId) {
+      const unitRes = await db.select().from(units).where(eq(units.id, data.unitId));
+      if (unitRes.length > 0 && unitRes[0].condoId) {
+        finalCondoId = unitRes[0].condoId;
+      }
+    }
+
+    const res = await db
+      .insert(residents)
+      .values({
+        unitId: data.unitId,
+        name: data.name,
+        cpf: data.cpf,
+        email: data.email,
+        phone: data.phone,
+        emergencyContact: data.emergencyContact,
+        residentType: data.residentType,
+        condoId: finalCondoId,
+        isActive: true,
+      })
+      .returning();
     return res[0];
   } catch (error) {
     console.error('createResident failed:', error);
@@ -328,6 +585,7 @@ export async function updateResident(
     emergencyContact?: string;
     residentType?: string;
     isActive?: boolean;
+    condoId?: number;
   }
 ) {
   try {
@@ -349,12 +607,15 @@ export async function deleteResident(id: number) {
   }
 }
 
-// --- VEÍCULOS E VAGAS ---
-export async function getVehicles() {
+// --- CONTROLE DE VEÍCULOS E VAGAS ---
+
+export async function getVehicles(condoId?: number) {
   try {
-    return await db
+    let query = db
       .select({
         id: vehicles.id,
+        condoId: vehicles.condoId,
+        condoName: condominiums.name,
         plate: vehicles.plate,
         model: vehicles.model,
         color: vehicles.color,
@@ -370,7 +631,12 @@ export async function getVehicles() {
       .from(vehicles)
       .innerJoin(units, eq(vehicles.unitId, units.id))
       .innerJoin(blocks, eq(units.blockId, blocks.id))
-      .orderBy(vehicles.parkingSpot, vehicles.plate);
+      .leftJoin(condominiums, eq(vehicles.condoId, condominiums.id));
+
+    if (condoId) {
+      return await query.where(eq(vehicles.condoId, condoId)).orderBy(vehicles.parkingSpot);
+    }
+    return await query.orderBy(vehicles.parkingSpot);
   } catch (error) {
     console.error('getVehicles failed:', error);
     throw new Error('Falha ao consultar veículos.', { cause: error });
@@ -385,13 +651,34 @@ export async function createVehicle(data: {
   parkingSpot: string;
   spotType?: string;
   residentName?: string;
+  condoId?: number;
 }) {
   try {
-    const res = await db.insert(vehicles).values(data).returning();
+    let finalCondoId = data.condoId;
+    if (!finalCondoId) {
+      const unitRes = await db.select().from(units).where(eq(units.id, data.unitId));
+      if (unitRes.length > 0 && unitRes[0].condoId) {
+        finalCondoId = unitRes[0].condoId;
+      }
+    }
+
+    const res = await db
+      .insert(vehicles)
+      .values({
+        unitId: data.unitId,
+        plate: data.plate.toUpperCase().trim(),
+        model: data.model.trim(),
+        color: data.color.trim(),
+        parkingSpot: data.parkingSpot.trim(),
+        spotType: data.spotType || 'coberta',
+        residentName: data.residentName,
+        condoId: finalCondoId,
+      })
+      .returning();
     return res[0];
   } catch (error) {
     console.error('createVehicle failed:', error);
-    throw new Error('Falha ao registrar veículo.', { cause: error });
+    throw new Error('Falha ao cadastrar veículo.', { cause: error });
   }
 }
 
@@ -405,10 +692,13 @@ export async function updateVehicle(
     parkingSpot?: string;
     spotType?: string;
     residentName?: string;
+    condoId?: number;
   }
 ) {
   try {
-    const res = await db.update(vehicles).set(data).where(eq(vehicles.id, id)).returning();
+    const updateData = { ...data };
+    if (updateData.plate) updateData.plate = updateData.plate.toUpperCase().trim();
+    const res = await db.update(vehicles).set(updateData).where(eq(vehicles.id, id)).returning();
     return res[0];
   } catch (error) {
     console.error('updateVehicle failed:', error);
@@ -422,16 +712,19 @@ export async function deleteVehicle(id: number) {
     return { success: true };
   } catch (error) {
     console.error('deleteVehicle failed:', error);
-    throw new Error('Falha ao excluir veículo.', { cause: error });
+    throw new Error('Falha ao remover veículo.', { cause: error });
   }
 }
 
 // --- LIVRO DE OCORRÊNCIAS ---
-export async function getIncidents() {
+
+export async function getIncidents(condoId?: number) {
   try {
-    return await db
+    let query = db
       .select({
         id: incidents.id,
+        condoId: incidents.condoId,
+        condoName: condominiums.name,
         title: incidents.title,
         category: incidents.category,
         description: incidents.description,
@@ -451,7 +744,12 @@ export async function getIncidents() {
       .from(incidents)
       .leftJoin(units, eq(incidents.unitId, units.id))
       .leftJoin(blocks, eq(units.blockId, blocks.id))
-      .orderBy(desc(incidents.createdAt));
+      .leftJoin(condominiums, eq(incidents.condoId, condominiums.id));
+
+    if (condoId) {
+      return await query.where(eq(incidents.condoId, condoId)).orderBy(desc(incidents.incidentDate), desc(incidents.incidentTime));
+    }
+    return await query.orderBy(desc(incidents.incidentDate), desc(incidents.incidentTime));
   } catch (error) {
     console.error('getIncidents failed:', error);
     throw new Error('Falha ao consultar ocorrências.', { cause: error });
@@ -469,9 +767,34 @@ export async function createIncident(data: {
   registeredBy: string;
   incidentDate: string;
   incidentTime: string;
+  condoId?: number;
 }) {
   try {
-    const res = await db.insert(incidents).values(data).returning();
+    let finalCondoId = data.condoId;
+    if (!finalCondoId && data.unitId) {
+      const unitRes = await db.select().from(units).where(eq(units.id, data.unitId));
+      if (unitRes.length > 0 && unitRes[0].condoId) {
+        finalCondoId = unitRes[0].condoId;
+      }
+    }
+
+    const res = await db
+      .insert(incidents)
+      .values({
+        unitId: data.unitId,
+        title: data.title,
+        category: data.category,
+        description: data.description,
+        involvedPersons: data.involvedPersons,
+        severity: data.severity || 'media',
+        attachmentUrl: data.attachmentUrl,
+        registeredBy: data.registeredBy,
+        incidentDate: data.incidentDate,
+        incidentTime: data.incidentTime,
+        condoId: finalCondoId,
+        status: 'aberta',
+      })
+      .returning();
     return res[0];
   } catch (error) {
     console.error('createIncident failed:', error);
@@ -481,24 +804,40 @@ export async function createIncident(data: {
 
 export async function updateIncidentStatus(
   id: number,
-  data: {
-    status: string;
-    actionTaken?: string;
-  }
+  data: { status?: string; actionTaken?: string; severity?: string }
 ) {
   try {
     const res = await db.update(incidents).set(data).where(eq(incidents.id, id)).returning();
     return res[0];
   } catch (error) {
     console.error('updateIncidentStatus failed:', error);
-    throw new Error('Falha ao atualizar status da ocorrência.', { cause: error });
+    throw new Error('Falha ao atualizar ocorrência.', { cause: error });
   }
 }
 
-// --- ÁREAS COMUNS E RESERVAS ---
-export async function getCommonAreas() {
+// --- ÁREAS COMUNS & RESERVAS ---
+
+export async function getCommonAreas(condoId?: number) {
   try {
-    return await db.select().from(commonAreas).where(eq(commonAreas.active, true)).orderBy(commonAreas.name);
+    let query = db
+      .select({
+        id: commonAreas.id,
+        condoId: commonAreas.condoId,
+        condoName: condominiums.name,
+        name: commonAreas.name,
+        capacity: commonAreas.capacity,
+        description: commonAreas.description,
+        cleaningFee: commonAreas.cleaningFee,
+        rules: commonAreas.rules,
+        active: commonAreas.active,
+      })
+      .from(commonAreas)
+      .leftJoin(condominiums, eq(commonAreas.condoId, condominiums.id));
+
+    if (condoId) {
+      return await query.where(eq(commonAreas.condoId, condoId)).orderBy(commonAreas.name);
+    }
+    return await query.orderBy(commonAreas.name);
   } catch (error) {
     console.error('getCommonAreas failed:', error);
     throw new Error('Falha ao consultar áreas comuns.', { cause: error });
@@ -507,10 +846,11 @@ export async function getCommonAreas() {
 
 export async function createCommonArea(data: {
   name: string;
-  capacity: number;
+  capacity?: number;
   description?: string;
   cleaningFee?: string;
   rules?: string;
+  condoId?: number;
 }) {
   try {
     const res = await db.insert(commonAreas).values(data).returning();
@@ -521,18 +861,13 @@ export async function createCommonArea(data: {
   }
 }
 
-export async function getReservations() {
+export async function getReservations(condoId?: number) {
   try {
-    return await db
+    let query = db
       .select({
         id: reservations.id,
-        areaId: commonAreas.id,
-        areaName: commonAreas.name,
-        cleaningFee: commonAreas.cleaningFee,
-        unitId: units.id,
-        unitNumber: units.number,
-        blockName: blocks.name,
-        residentName: reservations.residentName,
+        condoId: reservations.condoId,
+        condoName: condominiums.name,
         reservationDate: reservations.reservationDate,
         period: reservations.period,
         startTime: reservations.startTime,
@@ -540,12 +875,24 @@ export async function getReservations() {
         status: reservations.status,
         notes: reservations.notes,
         createdAt: reservations.createdAt,
+        residentName: reservations.residentName,
+        areaId: commonAreas.id,
+        areaName: commonAreas.name,
+        cleaningFee: commonAreas.cleaningFee,
+        unitId: units.id,
+        unitNumber: units.number,
+        blockName: blocks.name,
       })
       .from(reservations)
       .innerJoin(commonAreas, eq(reservations.areaId, commonAreas.id))
       .innerJoin(units, eq(reservations.unitId, units.id))
       .innerJoin(blocks, eq(units.blockId, blocks.id))
-      .orderBy(desc(reservations.reservationDate));
+      .leftJoin(condominiums, eq(reservations.condoId, condominiums.id));
+
+    if (condoId) {
+      return await query.where(eq(reservations.condoId, condoId)).orderBy(desc(reservations.reservationDate));
+    }
+    return await query.orderBy(desc(reservations.reservationDate));
   } catch (error) {
     console.error('getReservations failed:', error);
     throw new Error('Falha ao consultar reservas.', { cause: error });
@@ -557,13 +904,14 @@ export async function createReservation(data: {
   unitId: number;
   residentName: string;
   reservationDate: string;
-  period: string;
+  period?: string;
   startTime?: string;
   endTime?: string;
   notes?: string;
+  condoId?: number;
 }) {
   try {
-    // Verificar conflito de reserva na mesma área e data
+    // 1. Validação de conflito de datas para a mesma área
     const existing = await db
       .select()
       .from(reservations)
@@ -575,16 +923,39 @@ export async function createReservation(data: {
         )
       );
 
-    const hasConflict = existing.some((res) => {
-      if (res.period === 'dia_todo' || data.period === 'dia_todo') return true;
-      return res.period === data.period;
-    });
-
-    if (hasConflict) {
-      throw new Error(`Conflito: A área já possui uma reserva confirmada para este período nesta data.`);
+    if (existing.length > 0) {
+      const isConflict = existing.some((res) => {
+        if (res.period === 'dia_todo' || data.period === 'dia_todo') return true;
+        return res.period === data.period;
+      });
+      if (isConflict) {
+        throw new Error('Esta área comum já possui reserva confirmada para este período/data.');
+      }
     }
 
-    const res = await db.insert(reservations).values(data).returning();
+    let finalCondoId = data.condoId;
+    if (!finalCondoId) {
+      const areaRes = await db.select().from(commonAreas).where(eq(commonAreas.id, data.areaId));
+      if (areaRes.length > 0 && areaRes[0].condoId) {
+        finalCondoId = areaRes[0].condoId;
+      }
+    }
+
+    const res = await db
+      .insert(reservations)
+      .values({
+        areaId: data.areaId,
+        unitId: data.unitId,
+        residentName: data.residentName,
+        reservationDate: data.reservationDate,
+        period: data.period || 'dia_todo',
+        startTime: data.startTime,
+        endTime: data.endTime,
+        notes: data.notes,
+        condoId: finalCondoId,
+        status: 'confirmada',
+      })
+      .returning();
     return res[0];
   } catch (error) {
     console.error('createReservation failed:', error);
@@ -594,11 +965,7 @@ export async function createReservation(data: {
 
 export async function cancelReservation(id: number) {
   try {
-    const res = await db
-      .update(reservations)
-      .set({ status: 'cancelada' })
-      .where(eq(reservations.id, id))
-      .returning();
+    const res = await db.update(reservations).set({ status: 'cancelada' }).where(eq(reservations.id, id)).returning();
     return res[0];
   } catch (error) {
     console.error('cancelReservation failed:', error);
@@ -606,33 +973,41 @@ export async function cancelReservation(id: number) {
   }
 }
 
-// --- PORTARIA: CONTROLE DE ACESSO (VISITANTES E PRESTADORES) ---
-export async function getAccessLogs() {
+// --- PORTARIA: CONTROLE DE ACESSO & ENCOMENDAS ---
+
+export async function getAccessLogs(condoId?: number) {
   try {
-    return await db
+    let query = db
       .select({
         id: accessLogs.id,
+        condoId: accessLogs.condoId,
+        condoName: condominiums.name,
         visitorType: accessLogs.visitorType,
         name: accessLogs.name,
         document: accessLogs.document,
         company: accessLogs.company,
-        unitId: units.id,
-        unitNumber: units.number,
-        blockName: blocks.name,
         authorizedBy: accessLogs.authorizedBy,
         entryTime: accessLogs.entryTime,
         exitTime: accessLogs.exitTime,
         vehiclePlate: accessLogs.vehiclePlate,
         notes: accessLogs.notes,
         registeredBy: accessLogs.registeredBy,
+        unitId: units.id,
+        unitNumber: units.number,
+        blockName: blocks.name,
       })
       .from(accessLogs)
       .innerJoin(units, eq(accessLogs.unitId, units.id))
       .innerJoin(blocks, eq(units.blockId, blocks.id))
-      .orderBy(desc(accessLogs.entryTime));
+      .leftJoin(condominiums, eq(accessLogs.condoId, condominiums.id));
+
+    if (condoId) {
+      return await query.where(eq(accessLogs.condoId, condoId)).orderBy(desc(accessLogs.entryTime));
+    }
+    return await query.orderBy(desc(accessLogs.entryTime));
   } catch (error) {
     console.error('getAccessLogs failed:', error);
-    throw new Error('Falha ao consultar acessos de portaria.', { cause: error });
+    throw new Error('Falha ao consultar acessos.', { cause: error });
   }
 }
 
@@ -646,36 +1021,56 @@ export async function createAccessLog(data: {
   vehiclePlate?: string;
   notes?: string;
   registeredBy?: string;
+  condoId?: number;
 }) {
   try {
-    const res = await db.insert(accessLogs).values(data).returning();
+    let finalCondoId = data.condoId;
+    if (!finalCondoId) {
+      const unitRes = await db.select().from(units).where(eq(units.id, data.unitId));
+      if (unitRes.length > 0 && unitRes[0].condoId) {
+        finalCondoId = unitRes[0].condoId;
+      }
+    }
+
+    const res = await db
+      .insert(accessLogs)
+      .values({
+        visitorType: data.visitorType,
+        name: data.name,
+        document: data.document,
+        company: data.company,
+        unitId: data.unitId,
+        authorizedBy: data.authorizedBy,
+        vehiclePlate: data.vehiclePlate ? data.vehiclePlate.toUpperCase().trim() : null,
+        notes: data.notes,
+        registeredBy: data.registeredBy,
+        condoId: finalCondoId,
+      })
+      .returning();
     return res[0];
   } catch (error) {
     console.error('createAccessLog failed:', error);
-    throw new Error('Falha ao registrar acesso na portaria.', { cause: error });
+    throw new Error('Falha ao registrar entrada.', { cause: error });
   }
 }
 
 export async function registerAccessExit(id: number) {
   try {
-    const res = await db
-      .update(accessLogs)
-      .set({ exitTime: new Date() })
-      .where(eq(accessLogs.id, id))
-      .returning();
+    const res = await db.update(accessLogs).set({ exitTime: new Date() }).where(eq(accessLogs.id, id)).returning();
     return res[0];
   } catch (error) {
     console.error('registerAccessExit failed:', error);
-    throw new Error('Falha ao registrar saída do visitante.', { cause: error });
+    throw new Error('Falha ao registrar saída.', { cause: error });
   }
 }
 
-// --- PORTARIA: ENCOMENDAS ---
-export async function getDeliveries() {
+export async function getDeliveries(condoId?: number) {
   try {
-    return await db
+    let query = db
       .select({
         id: deliveries.id,
+        condoId: deliveries.condoId,
+        condoName: condominiums.name,
         recipientName: deliveries.recipientName,
         trackingCode: deliveries.trackingCode,
         carrier: deliveries.carrier,
@@ -693,7 +1088,12 @@ export async function getDeliveries() {
       .from(deliveries)
       .innerJoin(units, eq(deliveries.unitId, units.id))
       .innerJoin(blocks, eq(units.blockId, blocks.id))
-      .orderBy(desc(deliveries.receivedAt));
+      .leftJoin(condominiums, eq(deliveries.condoId, condominiums.id));
+
+    if (condoId) {
+      return await query.where(eq(deliveries.condoId, condoId)).orderBy(desc(deliveries.receivedAt));
+    }
+    return await query.orderBy(desc(deliveries.receivedAt));
   } catch (error) {
     console.error('getDeliveries failed:', error);
     throw new Error('Falha ao consultar encomendas.', { cause: error });
@@ -708,9 +1108,31 @@ export async function createDelivery(data: {
   packageType?: string;
   location?: string;
   receivedByPortaria?: string;
+  condoId?: number;
 }) {
   try {
-    const res = await db.insert(deliveries).values(data).returning();
+    let finalCondoId = data.condoId;
+    if (!finalCondoId) {
+      const unitRes = await db.select().from(units).where(eq(units.id, data.unitId));
+      if (unitRes.length > 0 && unitRes[0].condoId) {
+        finalCondoId = unitRes[0].condoId;
+      }
+    }
+
+    const res = await db
+      .insert(deliveries)
+      .values({
+        unitId: data.unitId,
+        recipientName: data.recipientName,
+        trackingCode: data.trackingCode,
+        carrier: data.carrier,
+        packageType: data.packageType || 'pacote',
+        location: data.location || 'Armário 1',
+        receivedByPortaria: data.receivedByPortaria,
+        condoId: finalCondoId,
+        status: 'aguardando',
+      })
+      .returning();
     return res[0];
   } catch (error) {
     console.error('createDelivery failed:', error);
@@ -732,17 +1154,33 @@ export async function markDeliveryPickup(id: number, pickedUpBy: string) {
     return res[0];
   } catch (error) {
     console.error('markDeliveryPickup failed:', error);
-    throw new Error('Falha ao registrar retirada da encomenda.', { cause: error });
+    throw new Error('Falha ao dar baixa na encomenda.', { cause: error });
   }
 }
 
-// --- MURAL DE AVISOS ---
-export async function getAnnouncements() {
+// --- MURAL DE AVISOS E COMUNICADOS ---
+
+export async function getAnnouncements(condoId?: number) {
   try {
-    return await db
-      .select()
+    let query = db
+      .select({
+        id: announcements.id,
+        condoId: announcements.condoId,
+        condoName: condominiums.name,
+        title: announcements.title,
+        content: announcements.content,
+        priority: announcements.priority,
+        pinned: announcements.pinned,
+        author: announcements.author,
+        createdAt: announcements.createdAt,
+      })
       .from(announcements)
-      .orderBy(desc(announcements.pinned), desc(announcements.createdAt));
+      .leftJoin(condominiums, eq(announcements.condoId, condominiums.id));
+
+    if (condoId) {
+      return await query.where(eq(announcements.condoId, condoId)).orderBy(desc(announcements.pinned), desc(announcements.createdAt));
+    }
+    return await query.orderBy(desc(announcements.pinned), desc(announcements.createdAt));
   } catch (error) {
     console.error('getAnnouncements failed:', error);
     throw new Error('Falha ao consultar comunicados.', { cause: error });
@@ -755,6 +1193,7 @@ export async function createAnnouncement(data: {
   priority?: string;
   pinned?: boolean;
   author: string;
+  condoId?: number;
 }) {
   try {
     const res = await db.insert(announcements).values(data).returning();
@@ -776,27 +1215,41 @@ export async function deleteAnnouncement(id: number) {
 }
 
 // --- ENQUETES E VOTAÇÕES ---
-export async function getPolls() {
+
+export async function getPolls(condoId?: number) {
   try {
-    const allPolls = await db.select().from(polls).orderBy(desc(polls.createdAt));
-    const allOptions = await db.select().from(pollOptions);
-    const allVotes = await db.select().from(pollVotes);
+    let query = db
+      .select({
+        id: polls.id,
+        condoId: polls.condoId,
+        condoName: condominiums.name,
+        title: polls.title,
+        description: polls.description,
+        active: polls.active,
+        expiresAt: polls.expiresAt,
+        createdAt: polls.createdAt,
+      })
+      .from(polls)
+      .leftJoin(condominiums, eq(polls.condoId, condominiums.id));
 
-    return allPolls.map((poll) => {
-      const options = allOptions.filter((opt) => opt.pollId === poll.id);
-      const votes = allVotes.filter((v) => v.pollId === poll.id);
-      const totalVotes = options.reduce((sum, opt) => sum + (opt.voteCount || 0), 0);
+    const pollRows = condoId ? await query.where(eq(polls.condoId, condoId)).orderBy(desc(polls.createdAt)) : await query.orderBy(desc(polls.createdAt));
 
-      const optionsWithPct = options.map((opt) => ({
-        ...opt,
-        percentage: totalVotes > 0 ? Math.round(((opt.voteCount || 0) / totalVotes) * 100) : 0,
-      }));
+    const options = await db.select().from(pollOptions);
+    const votes = await db.select().from(pollVotes);
+
+    return pollRows.map((poll) => {
+      const pollOpts = options.filter((o) => o.pollId === poll.id);
+      const pollVts = votes.filter((v) => v.pollId === poll.id);
+      const totalVotes = pollOpts.reduce((acc, curr) => acc + (curr.voteCount || 0), 0);
 
       return {
         ...poll,
         totalVotes,
-        options: optionsWithPct,
-        votes,
+        options: pollOpts.map((opt) => ({
+          ...opt,
+          percentage: totalVotes > 0 ? Math.round(((opt.voteCount || 0) / totalVotes) * 100) : 0,
+        })),
+        votes: pollVts,
       };
     });
   } catch (error) {
@@ -810,6 +1263,7 @@ export async function createPoll(data: {
   description?: string;
   expiresAt?: string;
   options: string[];
+  condoId?: number;
 }) {
   try {
     const newPoll = await db
@@ -818,6 +1272,7 @@ export async function createPoll(data: {
         title: data.title,
         description: data.description,
         expiresAt: data.expiresAt,
+        condoId: data.condoId,
       })
       .returning();
 
@@ -840,7 +1295,6 @@ export async function createPoll(data: {
 
 export async function votePoll(pollId: number, optionId: number, unitId: number, voterName?: string) {
   try {
-    // Check if unit already voted in this poll
     const existing = await db
       .select()
       .from(pollVotes)
@@ -870,8 +1324,11 @@ export async function votePoll(pollId: number, optionId: number, unitId: number,
 }
 
 // --- PAINEL: ESTATÍSTICAS DO CONDOMÍNIO ---
-export async function getDashboardStats() {
+
+export async function getDashboardStats(condoId?: number) {
   try {
+    const totalCondosRes = await db.select({ count: sql<number>`count(*)::int` }).from(condominiums);
+
     const [
       totalBlocksRes,
       totalUnitsRes,
@@ -882,17 +1339,34 @@ export async function getDashboardStats() {
       openIncidentsRes,
       todayReservationsRes,
     ] = await Promise.all([
-      db.select({ count: sql<number>`count(*)::int` }).from(blocks),
-      db.select({ count: sql<number>`count(*)::int` }).from(units),
-      db.select({ count: sql<number>`count(*)::int` }).from(residents).where(eq(residents.isActive, true)),
-      db.select({ count: sql<number>`count(*)::int` }).from(vehicles),
-      db.select({ count: sql<number>`count(*)::int` }).from(deliveries).where(eq(deliveries.status, 'aguardando')),
-      db.select({ count: sql<number>`count(*)::int` }).from(accessLogs).where(sql`${accessLogs.exitTime} IS NULL`),
-      db.select({ count: sql<number>`count(*)::int` }).from(incidents).where(eq(incidents.status, 'aberta')),
-      db.select({ count: sql<number>`count(*)::int` }).from(reservations).where(eq(reservations.status, 'confirmada')),
+      condoId
+        ? db.select({ count: sql<number>`count(*)::int` }).from(blocks).where(eq(blocks.condoId, condoId))
+        : db.select({ count: sql<number>`count(*)::int` }).from(blocks),
+      condoId
+        ? db.select({ count: sql<number>`count(*)::int` }).from(units).where(eq(units.condoId, condoId))
+        : db.select({ count: sql<number>`count(*)::int` }).from(units),
+      condoId
+        ? db.select({ count: sql<number>`count(*)::int` }).from(residents).where(and(eq(residents.isActive, true), eq(residents.condoId, condoId)))
+        : db.select({ count: sql<number>`count(*)::int` }).from(residents).where(eq(residents.isActive, true)),
+      condoId
+        ? db.select({ count: sql<number>`count(*)::int` }).from(vehicles).where(eq(vehicles.condoId, condoId))
+        : db.select({ count: sql<number>`count(*)::int` }).from(vehicles),
+      condoId
+        ? db.select({ count: sql<number>`count(*)::int` }).from(deliveries).where(and(eq(deliveries.status, 'aguardando'), eq(deliveries.condoId, condoId)))
+        : db.select({ count: sql<number>`count(*)::int` }).from(deliveries).where(eq(deliveries.status, 'aguardando')),
+      condoId
+        ? db.select({ count: sql<number>`count(*)::int` }).from(accessLogs).where(and(sql`${accessLogs.exitTime} IS NULL`, eq(accessLogs.condoId, condoId)))
+        : db.select({ count: sql<number>`count(*)::int` }).from(accessLogs).where(sql`${accessLogs.exitTime} IS NULL`),
+      condoId
+        ? db.select({ count: sql<number>`count(*)::int` }).from(incidents).where(and(eq(incidents.status, 'aberta'), eq(incidents.condoId, condoId)))
+        : db.select({ count: sql<number>`count(*)::int` }).from(incidents).where(eq(incidents.status, 'aberta')),
+      condoId
+        ? db.select({ count: sql<number>`count(*)::int` }).from(reservations).where(and(eq(reservations.status, 'confirmada'), eq(reservations.condoId, condoId)))
+        : db.select({ count: sql<number>`count(*)::int` }).from(reservations).where(eq(reservations.status, 'confirmada')),
     ]);
 
     return {
+      totalCondos: totalCondosRes[0]?.count || 0,
       totalBlocks: totalBlocksRes[0]?.count || 0,
       totalUnits: totalUnitsRes[0]?.count || 0,
       totalResidents: totalResidentsRes[0]?.count || 0,

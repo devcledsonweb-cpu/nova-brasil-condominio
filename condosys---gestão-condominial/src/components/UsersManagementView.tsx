@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { SystemUser } from '../types/index.ts';
+import { SystemUser, Condominium } from '../types/index.ts';
 import { useAuth } from '../context/AuthContext.tsx';
 import {
   UserCheck,
@@ -14,13 +14,19 @@ import {
   Eye,
   EyeOff,
   UserPlus,
+  Building2,
 } from 'lucide-react';
 
 interface UsersManagementViewProps {
+  condominiums?: Condominium[];
+  selectedCondoId?: number | 'all';
   onRefresh?: () => void;
 }
 
-export const UsersManagementView: React.FC<UsersManagementViewProps> = () => {
+export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
+  condominiums = [],
+  selectedCondoId = 'all',
+}) => {
   const { user, getAuthHeaders } = useAuth();
   const [usersList, setUsersList] = useState<SystemUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -31,6 +37,9 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<'sindico' | 'portaria'>('portaria');
+  const [userCondoId, setUserCondoId] = useState<string>(
+    selectedCondoId !== 'all' ? String(selectedCondoId) : ''
+  );
   const [showPassword, setShowPassword] = useState(false);
 
   // Permissões modulares
@@ -53,7 +62,8 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = () => {
   const fetchUsers = async () => {
     try {
       const headers = await getAuthHeaders();
-      const res = await fetch('/api/users', { headers });
+      const queryParam = selectedCondoId !== 'all' ? `?condoId=${selectedCondoId}` : '';
+      const res = await fetch(`/api/users${queryParam}`, { headers });
       if (res.ok) {
         const data = await res.json();
         setUsersList(data);
@@ -67,7 +77,7 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = () => {
 
   useEffect(() => {
     fetchUsers();
-  }, []);
+  }, [selectedCondoId]);
 
   const handleRoleChange = (newRole: 'sindico' | 'portaria') => {
     setRole(newRole);
@@ -98,17 +108,15 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = () => {
     setSaving(true);
     setErrorMsg('');
 
-    const permissions = role === 'sindico' ? ['all'] : [];
-    if (role === 'portaria') {
-      if (permPortaria) permissions.push('portaria');
-      if (permEncomendas) permissions.push('encomendas');
-      if (permVeiculos) permissions.push('veiculos');
-      if (permOcorrencias) permissions.push('ocorrencias');
-      if (permMoradores) permissions.push('moradores');
-      if (permReservas) permissions.push('reservas');
-      if (permAvisos) permissions.push('comunicados');
-      if (permEstrutura) permissions.push('estrutura');
-    }
+    const permissions: string[] = [];
+    if (permPortaria) permissions.push('portaria');
+    if (permEncomendas) permissions.push('encomendas');
+    if (permVeiculos) permissions.push('veiculos');
+    if (permOcorrencias) permissions.push('ocorrencias');
+    if (permMoradores) permissions.push('moradores');
+    if (permReservas) permissions.push('reservas');
+    if (permAvisos) permissions.push('avisos');
+    if (permEstrutura) permissions.push('estrutura');
 
     try {
       const headers = await getAuthHeaders();
@@ -120,13 +128,14 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = () => {
           email: email.trim().toLowerCase(),
           password: password.trim(),
           role,
-          permissions: JSON.stringify(permissions),
+          permissions: role === 'sindico' ? ['all'] : permissions,
+          condoId: userCondoId ? Number(userCondoId) : null,
         }),
       });
 
       if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.error || 'Erro ao criar usuário.');
+        throw new Error(err.error || 'Falha ao cadastrar usuário.');
       }
 
       setShowModal(false);
@@ -135,27 +144,9 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = () => {
       setPassword('');
       fetchUsers();
     } catch (err: any) {
-      setErrorMsg(err.message);
+      setErrorMsg(err.message || 'Erro inesperado.');
     } finally {
       setSaving(false);
-    }
-  };
-
-  const handleToggleActive = async (u: SystemUser) => {
-    if (u.email === 'administrativo@novabrasil.com') {
-      alert('O usuário Administrador Master não pode ser desativado.');
-      return;
-    }
-    try {
-      const headers = await getAuthHeaders();
-      await fetch(`/api/users/${u.id}`, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify({ isActive: !u.isActive }),
-      });
-      fetchUsers();
-    } catch (err) {
-      console.error(err);
     }
   };
 
@@ -163,37 +154,58 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = () => {
     e.preventDefault();
     if (!resetModalUser || !newPassword.trim()) return;
     setSaving(true);
+    setErrorMsg('');
+
     try {
       const headers = await getAuthHeaders();
-      await fetch(`/api/users/${resetModalUser.id}`, {
+      const res = await fetch(`/api/users/${resetModalUser.id}`, {
         method: 'PUT',
         headers,
         body: JSON.stringify({ password: newPassword.trim() }),
       });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Falha ao redefinir senha.');
+      }
+
       setResetModalUser(null);
       setNewPassword('');
-      alert('Senha atualizada com sucesso!');
-      fetchUsers();
-    } catch (err) {
-      console.error(err);
+      alert(`Senha do usuário ${resetModalUser.name} alterada com sucesso!`);
+    } catch (err: any) {
+      setErrorMsg(err.message);
     } finally {
       setSaving(false);
     }
   };
 
-  const handleDeleteUser = async (u: SystemUser) => {
-    if (u.email === 'administrativo@novabrasil.com') {
-      alert('O usuário Administrador Master não pode ser excluído.');
-      return;
-    }
-    if (!confirm(`Deseja realmente remover o acesso de ${u.name} (${u.email})?`)) return;
-
+  const handleToggleActive = async (u: SystemUser) => {
     try {
       const headers = await getAuthHeaders();
-      const res = await fetch(`/api/users/${u.id}`, { method: 'DELETE', headers });
+      const res = await fetch(`/api/users/${u.id}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ isActive: !u.isActive }),
+      });
+      if (res.ok) {
+        fetchUsers();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleDeleteUser = async (u: SystemUser) => {
+    if (!confirm(`Deseja realmente excluir o acesso de "${u.name}"?`)) return;
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/users/${u.id}`, {
+        method: 'DELETE',
+        headers,
+      });
       if (!res.ok) {
         const data = await res.json();
-        alert(data.error || 'Erro ao excluir usuário.');
+        alert(data.error || 'Erro ao excluir');
         return;
       }
       fetchUsers();
@@ -204,76 +216,50 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = () => {
 
   return (
     <div className="space-y-6">
-      {/* Cabeçalho */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+      {/* Top Banner */}
+      <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-slate-900">
-            Gestão de Usuários e Níveis de Acesso
-          </h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Criação e delegação de contas para Síndico e operadores de Portaria com controle granular de permissões
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold tracking-tight text-slate-900">
+              Gestão de Usuários & Equipe
+            </h1>
+            <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-slate-900 text-white font-mono">
+              {usersList.length} cadastrados
+            </span>
+          </div>
+          <p className="text-xs text-slate-500 mt-1">
+            Cadastre funcionários, porteiros e gestores atribuindo o condomínio específico e permissões de acesso
           </p>
         </div>
 
         <button
           onClick={() => {
             setErrorMsg('');
+            setUserCondoId(selectedCondoId !== 'all' ? String(selectedCondoId) : '');
             setShowModal(true);
           }}
-          className="px-3.5 py-2 text-xs font-medium bg-slate-900 text-white hover:bg-slate-800 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-900 text-white text-xs font-semibold rounded-lg hover:bg-slate-800 transition-colors shadow-xs cursor-pointer shrink-0"
         >
-          <UserPlus className="w-3.5 h-3.5" />
-          Novo Usuário / Operador
+          <UserPlus className="w-4 h-4" />
+          <span>Novo Usuário / Funcionário</span>
         </button>
-      </div>
-
-      {/* Informação do Administrador Master */}
-      <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-lg bg-slate-900 text-white">
-            <ShieldCheck className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-slate-900">Conta Master do Sistema:</span>
-              <span className="text-xs font-mono bg-slate-100 text-slate-800 px-2 py-0.5 rounded font-semibold">
-                administrativo@novabrasil.com
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Possui autoridade máxima para definir, conceder, revogar ou alterar qualquer nível de acesso na aplicação.
-            </p>
-          </div>
-        </div>
-
-        <span className="text-[11px] font-mono px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg font-semibold shrink-0">
-          Acesso Total Liberado
-        </span>
       </div>
 
       {/* Tabela de Usuários */}
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
-        <div className="p-4 border-b border-slate-200 flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-semibold text-slate-900">Usuários e Operadores Cadastrados</h3>
-            <p className="text-xs text-slate-500">Contas habilitadas a fazer login no painel</p>
-          </div>
-          <span className="text-xs font-mono text-slate-500">Total: {usersList.length} usuários</span>
-        </div>
-
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 text-slate-500 border-b border-slate-200 font-medium">
-              <tr>
-                <th className="py-2.5 px-4">Nome do Usuário</th>
-                <th className="py-2.5 px-4">E-mail de Login</th>
-                <th className="py-2.5 px-4">Nível de Acesso</th>
-                <th className="py-2.5 px-4">Módulos Permitidos</th>
-                <th className="py-2.5 px-4">Status</th>
-                <th className="py-2.5 px-4 text-right">Ações</th>
+          <table className="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr className="bg-slate-50/70 border-b border-slate-200 text-slate-500 font-semibold uppercase tracking-wider text-[11px]">
+                <th className="py-3 px-4">Nome</th>
+                <th className="py-3 px-4">E-mail Institucional</th>
+                <th className="py-3 px-4">Condomínio Vinculado</th>
+                <th className="py-3 px-4">Nível de Função</th>
+                <th className="py-3 px-4">Status</th>
+                <th className="py-3 px-4 text-right">Ações</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 text-slate-700">
               {loading ? (
                 <tr>
                   <td colSpan={6} className="py-8 text-center text-slate-400">
@@ -289,8 +275,9 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = () => {
               ) : (
                 usersList.map((u) => {
                   const isMaster = u.email === 'administrativo@novabrasil.com';
+
                   return (
-                    <tr key={u.id} className="hover:bg-slate-50/60 transition-colors">
+                    <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
                       <td className="py-3 px-4 font-semibold text-slate-900">
                         <div className="flex items-center gap-2">
                           {u.role === 'sindico' ? (
@@ -308,6 +295,20 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = () => {
                       </td>
                       <td className="py-3 px-4 font-mono text-slate-700">{u.email}</td>
                       <td className="py-3 px-4">
+                        <div className="flex items-center gap-1.5 text-xs">
+                          <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span
+                            className={`font-medium ${
+                              u.condoName
+                                ? 'text-slate-800'
+                                : 'text-slate-500 italic'
+                            }`}
+                          >
+                            {u.condoName ? u.condoName : 'Todos os Condomínios (Global)'}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
                         <span
                           className={`text-[10px] font-mono px-2 py-0.5 rounded font-semibold ${
                             u.role === 'sindico'
@@ -317,13 +318,6 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = () => {
                         >
                           {u.role === 'sindico' ? 'Síndico (Gestão Total)' : 'Portaria (Operacional)'}
                         </span>
-                      </td>
-                      <td className="py-3 px-4 text-slate-600">
-                        {u.role === 'sindico' ? (
-                          <span className="text-emerald-700 font-medium">Acesso Total irrestrito</span>
-                        ) : (
-                          <span className="text-slate-500">Portaria, Encomendas, Veículos, Acessos</span>
-                        )}
                       </td>
                       <td className="py-3 px-4">
                         <button
@@ -384,16 +378,37 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = () => {
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
           <div className="bg-white rounded-xl shadow-xl border border-slate-200 max-w-lg w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
-            <h3 className="text-sm font-bold text-slate-900">Cadastrar Novo Usuário / Operador</h3>
+            <h3 className="text-sm font-bold text-slate-900">Cadastrar Novo Usuário / Funcionário</h3>
             {errorMsg && <p className="text-xs text-rose-600">{errorMsg}</p>}
 
             <form onSubmit={handleCreateUser} className="space-y-4">
+              <div>
+                <label className="text-xs font-medium text-slate-700 block mb-1">
+                  Condomínio Designado
+                </label>
+                <select
+                  value={userCondoId}
+                  onChange={(e) => setUserCondoId(e.target.value)}
+                  className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:outline-hidden focus:border-slate-900 bg-white"
+                >
+                  <option value="">🏢 Todos os Condomínios (Gestor Geral / Empresa)</option>
+                  {condominiums.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      📍 {c.name} {c.city ? `(${c.city})` : ''}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-slate-400 mt-0.5">
+                  Selecione um condomínio específico para portarias ou "Todos os Condomínios" para administradores gerais.
+                </p>
+              </div>
+
               <div>
                 <label className="text-xs font-medium text-slate-700 block mb-1">Nome Completo *</label>
                 <input
                   type="text"
                   required
-                  placeholder="Ex: João da Silva (Porteiro Turno B)"
+                  placeholder="Ex: João da Silva (Porteiro Noturno)"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:outline-hidden focus:border-slate-900"
@@ -434,7 +449,7 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = () => {
               </div>
 
               <div>
-                <label className="text-xs font-medium text-slate-700 block mb-1.5">Nível de Acesso *</label>
+                <label className="text-xs font-medium text-slate-700 block mb-1.5">Nível de Função *</label>
                 <div className="grid grid-cols-2 gap-2">
                   <div
                     onClick={() => handleRoleChange('sindico')}
@@ -457,90 +472,25 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = () => {
                     }`}
                   >
                     <span className="text-xs font-bold text-slate-900 block">Portaria / Operador</span>
-                    <span className="text-[11px] text-slate-500">Focado em Portaria, Encomendas e Acessos</span>
+                    <span className="text-[11px] text-slate-500">Acessos, Encomendas, Veículos</span>
                   </div>
                 </div>
               </div>
 
-              {/* Permissões Específicas */}
-              {role === 'portaria' && (
-                <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
-                  <span className="text-xs font-semibold text-slate-700 block">
-                    Módulos Liberados para este Operador:
-                  </span>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={permPortaria}
-                        onChange={(e) => setPermPortaria(e.target.checked)}
-                        className="rounded border-slate-300 text-slate-900"
-                      />
-                      <span>Controle de Acessos</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={permEncomendas}
-                        onChange={(e) => setPermEncomendas(e.target.checked)}
-                        className="rounded border-slate-300 text-slate-900"
-                      />
-                      <span>Receber Encomendas</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={permVeiculos}
-                        onChange={(e) => setPermVeiculos(e.target.checked)}
-                        className="rounded border-slate-300 text-slate-900"
-                      />
-                      <span>Buscar Veículos & Vagas</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={permOcorrencias}
-                        onChange={(e) => setPermOcorrencias(e.target.checked)}
-                        className="rounded border-slate-300 text-slate-900"
-                      />
-                      <span>Livro de Ocorrências</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={permMoradores}
-                        onChange={(e) => setPermMoradores(e.target.checked)}
-                        className="rounded border-slate-300 text-slate-900"
-                      />
-                      <span>Consultar Moradores</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={permReservas}
-                        onChange={(e) => setPermReservas(e.target.checked)}
-                        className="rounded border-slate-300 text-slate-900"
-                      />
-                      <span>Consultar Reservas</span>
-                    </label>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex justify-end gap-2 pt-2">
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="px-3.5 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer"
+                  className="px-3 py-1.5 text-xs border border-slate-300 rounded-lg hover:bg-slate-50 font-medium cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-4 py-1.5 text-xs font-medium bg-slate-900 text-white rounded-lg hover:bg-slate-800 disabled:opacity-50 cursor-pointer"
+                  className="px-4 py-1.5 text-xs bg-slate-900 text-white rounded-lg hover:bg-slate-800 font-semibold cursor-pointer disabled:opacity-50"
                 >
-                  {saving ? 'Criando...' : 'Criar Acesso'}
+                  {saving ? 'Cadastrando...' : 'Cadastrar Usuário'}
                 </button>
               </div>
             </form>
@@ -552,17 +502,16 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = () => {
       {resetModalUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
           <div className="bg-white rounded-xl shadow-xl border border-slate-200 max-w-sm w-full p-6 space-y-4">
-            <h3 className="text-sm font-bold text-slate-900">Redefinir Senha de Acesso</h3>
-            <p className="text-xs text-slate-500">
-              Usuário: <span className="font-semibold text-slate-800">{resetModalUser.name}</span> (
-              {resetModalUser.email})
-            </p>
+            <h3 className="text-sm font-bold text-slate-900">
+              Redefinir Senha de {resetModalUser.name}
+            </h3>
+            {errorMsg && <p className="text-xs text-rose-600">{errorMsg}</p>}
 
-            <form onSubmit={handleResetPassword} className="space-y-3">
+            <form onSubmit={handleResetPassword} className="space-y-4">
               <div>
                 <label className="text-xs font-medium text-slate-700 block mb-1">Nova Senha *</label>
                 <input
-                  type="password"
+                  type="text"
                   required
                   placeholder="Digite a nova senha"
                   value={newPassword}
@@ -571,20 +520,20 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = () => {
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2">
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setResetModalUser(null)}
-                  className="px-3.5 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer"
+                  className="px-3 py-1.5 text-xs border border-slate-300 rounded-lg hover:bg-slate-50 font-medium cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-4 py-1.5 text-xs font-medium bg-slate-900 text-white rounded-lg hover:bg-slate-800 disabled:opacity-50 cursor-pointer"
+                  className="px-4 py-1.5 text-xs bg-slate-900 text-white rounded-lg hover:bg-slate-800 font-semibold cursor-pointer disabled:opacity-50"
                 >
-                  {saving ? 'Gravando...' : 'Salvar Nova Senha'}
+                  {saving ? 'Salvando...' : 'Atualizar Senha'}
                 </button>
               </div>
             </form>

@@ -59,21 +59,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Login com e-mail e senha no banco de dados relacional
   const loginWithCredentials = async (email: string, password: string): Promise<UserProfile> => {
-    const res = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPassword = password.trim();
 
-    if (!res.ok) {
-      const data = await res.json();
-      throw new Error(data.error || 'Falha ao autenticar.');
+    let res: Response;
+    try {
+      res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanEmail, password: cleanPassword }),
+      });
+    } catch (networkError) {
+      throw new Error('Falha de conexão com o servidor. Verifique sua rede e tente novamente.');
     }
 
-    const authenticatedUser: UserProfile = await res.json();
-    setUser(authenticatedUser);
-    localStorage.setItem('novabrasil_user', JSON.stringify(authenticatedUser));
-    return authenticatedUser;
+    let data: any = null;
+    const contentType = res.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      try {
+        data = await res.json();
+      } catch (jsonErr) {
+        console.warn('Erro ao decodificar JSON:', jsonErr);
+      }
+    }
+
+    if (!res.ok) {
+      const errorMessage =
+        data?.error ||
+        (res.status === 401
+          ? 'E-mail ou senha incorretos.'
+          : 'O servidor está iniciando. Por favor, aguarde alguns segundos e tente novamente.');
+      throw new Error(errorMessage);
+    }
+
+    if (!data) {
+      throw new Error('Resposta inesperada do servidor. Tente novamente.');
+    }
+
+    setUser(data);
+    localStorage.setItem('novabrasil_user', JSON.stringify(data));
+    return data;
   };
 
   const setRole = (newRole: UserRole) => {

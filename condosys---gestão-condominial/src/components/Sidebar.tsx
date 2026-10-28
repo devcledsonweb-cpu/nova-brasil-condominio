@@ -85,6 +85,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
     ...(role === 'sindico'
       ? [
           {
+            id: 'condominios',
+            label: 'Condomínios',
+            icon: Building2,
+            description: 'Múltiplos condomínios',
+          },
+          {
             id: 'usuarios',
             label: 'Gestão de Usuários',
             icon: KeyRound,
