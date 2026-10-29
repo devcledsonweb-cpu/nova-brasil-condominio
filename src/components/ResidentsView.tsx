@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Resident, Unit, Condominium } from '../types/index.ts';
 import { useAuth } from '../context/AuthContext.tsx';
+import { maskCPF, maskPhone } from '../utils/masks.ts';
 import { Users, Plus, Search, Phone, Mail, UserCheck, ShieldAlert, Trash2, Building2 } from 'lucide-react';
 
 interface ResidentsViewProps {
@@ -209,7 +210,7 @@ export const ResidentsView: React.FC<ResidentsViewProps> = ({
                     <div className="font-semibold text-slate-900">{resident.name}</div>
                     {resident.cpf && (
                       <div className="text-[10px] text-slate-400 font-mono">
-                        CPF: {resident.cpf}
+                        CPF: {maskCPF(resident.cpf)}
                       </div>
                     )}
                   </td>
@@ -235,7 +236,7 @@ export const ResidentsView: React.FC<ResidentsViewProps> = ({
                   <td className="py-3 px-4 space-y-0.5">
                     <div className="flex items-center gap-1.5 font-mono text-slate-800">
                       <Phone className="w-3 h-3 text-slate-400" />
-                      <span>{resident.phone}</span>
+                      <span>{maskPhone(resident.phone)}</span>
                     </div>
                     {resident.email && (
                       <div className="flex items-center gap-1.5 text-slate-500 text-[11px]">
@@ -378,8 +379,9 @@ export const ResidentsView: React.FC<ResidentsViewProps> = ({
                   <input
                     type="text"
                     placeholder="000.000.000-00"
+                    maxLength={14}
                     value={cpf}
-                    onChange={(e) => setCpf(e.target.value)}
+                    onChange={(e) => setCpf(maskCPF(e.target.value))}
                     className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-hidden focus:border-slate-900 font-mono"
                   />
                 </div>
@@ -394,8 +396,9 @@ export const ResidentsView: React.FC<ResidentsViewProps> = ({
                     type="text"
                     required
                     placeholder="(11) 98888-7777"
+                    maxLength={15}
                     value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
+                    onChange={(e) => setPhone(maskPhone(e.target.value))}
                     className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-hidden focus:border-slate-900 font-mono"
                   />
                 </div>

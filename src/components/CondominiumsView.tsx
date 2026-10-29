@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { Condominium } from '../types/index.ts';
+import { maskCNPJ, maskCEP, maskPhone, cleanDigits } from '../utils/masks.ts';
+import { fetchAddressByCep } from '../services/cep.ts';
 import {
   Building2,
   Plus,
@@ -58,6 +60,44 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
     status: 'ativo',
   });
 
+  const [isSearchingCep, setIsSearchingCep] = useState(false);
+  const [cepFeedback, setCepFeedback] = useState<string>('');
+
+  const lookupCep = async (digits: string) => {
+    if (digits.length !== 8) return;
+    setIsSearchingCep(true);
+    setCepFeedback('Buscando endereço via CEP...');
+    try {
+      const res = await fetchAddressByCep(digits);
+      if (res.success) {
+        setFormData((prev) => ({
+          ...prev,
+          address: res.fullAddress || prev.address,
+          city: res.city || prev.city,
+          state: res.state || prev.state,
+        }));
+        setCepFeedback('Endereço preenchido automaticamente (você pode alterá-lo livremente).');
+      } else {
+        setCepFeedback(res.error || 'CEP não localizado. Preencha manualmente.');
+      }
+    } catch {
+      setCepFeedback('Não foi possível consultar o CEP no momento. Preencha manualmente.');
+    } finally {
+      setIsSearchingCep(false);
+    }
+  };
+
+  const handleCepInputChange = (rawVal: string) => {
+    const masked = maskCEP(rawVal);
+    setFormData((prev) => ({ ...prev, zipCode: masked }));
+    const digits = cleanDigits(rawVal);
+    if (digits.length === 8) {
+      lookupCep(digits);
+    } else {
+      setCepFeedback('');
+    }
+  };
+
   const openAddModal = () => {
     setEditingCondo(null);
     setFormData({
@@ -74,6 +114,7 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
       status: 'ativo',
     });
     setErrorMsg('');
+    setCepFeedback('');
     setIsAddModalOpen(true);
   };
 
@@ -81,18 +122,19 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
     setEditingCondo(condo);
     setFormData({
       name: condo.name,
-      cnpj: condo.cnpj || '',
+      cnpj: condo.cnpj ? maskCNPJ(condo.cnpj) : '',
       address: condo.address || '',
       city: condo.city || '',
       state: condo.state || 'SP',
-      zipCode: condo.zipCode || '',
+      zipCode: condo.zipCode ? maskCEP(condo.zipCode) : '',
       totalUnits: condo.totalUnits || 0,
       sindicoName: condo.sindicoName || '',
-      sindicoPhone: condo.sindicoPhone || '',
+      sindicoPhone: condo.sindicoPhone ? maskPhone(condo.sindicoPhone) : '',
       sindicoEmail: condo.sindicoEmail || '',
       status: condo.status || 'ativo',
     });
     setErrorMsg('');
+    setCepFeedback('');
     setIsAddModalOpen(true);
   };
 
@@ -251,7 +293,7 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
                         </h3>
                         {condo.cnpj && (
                           <p className="text-[11px] text-slate-400 font-mono">
-                            CNPJ: {condo.cnpj}
+                            CNPJ: {maskCNPJ(condo.cnpj)}
                           </p>
                         )}
                       </div>
@@ -280,7 +322,14 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
                   <div className="flex items-start gap-1.5 text-xs text-slate-600">
                     <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
                     <span className="line-clamp-2">
-                      {[condo.address, condo.city, condo.state].filter(Boolean).join(', ')}
+                      {[
+                        condo.address,
+                        condo.city,
+                        condo.state,
+                        condo.zipCode ? `CEP ${maskCEP(condo.zipCode)}` : '',
+                      ]
+                        .filter(Boolean)
+                        .join(' - ')}
                     </span>
                   </div>
                 )}
@@ -438,8 +487,9 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
                   <input
                     type="text"
                     placeholder="00.000.000/0001-00"
+                    maxLength={18}
                     value={formData.cnpj}
-                    onChange={(e) => setFormData({ ...formData, cnpj: e.target.value })}
+                    onChange={(e) => setFormData({ ...formData, cnpj: maskCNPJ(e.target.value) })}
                     className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-hidden focus:border-slate-900 font-mono"
                   />
                 </div>
@@ -459,49 +509,87 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">
-                  Endereço Completo
-                </label>
-                <input
-                  type="text"
-                  placeholder="Rua, Avenida, Número, Bairro"
-                  value={formData.address}
-                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-hidden focus:border-slate-900"
-                />
-              </div>
+              {/* Seção de Endereço com Busca Automática por CEP */}
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-slate-600" />
+                    Localização & Endereço
+                  </span>
+                  <span className="text-[11px] text-slate-500">
+                    CEP preenche automático e permite edição
+                  </span>
+                </div>
 
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Cidade</label>
-                  <input
-                    type="text"
-                    placeholder="São Paulo"
-                    value={formData.city}
-                    onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-hidden focus:border-slate-900"
-                  />
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="col-span-1">
+                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                      CEP (00000-000)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="00000-000"
+                        maxLength={9}
+                        value={formData.zipCode}
+                        onChange={(e) => handleCepInputChange(e.target.value)}
+                        className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-hidden focus:border-slate-900 font-mono bg-white"
+                      />
+                      {isSearchingCep && (
+                        <div className="absolute right-2.5 top-2.5">
+                          <Clock className="w-3.5 h-3.5 text-slate-400 animate-spin" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="col-span-1">
+                    <label className="block text-xs font-medium text-slate-700 mb-1">Cidade</label>
+                    <input
+                      type="text"
+                      placeholder="São Paulo"
+                      value={formData.city}
+                      onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-hidden focus:border-slate-900 bg-white"
+                    />
+                  </div>
+
+                  <div className="col-span-1">
+                    <label className="block text-xs font-medium text-slate-700 mb-1">Estado (UF)</label>
+                    <input
+                      type="text"
+                      placeholder="SP"
+                      maxLength={2}
+                      value={formData.state}
+                      onChange={(e) => setFormData({ ...formData, state: e.target.value.toUpperCase() })}
+                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-hidden focus:border-slate-900 uppercase font-mono bg-white"
+                    />
+                  </div>
                 </div>
+
+                {cepFeedback && (
+                  <p
+                    className={`text-[11px] leading-tight flex items-center gap-1 ${
+                      cepFeedback.includes('preenchido')
+                        ? 'text-emerald-700 font-medium'
+                        : 'text-slate-600'
+                    }`}
+                  >
+                    {cepFeedback.includes('preenchido') && <CheckCircle2 className="w-3 h-3 shrink-0" />}
+                    {cepFeedback}
+                  </p>
+                )}
+
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Estado (UF)</label>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                    Logradouro, Bairro e Número (Editável)
+                  </label>
                   <input
                     type="text"
-                    placeholder="SP"
-                    maxLength={2}
-                    value={formData.state}
-                    onChange={(e) => setFormData({ ...formData, state: e.target.value.toUpperCase() })}
-                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-hidden focus:border-slate-900 uppercase"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">CEP</label>
-                  <input
-                    type="text"
-                    placeholder="00000-000"
-                    value={formData.zipCode}
-                    onChange={(e) => setFormData({ ...formData, zipCode: e.target.value })}
-                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-hidden focus:border-slate-900 font-mono"
+                    placeholder="Ex: Av. Paulista, 1000 - Bela Vista"
+                    value={formData.address}
+                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-hidden focus:border-slate-900 bg-white"
                   />
                 </div>
               </div>
@@ -531,9 +619,10 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
                       <input
                         type="text"
                         placeholder="(11) 99999-9999"
+                        maxLength={15}
                         value={formData.sindicoPhone}
-                        onChange={(e) => setFormData({ ...formData, sindicoPhone: e.target.value })}
-                        className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-hidden focus:border-slate-900"
+                        onChange={(e) => setFormData({ ...formData, sindicoPhone: maskPhone(e.target.value) })}
+                        className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-hidden focus:border-slate-900 font-mono"
                       />
                     </div>
                     <div>

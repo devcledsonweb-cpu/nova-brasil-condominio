@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Vehicle, Unit } from '../types/index.ts';
 import { useAuth } from '../context/AuthContext.tsx';
+import { maskPlate } from '../utils/masks.ts';
 import { Car, Plus, Search, Shield, Trash2, Key } from 'lucide-react';
 
 interface VehiclesViewProps {
@@ -256,9 +257,10 @@ export const VehiclesView: React.FC<VehiclesViewProps> = ({ vehicles, units, onR
                   <input
                     type="text"
                     required
-                    placeholder="Ex: ABC1D23"
+                    placeholder="Ex: ABC-1234 ou ABC1D23"
+                    maxLength={8}
                     value={plate}
-                    onChange={(e) => setPlate(e.target.value)}
+                    onChange={(e) => setPlate(maskPlate(e.target.value))}
                     className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:outline-hidden focus:border-slate-900 font-mono uppercase"
                   />
                 </div>

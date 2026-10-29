@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AccessLog, Delivery, Unit } from '../types/index.ts';
 import { useAuth } from '../context/AuthContext.tsx';
+import { maskDocument, maskPlate } from '../utils/masks.ts';
 import {
   Shield,
   Package,
@@ -556,13 +557,14 @@ export const AccessDeliveriesView: React.FC<AccessDeliveriesViewProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-slate-700 block mb-1">Documento (RG/CPF) *</label>
+                  <label className="text-xs font-medium text-slate-700 block mb-1">Documento (CPF / RG) *</label>
                   <input
                     type="text"
                     required
-                    placeholder="Número do documento"
+                    placeholder="000.000.000-00 ou RG"
+                    maxLength={18}
                     value={visitorDoc}
-                    onChange={(e) => setVisitorDoc(e.target.value)}
+                    onChange={(e) => setVisitorDoc(maskDocument(e.target.value))}
                     className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:outline-hidden focus:border-slate-900 font-mono"
                   />
                 </div>
@@ -613,9 +615,10 @@ export const AccessDeliveriesView: React.FC<AccessDeliveriesViewProps> = ({
                   <label className="text-xs font-medium text-slate-700 block mb-1">Placa do Veículo (se houver)</label>
                   <input
                     type="text"
-                    placeholder="Ex: ABC-1234"
+                    placeholder="Ex: ABC-1234 ou ABC1D23"
+                    maxLength={8}
                     value={vehiclePlate}
-                    onChange={(e) => setVehiclePlate(e.target.value)}
+                    onChange={(e) => setVehiclePlate(maskPlate(e.target.value))}
                     className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:outline-hidden focus:border-slate-900 font-mono uppercase"
                   />
                 </div>
