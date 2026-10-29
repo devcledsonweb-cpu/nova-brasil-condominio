@@ -97,15 +97,15 @@ export async function createCondominium(data: {
       .insert(condominiums)
       .values({
         name: data.name.trim(),
-        cnpj: data.cnpj?.trim(),
-        address: data.address?.trim(),
-        city: data.city?.trim(),
-        state: data.state?.trim(),
-        zipCode: data.zipCode?.trim(),
-        totalUnits: data.totalUnits || 0,
-        sindicoName: data.sindicoName?.trim(),
-        sindicoPhone: data.sindicoPhone?.trim(),
-        sindicoEmail: data.sindicoEmail?.trim(),
+        cnpj: data.cnpj?.trim() || null,
+        address: data.address?.trim() || null,
+        city: data.city?.trim() || null,
+        state: data.state?.trim() || null,
+        zipCode: data.zipCode?.trim() || null,
+        totalUnits: parseInt(String(data.totalUnits || 0), 10) || 0,
+        sindicoName: data.sindicoName?.trim() || null,
+        sindicoPhone: data.sindicoPhone?.trim() || null,
+        sindicoEmail: data.sindicoEmail?.trim() || null,
         status: data.status || 'ativo',
       })
       .returning();
@@ -136,18 +136,37 @@ export async function updateCondominium(
   try {
     const updateData: any = {};
     if (data.name) updateData.name = data.name.trim();
-    if (data.cnpj !== undefined) updateData.cnpj = data.cnpj?.trim();
-    if (data.address !== undefined) updateData.address = data.address?.trim();
-    if (data.city !== undefined) updateData.city = data.city?.trim();
-    if (data.state !== undefined) updateData.state = data.state?.trim();
-    if (data.zipCode !== undefined) updateData.zipCode = data.zipCode?.trim();
-    if (data.totalUnits !== undefined) updateData.totalUnits = data.totalUnits;
-    if (data.sindicoName !== undefined) updateData.sindicoName = data.sindicoName?.trim();
-    if (data.sindicoPhone !== undefined) updateData.sindicoPhone = data.sindicoPhone?.trim();
-    if (data.sindicoEmail !== undefined) updateData.sindicoEmail = data.sindicoEmail?.trim();
+    if (data.cnpj !== undefined) updateData.cnpj = data.cnpj?.trim() || null;
+    if (data.address !== undefined) updateData.address = data.address?.trim() || null;
+    if (data.city !== undefined) updateData.city = data.city?.trim() || null;
+    if (data.state !== undefined) updateData.state = data.state?.trim() || null;
+    if (data.zipCode !== undefined) updateData.zipCode = data.zipCode?.trim() || null;
+    if (data.totalUnits !== undefined) updateData.totalUnits = parseInt(String(data.totalUnits || 0), 10) || 0;
+    if (data.sindicoName !== undefined) updateData.sindicoName = data.sindicoName?.trim() || null;
+    if (data.sindicoPhone !== undefined) updateData.sindicoPhone = data.sindicoPhone?.trim() || null;
+    if (data.sindicoEmail !== undefined) updateData.sindicoEmail = data.sindicoEmail?.trim() || null;
     if (data.status !== undefined) updateData.status = data.status;
 
-    const res = await db.update(condominiums).set(updateData).where(eq(condominiums.id, id)).returning();
+    let res = await db.update(condominiums).set(updateData).where(eq(condominiums.id, id)).returning();
+    if (!res || res.length === 0) {
+      // Caso o condomínio tenha sido criado com ID mockado no cliente, insere no banco
+      res = await db
+        .insert(condominiums)
+        .values({
+          name: updateData.name || 'Condomínio',
+          cnpj: updateData.cnpj || null,
+          address: updateData.address || null,
+          city: updateData.city || null,
+          state: updateData.state || 'SP',
+          zipCode: updateData.zipCode || null,
+          totalUnits: updateData.totalUnits || 0,
+          sindicoName: updateData.sindicoName || null,
+          sindicoPhone: updateData.sindicoPhone || null,
+          sindicoEmail: updateData.sindicoEmail || null,
+          status: updateData.status || 'ativo',
+        })
+        .returning();
+    }
     return res[0];
   } catch (error) {
     console.error('updateCondominium failed:', error);

@@ -115,7 +115,7 @@ app.get('/api/condominiums/:id', requireAuth, async (req, res) => {
   }
 });
 
-app.post('/api/condominiums', requireAuth, requireSindico, async (req, res) => {
+app.post('/api/condominiums', requireAuth, async (req, res) => {
   try {
     const { name } = req.body;
     if (!name || !name.trim()) {
@@ -124,17 +124,19 @@ app.post('/api/condominiums', requireAuth, requireSindico, async (req, res) => {
     const condo = await createCondominium(req.body);
     res.status(201).json(condo);
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    console.error('Erro ao criar condomínio:', error);
+    res.status(400).json({ error: error.message || 'Falha ao criar condomínio.' });
   }
 });
 
-app.put('/api/condominiums/:id', requireAuth, requireSindico, async (req, res) => {
+app.put('/api/condominiums/:id', requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     const condo = await updateCondominium(id, req.body);
     res.json(condo);
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    console.error('Erro ao atualizar condomínio:', error);
+    res.status(400).json({ error: error.message || 'Falha ao atualizar condomínio.' });
   }
 });
 

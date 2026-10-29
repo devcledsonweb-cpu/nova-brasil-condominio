@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Resident, Unit, Condominium } from '../types/index.ts';
 import { useAuth } from '../context/AuthContext.tsx';
 import { maskCPF, maskPhone } from '../utils/masks.ts';
+import { safeFetchJson } from '../services/api.ts';
 import { Users, Plus, Search, Phone, Mail, UserCheck, ShieldAlert, Trash2, Building2 } from 'lucide-react';
 
 interface ResidentsViewProps {
@@ -56,7 +57,7 @@ export const ResidentsView: React.FC<ResidentsViewProps> = ({
     setErrorMsg('');
     try {
       const headers = await getAuthHeaders();
-      const res = await fetch('/api/residents', {
+      const result = await safeFetchJson('/api/residents', {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -70,10 +71,30 @@ export const ResidentsView: React.FC<ResidentsViewProps> = ({
           condoId: residentCondoId,
         }),
       });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Erro ao cadastrar morador.');
-      }
+
+      // Sincronizar com localStorage para suporte a ambientes estáticos (Vercel)
+      const localResidentsStr = localStorage.getItem('novabrasil_residents');
+      let list: Resident[] = localResidentsStr ? JSON.parse(localResidentsStr) : [...residents];
+      const targetUnit = units.find((u) => u.id === unitId);
+      const newResident: Resident = (result.success && result.data) ? result.data : {
+        id: (result.data && result.data.id) || Date.now(),
+        unitId,
+        condoId: residentCondoId,
+        name: name.trim(),
+        cpf: cpf.trim() || null,
+        email: email.trim() || null,
+        phone: phone.trim(),
+        emergencyContact: emergencyContact.trim() || null,
+        residentType,
+        isActive: true,
+        unitNumber: targetUnit ? targetUnit.number : '',
+        blockName: targetUnit ? targetUnit.blockName : '',
+        condoName: condominiums.find((c) => c.id === residentCondoId)?.name || '',
+        createdAt: new Date().toISOString(),
+      };
+      list.push(newResident);
+      localStorage.setItem('novabrasil_residents', JSON.stringify(list));
+
       setShowModal(false);
       setName('');
       setCpf('');
@@ -82,7 +103,7 @@ export const ResidentsView: React.FC<ResidentsViewProps> = ({
       setEmergencyContact('');
       onRefresh();
     } catch (err: any) {
-      setErrorMsg(err.message);
+      setErrorMsg(err.message || 'Erro ao cadastrar morador.');
     } finally {
       setSaving(false);
     }
@@ -92,7 +113,18 @@ export const ResidentsView: React.FC<ResidentsViewProps> = ({
     if (!confirm('Deseja realmente remover o cadastro deste morador?')) return;
     try {
       const headers = await getAuthHeaders();
-      await fetch(`/api/residents/${id}`, { method: 'DELETE', headers });
+      try {
+        await safeFetchJson(`/api/residents/${id}`, { method: 'DELETE', headers });
+      } catch (e) {
+        console.warn('Erro ao deletar morador via API:', e);
+      }
+
+      const localResidentsStr = localStorage.getItem('novabrasil_residents');
+      if (localResidentsStr) {
+        const list = JSON.parse(localResidentsStr).filter((r: any) => r.id !== id);
+        localStorage.setItem('novabrasil_residents', JSON.stringify(list));
+      }
+
       onRefresh();
     } catch (err) {
       console.error(err);

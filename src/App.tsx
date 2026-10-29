@@ -110,8 +110,22 @@ function NovaBrasilMain() {
       let loadedAnnouncements: Announcement[] = [];
       let loadedPolls: Poll[] = [];
 
-      if (condosRes.ok) {
-        loadedCondos = await condosRes.json();
+      // Helper para ler JSON com segurança e prevenir erros de parse caso o host (Vercel) retorne HTML
+      const parseJsonRes = async <T,>(res: Response): Promise<T | null> => {
+        try {
+          const contentType = res.headers.get('content-type') || '';
+          if (res.ok && contentType.includes('application/json')) {
+            return (await res.json()) as T;
+          }
+        } catch {
+          // ignora erro de parse de HTML
+        }
+        return null;
+      };
+
+      const condosData = await parseJsonRes<Condominium[]>(condosRes);
+      if (condosData && Array.isArray(condosData)) {
+        loadedCondos = condosData;
         localStorage.setItem('novabrasil_condos', JSON.stringify(loadedCondos));
       } else {
         const saved = localStorage.getItem('novabrasil_condos');
@@ -158,8 +172,9 @@ function NovaBrasilMain() {
       }
       setCondominiums(loadedCondos);
 
-      if (blocksRes.ok) {
-        loadedBlocks = await blocksRes.json();
+      const blocksData = await parseJsonRes<Block[]>(blocksRes);
+      if (blocksData && Array.isArray(blocksData)) {
+        loadedBlocks = blocksData;
         localStorage.setItem('novabrasil_blocks', JSON.stringify(loadedBlocks));
       } else {
         const saved = localStorage.getItem('novabrasil_blocks');
@@ -171,8 +186,9 @@ function NovaBrasilMain() {
       }
       setBlocks(loadedBlocks);
 
-      if (unitsRes.ok) {
-        loadedUnits = await unitsRes.json();
+      const unitsData = await parseJsonRes<Unit[]>(unitsRes);
+      if (unitsData && Array.isArray(unitsData)) {
+        loadedUnits = unitsData;
         localStorage.setItem('novabrasil_units', JSON.stringify(loadedUnits));
       } else {
         const saved = localStorage.getItem('novabrasil_units');
@@ -185,8 +201,9 @@ function NovaBrasilMain() {
       }
       setUnits(loadedUnits);
 
-      if (residentsRes.ok) {
-        loadedResidents = await residentsRes.json();
+      const residentsData = await parseJsonRes<Resident[]>(residentsRes);
+      if (residentsData && Array.isArray(residentsData)) {
+        loadedResidents = residentsData;
         localStorage.setItem('novabrasil_residents', JSON.stringify(loadedResidents));
       } else {
         const saved = localStorage.getItem('novabrasil_residents');
@@ -198,8 +215,9 @@ function NovaBrasilMain() {
       }
       setResidents(loadedResidents);
 
-      if (vehiclesRes.ok) {
-        loadedVehicles = await vehiclesRes.json();
+      const vehiclesData = await parseJsonRes<Vehicle[]>(vehiclesRes);
+      if (vehiclesData && Array.isArray(vehiclesData)) {
+        loadedVehicles = vehiclesData;
         localStorage.setItem('novabrasil_vehicles', JSON.stringify(loadedVehicles));
       } else {
         const saved = localStorage.getItem('novabrasil_vehicles');
@@ -210,8 +228,9 @@ function NovaBrasilMain() {
       }
       setVehicles(loadedVehicles);
 
-      if (incidentsRes.ok) {
-        loadedIncidents = await incidentsRes.json();
+      const incidentsData = await parseJsonRes<Incident[]>(incidentsRes);
+      if (incidentsData && Array.isArray(incidentsData)) {
+        loadedIncidents = incidentsData;
         localStorage.setItem('novabrasil_incidents', JSON.stringify(loadedIncidents));
       } else {
         const saved = localStorage.getItem('novabrasil_incidents');
@@ -221,8 +240,9 @@ function NovaBrasilMain() {
       }
       setIncidents(loadedIncidents);
 
-      if (areasRes.ok) {
-        loadedAreas = await areasRes.json();
+      const areasData = await parseJsonRes<CommonArea[]>(areasRes);
+      if (areasData && Array.isArray(areasData)) {
+        loadedAreas = areasData;
         localStorage.setItem('novabrasil_areas', JSON.stringify(loadedAreas));
       } else {
         const saved = localStorage.getItem('novabrasil_areas');
@@ -233,8 +253,9 @@ function NovaBrasilMain() {
       }
       setCommonAreas(loadedAreas);
 
-      if (reservationsRes.ok) {
-        loadedReservations = await reservationsRes.json();
+      const reservationsData = await parseJsonRes<Reservation[]>(reservationsRes);
+      if (reservationsData && Array.isArray(reservationsData)) {
+        loadedReservations = reservationsData;
         localStorage.setItem('novabrasil_reservations', JSON.stringify(loadedReservations));
       } else {
         const saved = localStorage.getItem('novabrasil_reservations');
@@ -242,8 +263,9 @@ function NovaBrasilMain() {
       }
       setReservations(loadedReservations);
 
-      if (accessRes.ok) {
-        loadedAccessLogs = await accessRes.json();
+      const accessData = await parseJsonRes<AccessLog[]>(accessRes);
+      if (accessData && Array.isArray(accessData)) {
+        loadedAccessLogs = accessData;
         localStorage.setItem('novabrasil_access_logs', JSON.stringify(loadedAccessLogs));
       } else {
         const saved = localStorage.getItem('novabrasil_access_logs');
@@ -253,8 +275,9 @@ function NovaBrasilMain() {
       }
       setAccessLogs(loadedAccessLogs);
 
-      if (deliveriesRes.ok) {
-        loadedDeliveries = await deliveriesRes.json();
+      const deliveriesData = await parseJsonRes<Delivery[]>(deliveriesRes);
+      if (deliveriesData && Array.isArray(deliveriesData)) {
+        loadedDeliveries = deliveriesData;
         localStorage.setItem('novabrasil_deliveries', JSON.stringify(loadedDeliveries));
       } else {
         const saved = localStorage.getItem('novabrasil_deliveries');
@@ -264,8 +287,9 @@ function NovaBrasilMain() {
       }
       setDeliveries(loadedDeliveries);
 
-      if (announcementsRes.ok) {
-        loadedAnnouncements = await announcementsRes.json();
+      const announcementsData = await parseJsonRes<Announcement[]>(announcementsRes);
+      if (announcementsData && Array.isArray(announcementsData)) {
+        loadedAnnouncements = announcementsData;
         localStorage.setItem('novabrasil_announcements', JSON.stringify(loadedAnnouncements));
       } else {
         const saved = localStorage.getItem('novabrasil_announcements');
@@ -275,8 +299,9 @@ function NovaBrasilMain() {
       }
       setAnnouncements(loadedAnnouncements);
 
-      if (pollsRes.ok) {
-        loadedPolls = await pollsRes.json();
+      const pollsData = await parseJsonRes<Poll[]>(pollsRes);
+      if (pollsData && Array.isArray(pollsData)) {
+        loadedPolls = pollsData;
         localStorage.setItem('novabrasil_polls', JSON.stringify(loadedPolls));
       } else {
         const saved = localStorage.getItem('novabrasil_polls');
@@ -285,8 +310,9 @@ function NovaBrasilMain() {
       setPolls(loadedPolls);
 
       // Atualiza estatísticas com fallback calculado
-      if (statsRes.ok) {
-        setStats(await statsRes.json());
+      const statsData = await parseJsonRes<any>(statsRes);
+      if (statsData) {
+        setStats(statsData);
       } else {
         setStats({
           totalCondos: loadedCondos.length,

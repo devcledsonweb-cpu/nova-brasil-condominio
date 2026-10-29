@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Block, Unit, Condominium } from '../types/index.ts';
 import { useAuth } from '../context/AuthContext.tsx';
+import { safeFetchJson } from '../services/api.ts';
 import { Building2, Plus, Home, Trash2, Edit3, ShieldAlert, Layers, MapPin } from 'lucide-react';
 
 interface StructureViewProps {
@@ -59,7 +60,7 @@ export const StructureView: React.FC<StructureViewProps> = ({
     setErrorMsg('');
     try {
       const headers = await getAuthHeaders();
-      const res = await fetch('/api/blocks', {
+      const result = await safeFetchJson('/api/blocks', {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -69,16 +70,26 @@ export const StructureView: React.FC<StructureViewProps> = ({
           condoId: blockCondoId,
         }),
       });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Erro ao criar bloco.');
-      }
+
+      // Sincronizar com localStorage
+      const localBlocksStr = localStorage.getItem('novabrasil_blocks');
+      let list: Block[] = localBlocksStr ? JSON.parse(localBlocksStr) : [...blocks];
+      const newBlock: Block = (result.success && result.data) ? result.data : {
+        id: (result.data && result.data.id) || Date.now(),
+        name: blockName.trim(),
+        description: blockDesc.trim() || null,
+        totalFloors: parseInt(blockFloors, 10) || 4,
+        condoId: blockCondoId,
+      };
+      list.push(newBlock);
+      localStorage.setItem('novabrasil_blocks', JSON.stringify(list));
+
       setShowBlockModal(false);
       setBlockName('');
       setBlockDesc('');
       onRefresh();
     } catch (err: any) {
-      setErrorMsg(err.message);
+      setErrorMsg(err.message || 'Erro ao criar bloco.');
     } finally {
       setSaving(false);
     }
@@ -91,7 +102,7 @@ export const StructureView: React.FC<StructureViewProps> = ({
     setErrorMsg('');
     try {
       const headers = await getAuthHeaders();
-      const res = await fetch('/api/units', {
+      const result = await safeFetchJson('/api/units', {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -103,16 +114,30 @@ export const StructureView: React.FC<StructureViewProps> = ({
           condoId: unitCondoId,
         }),
       });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Erro ao criar unidade.');
-      }
+
+      // Sincronizar com localStorage
+      const localUnitsStr = localStorage.getItem('novabrasil_units');
+      let list: Unit[] = localUnitsStr ? JSON.parse(localUnitsStr) : [...units];
+      const matchingBlock = blocks.find((b) => b.id === unitBlockId);
+      const newUnit: Unit = (result.success && result.data) ? result.data : {
+        id: (result.data && result.data.id) || Date.now(),
+        blockId: unitBlockId,
+        blockName: matchingBlock ? matchingBlock.name : '',
+        number: unitNumber.trim(),
+        floor: parseInt(unitFloor, 10) || 1,
+        unitType,
+        notes: unitNotes.trim() || null,
+        condoId: unitCondoId,
+      };
+      list.push(newUnit);
+      localStorage.setItem('novabrasil_units', JSON.stringify(list));
+
       setShowUnitModal(false);
       setUnitNumber('');
       setUnitNotes('');
       onRefresh();
     } catch (err: any) {
-      setErrorMsg(err.message);
+      setErrorMsg(err.message || 'Erro ao criar unidade.');
     } finally {
       setSaving(false);
     }
@@ -122,7 +147,18 @@ export const StructureView: React.FC<StructureViewProps> = ({
     if (!confirm('Deseja realmente remover esta unidade?')) return;
     try {
       const headers = await getAuthHeaders();
-      await fetch(`/api/units/${id}`, { method: 'DELETE', headers });
+      try {
+        await safeFetchJson(`/api/units/${id}`, { method: 'DELETE', headers });
+      } catch (e) {
+        console.warn('Erro ao deletar unidade via API:', e);
+      }
+
+      const localUnitsStr = localStorage.getItem('novabrasil_units');
+      if (localUnitsStr) {
+        const list = JSON.parse(localUnitsStr).filter((u: any) => u.id !== id);
+        localStorage.setItem('novabrasil_units', JSON.stringify(list));
+      }
+
       onRefresh();
     } catch (err) {
       console.error(err);
@@ -138,7 +174,24 @@ export const StructureView: React.FC<StructureViewProps> = ({
       return;
     try {
       const headers = await getAuthHeaders();
-      await fetch(`/api/blocks/${id}`, { method: 'DELETE', headers });
+      try {
+        await safeFetchJson(`/api/blocks/${id}`, { method: 'DELETE', headers });
+      } catch (e) {
+        console.warn('Erro ao deletar bloco via API:', e);
+      }
+
+      const localBlocksStr = localStorage.getItem('novabrasil_blocks');
+      if (localBlocksStr) {
+        const list = JSON.parse(localBlocksStr).filter((b: any) => b.id !== id);
+        localStorage.setItem('novabrasil_blocks', JSON.stringify(list));
+      }
+
+      const localUnitsStr = localStorage.getItem('novabrasil_units');
+      if (localUnitsStr) {
+        const list = JSON.parse(localUnitsStr).filter((u: any) => u.blockId !== id);
+        localStorage.setItem('novabrasil_units', JSON.stringify(list));
+      }
+
       onRefresh();
     } catch (err) {
       console.error(err);

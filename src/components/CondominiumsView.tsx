@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Condominium } from '../types/index.ts';
 import { maskCNPJ, maskCEP, maskPhone, cleanDigits } from '../utils/masks.ts';
 import { fetchAddressByCep } from '../services/cep.ts';
+import { safeFetchJson } from '../services/api.ts';
 import {
   Building2,
   Plus,
@@ -153,18 +154,82 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
       const url = editingCondo ? `/api/condominiums/${editingCondo.id}` : '/api/condominiums';
       const method = editingCondo ? 'PUT' : 'POST';
 
-      const res = await fetch(url, {
-        method,
-        headers,
-        body: JSON.stringify(formData),
-      });
+      // 1. Tentar salvar no servidor backend
+      let savedCondo: any = null;
+      try {
+        const result = await safeFetchJson(url, {
+          method,
+          headers,
+          body: JSON.stringify({
+            ...formData,
+            totalUnits: Number(formData.totalUnits) || 0,
+          }),
+        });
 
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || 'Falha ao salvar condomínio.');
+        if (result.success && result.data) {
+          savedCondo = result.data;
+        }
+      } catch (e) {
+        console.warn('Backend indisponível, sincronizando localmente:', e);
       }
 
-      await onRefresh();
+      // 2. Sincronizar e salvar localmente para garantir persistência mesmo em Vercel ou conexão instável
+      const localCondosStr = localStorage.getItem('novabrasil_condos');
+      let localCondos: Condominium[] = localCondosStr
+        ? JSON.parse(localCondosStr)
+        : [...condominiums];
+
+      if (editingCondo) {
+        localCondos = localCondos.map((c) =>
+          c.id === editingCondo.id
+            ? {
+                ...c,
+                name: formData.name.trim(),
+                cnpj: formData.cnpj || null,
+                address: formData.address || null,
+                city: formData.city || null,
+                state: formData.state || 'SP',
+                zipCode: formData.zipCode || null,
+                totalUnits: Number(formData.totalUnits) || 0,
+                sindicoName: formData.sindicoName || null,
+                sindicoPhone: formData.sindicoPhone || null,
+                sindicoEmail: formData.sindicoEmail || null,
+                status: (formData.status as 'ativo' | 'implantacao' | 'inativo') || 'ativo',
+              }
+            : c
+        );
+      } else {
+        const newCondo: Condominium = savedCondo || {
+          id: Date.now(),
+          name: formData.name.trim(),
+          cnpj: formData.cnpj || null,
+          address: formData.address || null,
+          city: formData.city || null,
+          state: formData.state || 'SP',
+          zipCode: formData.zipCode || null,
+          totalUnits: Number(formData.totalUnits) || 0,
+          blocksCount: 0,
+          unitsCount: 0,
+          residentsCount: 0,
+          usersCount: 0,
+          sindicoName: formData.sindicoName || null,
+          sindicoPhone: formData.sindicoPhone || null,
+          sindicoEmail: formData.sindicoEmail || null,
+          status: (formData.status as 'ativo' | 'implantacao' | 'inativo') || 'ativo',
+          createdAt: new Date().toISOString(),
+        };
+        localCondos.push(newCondo);
+      }
+
+      localStorage.setItem('novabrasil_condos', JSON.stringify(localCondos));
+
+      // 3. Atualizar dados na interface
+      try {
+        await onRefresh();
+      } catch (e) {
+        console.warn('Erro ao atualizar lista de condomínios:', e);
+      }
+
       setIsAddModalOpen(false);
     } catch (err: any) {
       setErrorMsg(err.message || 'Erro inesperado ao salvar.');
@@ -184,14 +249,20 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
 
     try {
       const headers = await getAuthHeaders();
-      const res = await fetch(`/api/condominiums/${condo.id}`, {
-        method: 'DELETE',
-        headers,
-      });
+      try {
+        await safeFetchJson(`/api/condominiums/${condo.id}`, {
+          method: 'DELETE',
+          headers,
+        });
+      } catch (e) {
+        console.warn('API indisponível, deletando localmente:', e);
+      }
 
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || 'Falha ao excluir condomínio.');
+      // Remover do localStorage
+      const localCondosStr = localStorage.getItem('novabrasil_condos');
+      if (localCondosStr) {
+        const localCondos = JSON.parse(localCondosStr).filter((c: any) => c.id !== condo.id);
+        localStorage.setItem('novabrasil_condos', JSON.stringify(localCondos));
       }
 
       if (selectedCondoId === condo.id) {

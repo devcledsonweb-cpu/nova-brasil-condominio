@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Vehicle, Unit } from '../types/index.ts';
 import { useAuth } from '../context/AuthContext.tsx';
 import { maskPlate } from '../utils/masks.ts';
+import { safeFetchJson } from '../services/api.ts';
 import { Car, Plus, Search, Shield, Trash2, Key } from 'lucide-react';
 
 interface VehiclesViewProps {
@@ -34,7 +35,7 @@ export const VehiclesView: React.FC<VehiclesViewProps> = ({ vehicles, units, onR
     setErrorMsg('');
     try {
       const headers = await getAuthHeaders();
-      const res = await fetch('/api/vehicles', {
+      const result = await safeFetchJson('/api/vehicles', {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -47,10 +48,27 @@ export const VehiclesView: React.FC<VehiclesViewProps> = ({ vehicles, units, onR
           residentName: residentName.trim() || undefined,
         }),
       });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Erro ao registrar veículo.');
-      }
+
+      // Sincronizar com localStorage para ambientes estáticos (Vercel)
+      const localVehiclesStr = localStorage.getItem('novabrasil_vehicles');
+      let list: Vehicle[] = localVehiclesStr ? JSON.parse(localVehiclesStr) : [...vehicles];
+      const targetUnit = units.find((u) => u.id === unitId);
+      const newVehicle: Vehicle = (result.success && result.data) ? result.data : {
+        id: (result.data && result.data.id) || Date.now(),
+        unitId,
+        plate: plate.toUpperCase().trim(),
+        model: model.trim(),
+        color: color.trim(),
+        parkingSpot: parkingSpot.trim(),
+        spotType,
+        residentName: residentName.trim() || undefined,
+        condoId: targetUnit ? targetUnit.condoId : 1,
+        blockName: targetUnit ? targetUnit.blockName : '',
+        unitNumber: targetUnit ? targetUnit.number : '',
+      };
+      list.push(newVehicle);
+      localStorage.setItem('novabrasil_vehicles', JSON.stringify(list));
+
       setShowModal(false);
       setPlate('');
       setModel('');
@@ -59,7 +77,7 @@ export const VehiclesView: React.FC<VehiclesViewProps> = ({ vehicles, units, onR
       setResidentName('');
       onRefresh();
     } catch (err: any) {
-      setErrorMsg(err.message);
+      setErrorMsg(err.message || 'Erro ao registrar veículo.');
     } finally {
       setSaving(false);
     }
@@ -69,7 +87,18 @@ export const VehiclesView: React.FC<VehiclesViewProps> = ({ vehicles, units, onR
     if (!confirm('Deseja realmente remover o registro deste veículo?')) return;
     try {
       const headers = await getAuthHeaders();
-      await fetch(`/api/vehicles/${id}`, { method: 'DELETE', headers });
+      try {
+        await safeFetchJson(`/api/vehicles/${id}`, { method: 'DELETE', headers });
+      } catch (e) {
+        console.warn('Erro ao deletar veículo via API:', e);
+      }
+
+      const localVehiclesStr = localStorage.getItem('novabrasil_vehicles');
+      if (localVehiclesStr) {
+        const list = JSON.parse(localVehiclesStr).filter((v: any) => v.id !== id);
+        localStorage.setItem('novabrasil_vehicles', JSON.stringify(list));
+      }
+
       onRefresh();
     } catch (err) {
       console.error(err);
