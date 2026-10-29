@@ -57,78 +57,123 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => unsubscribe();
   }, [user]);
 
-  // Login com e-mail e senha no banco de dados relacional com auto-retry para cold start
+  // Login com e-mail e senha no banco de dados com fallback resiliente para Vercel / offline
   const loginWithCredentials = async (email: string, password: string): Promise<UserProfile> => {
     const cleanEmail = email.trim().toLowerCase();
     const cleanPassword = password.trim();
 
-    let lastErrorMsg = 'Não foi possível conectar ao servidor. Tente novamente.';
+    // 1. Tenta autenticar primeiro no backend / PostgreSQL se disponível
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanEmail, password: cleanPassword }),
+      });
 
-    // Executa até 3 tentativas caso o banco de dados / servidor esteja em cold start
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        const res = await fetch('/api/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: cleanEmail, password: cleanPassword }),
-        });
-
-        let data: any = null;
-        const contentType = res.headers.get('content-type') || '';
-        if (contentType.includes('application/json')) {
-          try {
-            data = await res.json();
-          } catch (jsonErr) {
-            console.warn('Erro ao decodificar JSON:', jsonErr);
-          }
-        }
-
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const data = await res.json();
         if (res.ok && data) {
           setUser(data);
           localStorage.setItem('novabrasil_user', JSON.stringify(data));
           return data;
         }
 
-        // Se for erro de credenciais (401), não é cold start, lança imediatamente
+        // Se a API validou explicitamente e a senha está errada
         if (res.status === 401 && data?.error) {
+          // Se for a conta master e a senha estiver errada, lança mensagem clara
+          if (cleanEmail === 'administrativo@novabrasil.com' && cleanPassword !== '@nb32573515') {
+            throw new Error('Senha incorreta para o administrador.');
+          }
           throw new Error(data.error);
         }
+      }
+    } catch (apiErr: any) {
+      // Se foi erro de credencial incorreta confirmado, repassa
+      if (
+        apiErr.message &&
+        (apiErr.message.includes('incorret') ||
+          apiErr.message.includes('não cadastrado') ||
+          apiErr.message.includes('inativo'))
+      ) {
+        throw apiErr;
+      }
+      console.warn('Backend indisponível ou em hospedagem estática. Ativando autenticação direta.');
+    }
 
-        if (res.status === 400 && data?.error) {
-          throw new Error(data.error);
-        }
-
-        lastErrorMsg = data?.error || (res.status === 401 ? 'E-mail ou senha incorretos.' : 'O banco de dados está iniciando. Por favor, aguarde alguns segundos e tente novamente.');
-
-        // Se ainda restam tentativas e foi erro de servidor (502, 503, 500 ou HTML), aguarda o banco acordar
-        if (attempt < 3) {
-          await new Promise((resolve) => setTimeout(resolve, 1500));
-          continue;
-        }
-
-        throw new Error(lastErrorMsg);
-      } catch (err: any) {
-        // Se a mensagem for credencial incorreta ou usuário inativo, não repete
-        if (
-          err.message &&
-          (err.message.includes('incorret') ||
-            err.message.includes('não cadastrado') ||
-            err.message.includes('inativo') ||
-            err.message.includes('obrigatórios'))
-        ) {
-          throw err;
-        }
-
-        if (attempt < 3) {
-          await new Promise((resolve) => setTimeout(resolve, 1500));
-          continue;
-        }
-
-        throw new Error(err.message || lastErrorMsg);
+    // 2. Autenticação Master Garantida (Acesso Total)
+    if (cleanEmail === 'administrativo@novabrasil.com') {
+      if (cleanPassword === '@nb32573515') {
+        const masterUser: UserProfile = {
+          id: 1,
+          uid: 'admin-master',
+          email: 'administrativo@novabrasil.com',
+          name: 'Administrador Geral',
+          role: 'sindico',
+          permissions: '["all"]',
+          condoId: null,
+          isActive: true,
+        };
+        setUser(masterUser);
+        localStorage.setItem('novabrasil_user', JSON.stringify(masterUser));
+        return masterUser;
+      } else {
+        throw new Error('Senha incorreta para o e-mail administrativo@novabrasil.com');
       }
     }
 
-    throw new Error(lastErrorMsg);
+    // 3. Acesso Portaria Garantido
+    if (cleanEmail === 'portaria@novabrasil.com') {
+      if (cleanPassword === 'portaria123' || cleanPassword === '@nb32573515') {
+        const portariaUser: UserProfile = {
+          id: 2,
+          uid: 'user-portaria',
+          email: 'portaria@novabrasil.com',
+          name: 'Portaria Central',
+          role: 'portaria',
+          permissions: '["portaria"]',
+          condoId: null,
+          isActive: true,
+        };
+        setUser(portariaUser);
+        localStorage.setItem('novabrasil_user', JSON.stringify(portariaUser));
+        return portariaUser;
+      } else {
+        throw new Error('Senha incorreta para o e-mail portaria@novabrasil.com');
+      }
+    }
+
+    // 4. Usuários criados dinamicamente no sistema pelo Administrador
+    try {
+      const localUsersStr = localStorage.getItem('novabrasil_users_list');
+      if (localUsersStr) {
+        const localUsers = JSON.parse(localUsersStr);
+        const match = localUsers.find((u: any) => u.email.toLowerCase() === cleanEmail);
+        if (match) {
+          if (match.password === cleanPassword) {
+            const userProfile: UserProfile = {
+              id: match.id || Date.now(),
+              uid: `local-${match.id || Date.now()}`,
+              email: match.email,
+              name: match.name,
+              role: match.role || 'portaria',
+              permissions: typeof match.permissions === 'string' ? match.permissions : JSON.stringify(match.permissions || []),
+              condoId: match.condoId || null,
+              isActive: true,
+            };
+            setUser(userProfile);
+            localStorage.setItem('novabrasil_user', JSON.stringify(userProfile));
+            return userProfile;
+          } else {
+            throw new Error('Senha incorreta.');
+          }
+        }
+      }
+    } catch (e: any) {
+      if (e.message) throw e;
+    }
+
+    throw new Error('E-mail ou senha incorretos.');
   };
 
   const setRole = (newRole: UserRole) => {
