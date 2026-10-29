@@ -174,32 +174,32 @@ export const PatrolVehiclesView: React.FC<PatrolVehiclesViewProps> = ({
     return true;
   });
 
-  const getStatusBadge = (status: PatrolVehicle['status']) => {
+  const getStatusIndicator = (status: PatrolVehicle['status']) => {
     switch (status) {
       case 'em_ronda':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            Em Ronda Ativa
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            Em Ronda
           </span>
         );
       case 'disponivel':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-            <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-            Disponível no Posto
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 dark:text-blue-400">
+            <span className="w-2 h-2 rounded-full bg-blue-500" />
+            Disponível
           </span>
         );
       case 'manutencao':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-            <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-            Manutenção Mecânica
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
+            <AlertTriangle className="w-3.5 h-3.5" />
+            Manutenção
           </span>
         );
       case 'abastecimento':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-purple-600 dark:text-purple-400">
             Abastecendo
           </span>
         );
@@ -209,32 +209,32 @@ export const PatrolVehiclesView: React.FC<PatrolVehiclesViewProps> = ({
   const getTypeIcon = (type: PatrolVehicle['type']) => {
     switch (type) {
       case 'moto':
-        return <Bike className="w-5 h-5 text-amber-600" />;
+        return <Bike className="w-5 h-5 text-amber-600 dark:text-amber-400" />;
       case 'carro':
       case 'utilitario':
-        return <Car className="w-5 h-5 text-blue-600" />;
+        return <Car className="w-5 h-5 text-blue-600 dark:text-blue-400" />;
       default:
-        return <Navigation className="w-5 h-5 text-indigo-600" />;
+        return <Navigation className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />;
     }
   };
 
   return (
     <div className="space-y-6">
       {/* Header Banner */}
-      <div className="bg-white rounded-xl border border-slate-200 p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs">
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs transition-colors">
         <div>
-          <div className="flex items-center gap-2 text-slate-900 font-bold text-xl">
-            <Bike className="w-6 h-6 text-amber-600" />
+          <div className="flex items-center gap-2 text-slate-900 dark:text-white font-bold text-xl">
+            <Bike className="w-6 h-6 text-amber-600 dark:text-amber-400" />
             <span>Frota & Veículos de Ronda da Empresa</span>
           </div>
-          <p className="text-slate-500 text-sm mt-1">
+          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
             Motos, carros e viaturas da empresa vinculados aos condomínios para patrulhamento e rondas perimetrais.
           </p>
         </div>
 
         <button
           onClick={openAddModal}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors cursor-pointer shrink-0"
+          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors cursor-pointer shrink-0"
         >
           <Plus className="w-4 h-4" />
           Cadastrar Veículo de Ronda
@@ -242,50 +242,50 @@ export const PatrolVehiclesView: React.FC<PatrolVehiclesViewProps> = ({
       </div>
 
       {/* KPI Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-          <p className="text-xs font-medium text-slate-500">Total de Viaturas</p>
-          <p className="text-2xl font-bold text-slate-900 mt-1">{filteredVehicles.length}</p>
-          <p className="text-[11px] text-slate-400 mt-0.5">Motos e carros de ronda</p>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs transition-colors">
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Total de Viaturas</p>
+          <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">{filteredVehicles.length}</p>
+          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">Motos e carros de ronda</p>
         </div>
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-          <p className="text-xs font-medium text-emerald-600">Em Ronda Ativa</p>
-          <p className="text-2xl font-bold text-emerald-700 mt-1">
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs transition-colors">
+          <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400">Em Ronda Ativa</p>
+          <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">
             {filteredVehicles.filter((v) => v.status === 'em_ronda').length}
           </p>
-          <p className="text-[11px] text-slate-400 mt-0.5">Patrulhando no momento</p>
+          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">Patrulhando no momento</p>
         </div>
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-          <p className="text-xs font-medium text-amber-600">Motos de Ronda</p>
-          <p className="text-2xl font-bold text-amber-700 mt-1">
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs transition-colors">
+          <p className="text-xs font-medium text-amber-600 dark:text-amber-400">Motos de Ronda</p>
+          <p className="text-2xl font-bold text-amber-600 dark:text-amber-400 mt-1">
             {filteredVehicles.filter((v) => v.type === 'moto').length}
           </p>
-          <p className="text-[11px] text-slate-400 mt-0.5">Rápida intervenção</p>
+          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">Rápida intervenção</p>
         </div>
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-          <p className="text-xs font-medium text-blue-600">Carros / Viaturas</p>
-          <p className="text-2xl font-bold text-blue-700 mt-1">
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs transition-colors">
+          <p className="text-xs font-medium text-blue-600 dark:text-blue-400">Carros / Viaturas</p>
+          <p className="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-1">
             {filteredVehicles.filter((v) => v.type === 'carro' || v.type === 'utilitario').length}
           </p>
-          <p className="text-[11px] text-slate-400 mt-0.5">Apoio operacional</p>
+          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">Apoio operacional</p>
         </div>
       </div>
 
       {/* Filters Bar */}
-      <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 shadow-xs flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between transition-colors">
         <div className="relative flex-1">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             placeholder="Buscar por placa, modelo, rondante ou condomínio..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+            className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500"
           />
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-1.5 text-xs text-slate-500">
+          <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
             <Filter className="w-3.5 h-3.5" />
             <span>Filtros:</span>
           </div>
@@ -293,7 +293,7 @@ export const PatrolVehiclesView: React.FC<PatrolVehiclesViewProps> = ({
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
-            className="text-xs border border-slate-200 rounded-lg px-2.5 py-2 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-2 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="all">Todos os Tipos</option>
             <option value="moto">Motos de Ronda</option>
@@ -305,7 +305,7 @@ export const PatrolVehiclesView: React.FC<PatrolVehiclesViewProps> = ({
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="text-xs border border-slate-200 rounded-lg px-2.5 py-2 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-2 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="all">Todos os Status</option>
             <option value="em_ronda">Em Ronda Ativa</option>
@@ -318,17 +318,17 @@ export const PatrolVehiclesView: React.FC<PatrolVehiclesViewProps> = ({
 
       {/* Grid of Vehicles */}
       {filteredVehicles.length === 0 ? (
-        <div className="bg-white rounded-xl border border-slate-200 p-12 text-center shadow-xs">
-          <Car className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-          <h3 className="text-base font-semibold text-slate-900">Nenhum veículo de ronda encontrado</h3>
-          <p className="text-slate-500 text-sm mt-1 max-w-md mx-auto">
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-12 text-center shadow-xs">
+          <Car className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
+          <h3 className="text-base font-semibold text-slate-900 dark:text-white">Nenhum veículo de ronda encontrado</h3>
+          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1 max-w-md mx-auto">
             {searchTerm || typeFilter !== 'all' || statusFilter !== 'all'
               ? 'Tente ajustar os filtros ou termo de busca acima.'
               : 'Cadastre motos e carros da sua empresa alocados aos condomínios para ronda.'}
           </p>
           <button
             onClick={openAddModal}
-            className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors cursor-pointer"
+            className="mt-4 inline-flex items-center gap-2 px-4 py-2 min-h-[44px] bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             Cadastrar Primeiro Veículo
@@ -339,54 +339,55 @@ export const PatrolVehiclesView: React.FC<PatrolVehiclesViewProps> = ({
           {filteredVehicles.map((vehicle) => (
             <div
               key={vehicle.id}
-              className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs hover:border-amber-300 transition-all flex flex-col justify-between"
+              className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 shadow-xs hover:border-amber-300 dark:hover:border-amber-600 transition-all flex flex-col justify-between"
             >
               <div>
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-start gap-3">
-                    <div className="p-2.5 bg-slate-100 rounded-lg shrink-0 mt-0.5">
+                    <div className="p-2.5 bg-slate-100 dark:bg-slate-800 rounded-lg shrink-0 mt-0.5">
                       {getTypeIcon(vehicle.type)}
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-mono text-sm font-bold bg-slate-900 text-white px-2 py-0.5 rounded tracking-wider border border-slate-800">
+                        <span className="font-mono text-xs font-bold text-slate-900 dark:text-white tracking-wider">
                           {maskPlate(vehicle.plate)}
                         </span>
-                        <span className="text-xs text-slate-500 capitalize">{vehicle.color}</span>
+                        <span>·</span>
+                        <span className="text-xs text-slate-500 dark:text-slate-400 capitalize">{vehicle.color}</span>
                       </div>
-                      <h3 className="font-bold text-slate-900 text-base mt-1.5">{vehicle.model}</h3>
+                      <h3 className="font-bold text-slate-900 dark:text-white text-base mt-1">{vehicle.model}</h3>
                     </div>
                   </div>
-                  <div>{getStatusBadge(vehicle.status)}</div>
+                  <div>{getStatusIndicator(vehicle.status)}</div>
                 </div>
 
-                <div className="mt-4 pt-3 border-t border-slate-100 space-y-2 text-xs text-slate-600">
+                <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2 text-xs text-slate-600 dark:text-slate-300">
                   <div className="flex items-center gap-2">
                     <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <span className="font-semibold text-slate-900 truncate">
+                    <span className="font-semibold text-slate-900 dark:text-slate-100 truncate">
                       {vehicle.condoName || 'Posto Regional'}
                     </span>
                   </div>
 
                   <div className="flex items-center gap-2">
                     <UserCheck className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <span>Rondante: <strong>{vehicle.driverName || 'Não escalado'}</strong></span>
+                    <span>Rondante: <strong className="text-slate-800 dark:text-slate-200">{vehicle.driverName || 'Não escalado'}</strong></span>
                   </div>
 
                   <div className="flex items-center gap-2">
                     <Gauge className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <span>KM Atual: <strong>{vehicle.currentKm.toLocaleString('pt-BR')} km</strong></span>
+                    <span>KM Atual: <strong className="text-slate-800 dark:text-slate-200">{vehicle.currentKm.toLocaleString('pt-BR')} km</strong></span>
                   </div>
 
                   {vehicle.routeDescription && (
-                    <div className="flex items-start gap-2 text-slate-500">
+                    <div className="flex items-start gap-2 text-slate-500 dark:text-slate-400">
                       <Navigation className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
                       <span className="line-clamp-2">{vehicle.routeDescription}</span>
                     </div>
                   )}
 
                   {vehicle.lastPatrolAt && (
-                    <div className="flex items-center gap-2 text-emerald-700 bg-emerald-50/60 px-2 py-1 rounded text-[11px] font-medium">
+                    <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 pt-1 text-[11px] font-medium">
                       <Clock className="w-3.5 h-3.5 shrink-0" />
                       <span>Última ronda registrada às {vehicle.lastPatrolAt}</span>
                     </div>
@@ -394,27 +395,27 @@ export const PatrolVehiclesView: React.FC<PatrolVehiclesViewProps> = ({
                 </div>
               </div>
 
-              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+              <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
                 <button
                   onClick={() => handleRegisterQuickPatrol(vehicle)}
                   title="Registrar ronda realizada agora"
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 text-slate-700 rounded-lg text-xs font-medium transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 min-h-[36px] bg-slate-100 dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 hover:text-emerald-700 dark:hover:text-emerald-400 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-medium transition-colors cursor-pointer"
                 >
                   <RotateCw className="w-3 h-3" />
-                  +1 Ronda (Check)
+                  +1 Ronda
                 </button>
 
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => openEditModal(vehicle)}
-                    className="p-1.5 hover:bg-slate-100 rounded text-slate-500 hover:text-blue-600 transition-colors cursor-pointer"
+                    className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center"
                     title="Editar Veículo"
                   >
                     <Edit2 className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => setDeleteConfirmId(vehicle.id)}
-                    className="p-1.5 hover:bg-rose-50 rounded text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                    className="p-2 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center"
                     title="Excluir Veículo"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -428,25 +429,25 @@ export const PatrolVehiclesView: React.FC<PatrolVehiclesViewProps> = ({
 
       {/* Modal Cadastro/Edição de Veículo */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs overflow-y-auto">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-xl max-w-lg w-full p-6 my-8">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xl max-w-lg w-full p-5 sm:p-6 my-8 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
               <div className="flex items-center gap-2">
-                <Bike className="w-5 h-5 text-amber-600" />
-                <h3 className="font-bold text-slate-900 text-lg">
+                <Bike className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                <h3 className="font-bold text-slate-900 dark:text-white text-lg">
                   {editingVehicle ? 'Editar Veículo de Ronda' : 'Novo Veículo de Ronda'}
                 </h3>
               </div>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {errorMessage && (
-              <div className="mt-4 p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-2 text-rose-700 text-xs">
+              <div className="mt-4 p-3 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 rounded-lg flex items-center gap-2 text-rose-700 dark:text-rose-300 text-xs">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{errorMessage}</span>
               </div>
@@ -454,13 +455,13 @@ export const PatrolVehiclesView: React.FC<PatrolVehiclesViewProps> = ({
 
             <form onSubmit={handleSubmit} className="mt-4 space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Condomínio Vinculado ao Veículo *
                 </label>
                 <select
                   value={condoId}
                   onChange={(e) => setCondoId(e.target.value ? Number(e.target.value) : '')}
-                  className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full text-sm border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">Ronda Regional da Empresa (Múltiplos Postos)</option>
                   {condominiums.map((condo) => (
@@ -471,15 +472,15 @@ export const PatrolVehiclesView: React.FC<PatrolVehiclesViewProps> = ({
                 </select>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     Tipo de Veículo *
                   </label>
                   <select
                     value={type}
                     onChange={(e) => setType(e.target.value as any)}
-                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full text-sm border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="moto">Moto de Ronda</option>
                     <option value="carro">Carro / Viatura</option>
@@ -489,8 +490,8 @@ export const PatrolVehiclesView: React.FC<PatrolVehiclesViewProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Placa do Veículo (Mercosul ou Antiga) *
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Placa do Veículo *
                   </label>
                   <input
                     type="text"
@@ -498,12 +499,12 @@ export const PatrolVehiclesView: React.FC<PatrolVehiclesViewProps> = ({
                     placeholder="ABC1D23 ou ABC-1234"
                     value={plate}
                     onChange={(e) => setPlate(maskPlate(e.target.value))}
-                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 font-mono uppercase focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full text-sm border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 font-mono uppercase bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     Marca / Fabricante
                   </label>
                   <input
@@ -511,12 +512,12 @@ export const PatrolVehiclesView: React.FC<PatrolVehiclesViewProps> = ({
                     placeholder="Ex: Honda, Yamaha, Fiat"
                     value={brand}
                     onChange={(e) => setBrand(e.target.value)}
-                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full text-sm border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     Modelo do Veículo *
                   </label>
                   <input
@@ -525,12 +526,12 @@ export const PatrolVehiclesView: React.FC<PatrolVehiclesViewProps> = ({
                     placeholder="Ex: CG 160 Fan, Mobi 1.0"
                     value={model}
                     onChange={(e) => setModel(e.target.value)}
-                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full text-sm border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     Cor Predominante
                   </label>
                   <input
@@ -538,12 +539,12 @@ export const PatrolVehiclesView: React.FC<PatrolVehiclesViewProps> = ({
                     placeholder="Ex: Preto, Branco, Prata"
                     value={color}
                     onChange={(e) => setColor(e.target.value)}
-                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full text-sm border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     Quilometragem Atual (KM)
                   </label>
                   <input
@@ -552,12 +553,12 @@ export const PatrolVehiclesView: React.FC<PatrolVehiclesViewProps> = ({
                     placeholder="0"
                     value={currentKm}
                     onChange={(e) => setCurrentKm(Number(e.target.value))}
-                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full text-sm border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     Rondante / Condutor Designado
                   </label>
                   <input
@@ -565,18 +566,18 @@ export const PatrolVehiclesView: React.FC<PatrolVehiclesViewProps> = ({
                     placeholder="Ex: Agente Silva (Ronda Noturna)"
                     value={driverName}
                     onChange={(e) => setDriverName(e.target.value)}
-                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full text-sm border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     Status Operacional *
                   </label>
                   <select
                     value={status}
                     onChange={(e) => setStatus(e.target.value as any)}
-                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full text-sm border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="em_ronda">Em Ronda Ativa</option>
                     <option value="disponivel">Disponível no Posto</option>
@@ -585,8 +586,8 @@ export const PatrolVehiclesView: React.FC<PatrolVehiclesViewProps> = ({
                   </select>
                 </div>
 
-                <div className="md:col-span-2">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     Descrição da Rota & Procedimento de Ronda
                   </label>
                   <textarea
@@ -594,23 +595,23 @@ export const PatrolVehiclesView: React.FC<PatrolVehiclesViewProps> = ({
                     placeholder="Ex: Ronda perimetral pelos portões e garagens dos blocos a cada 30 minutos..."
                     value={routeDescription}
                     onChange={(e) => setRouteDescription(e.target.value)}
-                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full text-sm border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm font-medium rounded-lg cursor-pointer"
+                  className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 text-sm font-medium rounded-lg cursor-pointer min-h-[44px]"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors cursor-pointer disabled:opacity-50"
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors cursor-pointer disabled:opacity-50 min-h-[44px]"
                 >
                   {isSubmitting ? 'Salvando...' : editingVehicle ? 'Atualizar Veículo' : 'Salvar Veículo'}
                 </button>
@@ -622,19 +623,19 @@ export const PatrolVehiclesView: React.FC<PatrolVehiclesViewProps> = ({
 
       {/* Modal Confirmação Exclusão */}
       {deleteConfirmId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-xl max-w-sm w-full p-6 text-center">
-            <div className="w-12 h-12 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center mx-auto mb-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xl max-w-sm w-full p-6 text-center">
+            <div className="w-12 h-12 rounded-full bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto mb-3">
               <Trash2 className="w-6 h-6" />
             </div>
-            <h3 className="font-bold text-slate-900 text-base">Remover Veículo de Ronda?</h3>
-            <p className="text-slate-500 text-xs mt-1">
+            <h3 className="font-bold text-slate-900 dark:text-white text-base">Remover Veículo de Ronda?</h3>
+            <p className="text-slate-500 dark:text-slate-400 text-xs mt-1">
               Esta ação desvinculará o veículo do condomínio e da frota operacional.
             </p>
             <div className="flex items-center justify-center gap-3 mt-5">
               <button
                 onClick={() => setDeleteConfirmId(null)}
-                className="px-4 py-2 border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-semibold rounded-lg cursor-pointer"
+                className="px-4 py-2 min-h-[40px] border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold rounded-lg cursor-pointer"
               >
                 Cancelar
               </button>
@@ -643,7 +644,7 @@ export const PatrolVehiclesView: React.FC<PatrolVehiclesViewProps> = ({
                   await onDeleteVehicle(deleteConfirmId);
                   setDeleteConfirmId(null);
                 }}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-lg shadow-sm cursor-pointer"
+                className="px-4 py-2 min-h-[40px] bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-lg shadow-sm cursor-pointer"
               >
                 Confirmar Exclusão
               </button>

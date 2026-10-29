@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext.tsx';
+import { ThemeProvider } from './context/ThemeContext.tsx';
 import { Header } from './components/Header.tsx';
 import { Sidebar } from './components/Sidebar.tsx';
+import { MobileBottomNav } from './components/MobileBottomNav.tsx';
 import { RoleModal } from './components/RoleModal.tsx';
 import { DashboardView } from './components/DashboardView.tsx';
 import { CondominiumsView } from './components/CondominiumsView.tsx';
@@ -27,6 +29,7 @@ function NovaBrasilMain() {
   const { user, getAuthHeaders, role, isAuthenticated, loading: authLoading } = useAuth();
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // Estados Multi-Condomínio
@@ -797,10 +800,10 @@ function NovaBrasilMain() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 transition-colors">
         <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-2" />
-          <p className="text-xs text-slate-500 font-mono">Conectando ao sistema NOVA BRASIL...</p>
+          <Loader2 className="w-8 h-8 animate-spin text-blue-600 dark:text-blue-400 mx-auto mb-2" />
+          <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">Conectando ao sistema NOVA BRASIL...</p>
         </div>
       </div>
     );
@@ -811,7 +814,7 @@ function NovaBrasilMain() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100/70 text-slate-900 flex flex-col font-sans">
+    <div className="min-h-screen bg-slate-100/70 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors">
       <Header
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -819,6 +822,8 @@ function NovaBrasilMain() {
         condominiums={condominiums}
         selectedCondoId={selectedCondoId}
         onSelectCondo={setSelectedCondoId}
+        isMobileMenuOpen={isMobileMenuOpen}
+        setIsMobileMenuOpen={setIsMobileMenuOpen}
       />
 
       <div className="flex-1 flex flex-col md:flex-row">
@@ -828,7 +833,7 @@ function NovaBrasilMain() {
           onOpenRoleModal={() => setIsRoleModalOpen(true)}
         />
 
-        <main className="flex-1 p-4 md:p-6 lg:p-8 max-w-7xl mx-auto w-full">
+        <main className="flex-1 p-3 sm:p-4 md:p-6 lg:p-8 pb-24 md:pb-8 max-w-7xl mx-auto w-full transition-colors">
           {activeTab === 'dashboard' && (
             <DashboardView
               stats={stats}
@@ -918,8 +923,14 @@ function NovaBrasilMain() {
             />
           )}
         </main>
-
       </div>
+
+      {/* Navegação Inferior para Telas Mobile */}
+      <MobileBottomNav
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
+      />
 
       <RoleModal
         isOpen={isRoleModalOpen}
@@ -931,8 +942,10 @@ function NovaBrasilMain() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <NovaBrasilMain />
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <NovaBrasilMain />
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

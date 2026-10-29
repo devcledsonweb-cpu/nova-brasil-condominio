@@ -195,16 +195,16 @@ export const MaintenancesView: React.FC<MaintenancesViewProps> = ({
   const getCategoryIcon = (cat: MaintenanceOrder['category']) => {
     switch (cat) {
       case 'portoes':
-        return <KeyRound className="w-5 h-5 text-amber-600" />;
+        return <KeyRound className="w-5 h-5 text-amber-600 dark:text-amber-400" />;
       case 'cftv':
-        return <Video className="w-5 h-5 text-indigo-600" />;
+        return <Video className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />;
       case 'eletrica':
       case 'gerador':
-        return <Zap className="w-5 h-5 text-yellow-600" />;
+        return <Zap className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />;
       case 'hidraulica':
-        return <Droplets className="w-5 h-5 text-blue-600" />;
+        return <Droplets className="w-5 h-5 text-blue-600 dark:text-blue-400" />;
       default:
-        return <Wrench className="w-5 h-5 text-slate-700" />;
+        return <Wrench className="w-5 h-5 text-slate-700 dark:text-slate-300" />;
     }
   };
 
@@ -231,73 +231,73 @@ export const MaintenancesView: React.FC<MaintenancesViewProps> = ({
     }
   };
 
-  const getStatusBadge = (status: MaintenanceOrder['status']) => {
+  const getStatusIndicator = (status: MaintenanceOrder['status']) => {
     switch (status) {
       case 'agendada':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 dark:text-blue-400">
             <Clock className="w-3.5 h-3.5" />
             Agendada
           </span>
         );
       case 'em_andamento':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
+            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
             Em Andamento
           </span>
         );
       case 'aguardando_peca':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-purple-600 dark:text-purple-400">
             <AlertTriangle className="w-3.5 h-3.5" />
             Aguardando Peça
           </span>
         );
       case 'concluida':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+            <CheckCircle2 className="w-3.5 h-3.5" />
             Concluída
           </span>
         );
       case 'cancelada':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400">
             Cancelada
           </span>
         );
     }
   };
 
-  const getTypeBadge = (type: MaintenanceOrder['maintenanceType']) => {
+  const getTypeLabel = (type: MaintenanceOrder['maintenanceType']) => {
     switch (type) {
       case 'preventiva':
-        return <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">Preventiva Periódica</span>;
+        return 'Preventiva';
       case 'corretiva':
-        return <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200">Corretiva</span>;
+        return 'Corretiva';
       case 'emergencial':
-        return <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-rose-50 text-rose-700 border border-rose-200">Emergencial (Urgente)</span>;
+        return 'Emergencial';
     }
   };
 
   return (
     <div className="space-y-6">
       {/* Top Banner */}
-      <div className="bg-white rounded-xl border border-slate-200 p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs">
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs transition-colors">
         <div>
-          <div className="flex items-center gap-2 text-slate-900 font-bold text-xl">
-            <Wrench className="w-6 h-6 text-amber-600" />
+          <div className="flex items-center gap-2 text-slate-900 dark:text-white font-bold text-xl">
+            <Wrench className="w-6 h-6 text-amber-600 dark:text-amber-400" />
             <span>Manutenções da Empresa nos Condomínios</span>
           </div>
-          <p className="text-slate-500 text-sm mt-1">
+          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
             Ordens de serviço de manutenção preventiva, corretiva e emergencial executadas pela sua empresa nos condomínios clientes.
           </p>
         </div>
 
         <button
           onClick={openAddModal}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors cursor-pointer shrink-0"
+          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors cursor-pointer shrink-0"
         >
           <Plus className="w-4 h-4" />
           Abrir Ordem de Manutenção (O.S.)
@@ -305,50 +305,50 @@ export const MaintenancesView: React.FC<MaintenancesViewProps> = ({
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-          <p className="text-xs font-medium text-slate-500">Total de Ordens</p>
-          <p className="text-2xl font-bold text-slate-900 mt-1">{filteredOrders.length}</p>
-          <p className="text-[11px] text-slate-400 mt-0.5">Histórico completo</p>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs transition-colors">
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Total de Ordens</p>
+          <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">{filteredOrders.length}</p>
+          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">Histórico completo</p>
         </div>
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-          <p className="text-xs font-medium text-amber-600">Em Aberto / Andamento</p>
-          <p className="text-2xl font-bold text-amber-700 mt-1">
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs transition-colors">
+          <p className="text-xs font-medium text-amber-600 dark:text-amber-400">Em Aberto / Andamento</p>
+          <p className="text-2xl font-bold text-amber-600 dark:text-amber-400 mt-1">
             {filteredOrders.filter((o) => o.status === 'agendada' || o.status === 'em_andamento' || o.status === 'aguardando_peca').length}
           </p>
-          <p className="text-[11px] text-slate-400 mt-0.5">Demandas ativas</p>
+          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">Demandas ativas</p>
         </div>
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-          <p className="text-xs font-medium text-emerald-600">Concluídas com Sucesso</p>
-          <p className="text-2xl font-bold text-emerald-700 mt-1">
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs transition-colors">
+          <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400">Concluídas com Sucesso</p>
+          <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">
             {filteredOrders.filter((o) => o.status === 'concluida').length}
           </p>
-          <p className="text-[11px] text-slate-400 mt-0.5">Serviços finalizados</p>
+          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">Serviços finalizados</p>
         </div>
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-          <p className="text-xs font-medium text-rose-600">Emergenciais</p>
-          <p className="text-2xl font-bold text-rose-700 mt-1">
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs transition-colors">
+          <p className="text-xs font-medium text-rose-600 dark:text-rose-400">Emergenciais</p>
+          <p className="text-2xl font-bold text-rose-600 dark:text-rose-400 mt-1">
             {filteredOrders.filter((o) => o.maintenanceType === 'emergencial').length}
           </p>
-          <p className="text-[11px] text-slate-400 mt-0.5">Atendimentos rápidos</p>
+          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">Atendimentos rápidos</p>
         </div>
       </div>
 
       {/* Filters and Search Bar */}
-      <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 shadow-xs flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between transition-colors">
         <div className="relative flex-1">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             placeholder="Buscar por título da OS, técnico, condomínio ou problema..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50"
+            className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500"
           />
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-1.5 text-xs text-slate-500">
+          <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
             <Filter className="w-3.5 h-3.5" />
             <span>Filtros:</span>
           </div>
@@ -356,7 +356,7 @@ export const MaintenancesView: React.FC<MaintenancesViewProps> = ({
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="text-xs border border-slate-200 rounded-lg px-2.5 py-2 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-2 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="all">Todos os Status</option>
             <option value="agendada">Agendadas</option>
@@ -369,7 +369,7 @@ export const MaintenancesView: React.FC<MaintenancesViewProps> = ({
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
-            className="text-xs border border-slate-200 rounded-lg px-2.5 py-2 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-2 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="all">Todos os Tipos</option>
             <option value="preventiva">Preventiva Periódica</option>
@@ -380,7 +380,7 @@ export const MaintenancesView: React.FC<MaintenancesViewProps> = ({
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            className="text-xs border border-slate-200 rounded-lg px-2.5 py-2 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-2 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="all">Todas as Categorias</option>
             <option value="portoes">Portões & Motores</option>
@@ -397,17 +397,17 @@ export const MaintenancesView: React.FC<MaintenancesViewProps> = ({
 
       {/* Orders List / Grid */}
       {filteredOrders.length === 0 ? (
-        <div className="bg-white rounded-xl border border-slate-200 p-12 text-center shadow-xs">
-          <Wrench className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-          <h3 className="text-base font-semibold text-slate-900">Nenhuma manutenção encontrada</h3>
-          <p className="text-slate-500 text-sm mt-1 max-w-md mx-auto">
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-12 text-center shadow-xs">
+          <Wrench className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
+          <h3 className="text-base font-semibold text-slate-900 dark:text-white">Nenhuma manutenção encontrada</h3>
+          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1 max-w-md mx-auto">
             {searchTerm || categoryFilter !== 'all' || statusFilter !== 'all'
               ? 'Tente ajustar os filtros ou termo de busca acima.'
               : 'Registre as manutenções executadas pela sua empresa nos condomínios (portões, bombas, CFTV, etc.).'}
           </p>
           <button
             onClick={openAddModal}
-            className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors cursor-pointer"
+            className="mt-4 inline-flex items-center gap-2 px-4 py-2 min-h-[44px] bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             Cadastrar Primeira Manutenção
@@ -418,83 +418,84 @@ export const MaintenancesView: React.FC<MaintenancesViewProps> = ({
           {filteredOrders.map((order) => (
             <div
               key={order.id}
-              className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs hover:border-amber-300 transition-all flex flex-col justify-between"
+              className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 shadow-xs hover:border-amber-300 dark:hover:border-amber-600 transition-all flex flex-col justify-between"
             >
               <div>
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-start gap-3">
-                    <div className="p-2.5 bg-slate-100 rounded-lg shrink-0 mt-0.5">
+                    <div className="p-2.5 bg-slate-100 dark:bg-slate-800 rounded-lg shrink-0 mt-0.5">
                       {getCategoryIcon(order.category)}
                     </div>
                     <div>
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        {getTypeBadge(order.maintenanceType)}
-                        <span className="text-[11px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
-                          {getCategoryLabel(order.category)}
+                      <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                        <span className="font-medium text-amber-600 dark:text-amber-400">
+                          {getTypeLabel(order.maintenanceType)}
                         </span>
+                        <span>·</span>
+                        <span>{getCategoryLabel(order.category)}</span>
                       </div>
-                      <h3 className="font-bold text-slate-900 text-base mt-1.5">{order.title}</h3>
+                      <h3 className="font-bold text-slate-900 dark:text-white text-base mt-1">{order.title}</h3>
                     </div>
                   </div>
-                  <div>{getStatusBadge(order.status)}</div>
+                  <div>{getStatusIndicator(order.status)}</div>
                 </div>
 
-                <div className="mt-3 p-2.5 bg-slate-50 rounded-lg text-xs text-slate-600">
+                <div className="mt-3 p-2.5 bg-slate-50 dark:bg-slate-800/60 rounded-lg text-xs text-slate-600 dark:text-slate-300 border border-slate-100 dark:border-slate-800">
                   <p className="line-clamp-2">{order.description}</p>
                 </div>
 
                 {order.solutionDetails && (
-                  <div className="mt-2 p-2 bg-emerald-50/70 border border-emerald-100 rounded-lg text-xs text-emerald-800">
+                  <div className="mt-2 p-2.5 bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/50 rounded-lg text-xs text-emerald-800 dark:text-emerald-300">
                     <span className="font-semibold block">Solução Técnica:</span>
                     <p className="line-clamp-2 mt-0.5">{order.solutionDetails}</p>
                   </div>
                 )}
 
-                <div className="mt-4 pt-3 border-t border-slate-100 space-y-2 text-xs text-slate-600">
+                <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2 text-xs text-slate-600 dark:text-slate-300">
                   <div className="flex items-center gap-2">
                     <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <span className="font-semibold text-slate-900 truncate">
+                    <span className="font-semibold text-slate-900 dark:text-slate-100 truncate">
                       {order.condoName || 'Posto Geral'}
                     </span>
                   </div>
 
                   <div className="flex items-center gap-2">
                     <UserCheck className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <span>Técnico: <strong>{order.technicianName}</strong></span>
+                    <span>Técnico: <strong className="text-slate-800 dark:text-slate-200">{order.technicianName}</strong></span>
                   </div>
 
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 text-slate-500">
+                    <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
                       <Calendar className="w-3.5 h-3.5 text-slate-400" />
                       <span>Agendada: {order.scheduledDate}</span>
                     </div>
 
                     {order.cost && order.cost !== 'R$ 0,00' && (
-                      <div className="font-semibold text-slate-900 bg-slate-100 px-2 py-0.5 rounded">
+                      <div className="font-semibold text-slate-900 dark:text-slate-100">
                         {order.cost}
                       </div>
                     )}
                   </div>
 
                   {order.completedDate && (
-                    <div className="text-[11px] text-emerald-700 font-medium">
+                    <div className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
                       Concluída em {order.completedDate}
                     </div>
                   )}
                 </div>
               </div>
 
-              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+              <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
                 {order.status !== 'concluida' ? (
                   <button
                     onClick={() => handleQuickComplete(order)}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 min-h-[36px] bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
                   >
                     <CheckCircle2 className="w-3.5 h-3.5" />
                     Concluir Serviço
                   </button>
                 ) : (
-                  <span className="text-xs text-emerald-600 font-semibold flex items-center gap-1">
+                  <span className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
                     <CheckCircle2 className="w-3.5 h-3.5" />
                     Finalizada
                   </span>
@@ -503,14 +504,14 @@ export const MaintenancesView: React.FC<MaintenancesViewProps> = ({
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => openEditModal(order)}
-                    className="p-1.5 hover:bg-slate-100 rounded text-slate-500 hover:text-blue-600 transition-colors cursor-pointer"
+                    className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center"
                     title="Editar Manutenção"
                   >
                     <Edit2 className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => setDeleteConfirmId(order.id)}
-                    className="p-1.5 hover:bg-rose-50 rounded text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                    className="p-2 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center"
                     title="Excluir Manutenção"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -524,25 +525,25 @@ export const MaintenancesView: React.FC<MaintenancesViewProps> = ({
 
       {/* Modal Cadastro / Edição */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs overflow-y-auto">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-xl max-w-lg w-full p-6 my-8">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xl max-w-lg w-full p-5 sm:p-6 my-8 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
               <div className="flex items-center gap-2">
-                <Wrench className="w-5 h-5 text-amber-600" />
-                <h3 className="font-bold text-slate-900 text-lg">
+                <Wrench className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                <h3 className="font-bold text-slate-900 dark:text-white text-lg">
                   {editingOrder ? 'Editar Ordem de Manutenção' : 'Nova Ordem de Manutenção'}
                 </h3>
               </div>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {errorMessage && (
-              <div className="mt-4 p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-2 text-rose-700 text-xs">
+              <div className="mt-4 p-3 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 rounded-lg flex items-center gap-2 text-rose-700 dark:text-rose-300 text-xs">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{errorMessage}</span>
               </div>
@@ -550,13 +551,13 @@ export const MaintenancesView: React.FC<MaintenancesViewProps> = ({
 
             <form onSubmit={handleSubmit} className="mt-4 space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Condomínio / Posto Atendido *
                 </label>
                 <select
                   value={condoId}
                   onChange={(e) => setCondoId(e.target.value ? Number(e.target.value) : '')}
-                  className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full text-sm border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">Posto Geral da Empresa</option>
                   {condominiums.map((condo) => (
@@ -567,9 +568,9 @@ export const MaintenancesView: React.FC<MaintenancesViewProps> = ({
                 </select>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="md:col-span-2">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     Título do Serviço / O.S. *
                   </label>
                   <input
@@ -578,18 +579,18 @@ export const MaintenancesView: React.FC<MaintenancesViewProps> = ({
                     placeholder="Ex: Troca do motor do portão de entrada principal"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full text-sm border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     Categoria do Serviço *
                   </label>
                   <select
                     value={category}
                     onChange={(e) => setCategory(e.target.value as any)}
-                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full text-sm border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="portoes">Portões & Motores</option>
                     <option value="cftv">CFTV & Câmeras</option>
@@ -604,13 +605,13 @@ export const MaintenancesView: React.FC<MaintenancesViewProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     Tipo de Manutenção *
                   </label>
                   <select
                     value={maintenanceType}
                     onChange={(e) => setMaintenanceType(e.target.value as any)}
-                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full text-sm border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="preventiva">Preventiva Periódica</option>
                     <option value="corretiva">Corretiva</option>
@@ -619,7 +620,7 @@ export const MaintenancesView: React.FC<MaintenancesViewProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     Técnico / Equipe da Empresa *
                   </label>
                   <input
@@ -628,45 +629,45 @@ export const MaintenancesView: React.FC<MaintenancesViewProps> = ({
                     placeholder="Ex: Técnico Rodrigo (Equipe Eletrotécnica)"
                     value={technicianName}
                     onChange={(e) => setTechnicianName(e.target.value)}
-                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full text-sm border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Custo Estimado / Peças (R$)
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Custo Estimado / Peças
                   </label>
                   <input
                     type="text"
                     placeholder="R$ 350,00"
                     value={cost}
                     onChange={(e) => setCost(maskCurrency(e.target.value))}
-                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full text-sm border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Data Agendada (DD/MM/AAAA) *
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Data Agendada *
                   </label>
                   <input
                     type="text"
                     required
-                    placeholder="12/03/2024"
+                    placeholder="DD/MM/AAAA"
                     value={scheduledDate}
                     onChange={(e) => setScheduledDate(maskDate(e.target.value))}
-                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full text-sm border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     Status da Manutenção *
                   </label>
                   <select
                     value={status}
                     onChange={(e) => setStatus(e.target.value as any)}
-                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full text-sm border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="agendada">Agendada</option>
                     <option value="em_andamento">Em Andamento</option>
@@ -677,22 +678,22 @@ export const MaintenancesView: React.FC<MaintenancesViewProps> = ({
                 </div>
 
                 {status === 'concluida' && (
-                  <div className="md:col-span-2">
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                       Data de Conclusão (DD/MM/AAAA)
                     </label>
                     <input
                       type="text"
-                      placeholder="12/03/2024"
+                      placeholder="DD/MM/AAAA"
                       value={completedDate}
                       onChange={(e) => setCompletedDate(maskDate(e.target.value))}
-                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full text-sm border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
                 )}
 
-                <div className="md:col-span-2">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     Descrição do Problema ou Serviço a Realizar *
                   </label>
                   <textarea
@@ -701,12 +702,12 @@ export const MaintenancesView: React.FC<MaintenancesViewProps> = ({
                     placeholder="Descreva o que será feito ou a queixa recebida do condomínio..."
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full text-sm border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
-                <div className="md:col-span-2">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     Relatório da Solução / Peças Substituídas (Opcional)
                   </label>
                   <textarea
@@ -714,23 +715,23 @@ export const MaintenancesView: React.FC<MaintenancesViewProps> = ({
                     placeholder="Ex: Substituída placa central Peccinin e ajustado fim de curso do portão..."
                     value={solutionDetails}
                     onChange={(e) => setSolutionDetails(e.target.value)}
-                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full text-sm border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm font-medium rounded-lg cursor-pointer"
+                  className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 text-sm font-medium rounded-lg cursor-pointer min-h-[44px]"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors cursor-pointer disabled:opacity-50"
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors cursor-pointer disabled:opacity-50 min-h-[44px]"
                 >
                   {isSubmitting ? 'Salvando...' : editingOrder ? 'Atualizar O.S.' : 'Salvar O.S.'}
                 </button>
@@ -742,19 +743,19 @@ export const MaintenancesView: React.FC<MaintenancesViewProps> = ({
 
       {/* Modal Confirmação Exclusão */}
       {deleteConfirmId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-xl max-w-sm w-full p-6 text-center">
-            <div className="w-12 h-12 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center mx-auto mb-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xl max-w-sm w-full p-6 text-center">
+            <div className="w-12 h-12 rounded-full bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto mb-3">
               <Trash2 className="w-6 h-6" />
             </div>
-            <h3 className="font-bold text-slate-900 text-base">Remover Ordem de Manutenção?</h3>
-            <p className="text-slate-500 text-xs mt-1">
+            <h3 className="font-bold text-slate-900 dark:text-white text-base">Remover Ordem de Manutenção?</h3>
+            <p className="text-slate-500 dark:text-slate-400 text-xs mt-1">
               Esta ação removerá a ordem de serviço do histórico do condomínio.
             </p>
             <div className="flex items-center justify-center gap-3 mt-5">
               <button
                 onClick={() => setDeleteConfirmId(null)}
-                className="px-4 py-2 border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-semibold rounded-lg cursor-pointer"
+                className="px-4 py-2 min-h-[40px] border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold rounded-lg cursor-pointer"
               >
                 Cancelar
               </button>
@@ -763,7 +764,7 @@ export const MaintenancesView: React.FC<MaintenancesViewProps> = ({
                   await onDeleteMaintenance(deleteConfirmId);
                   setDeleteConfirmId(null);
                 }}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-lg shadow-sm cursor-pointer"
+                className="px-4 py-2 min-h-[40px] bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-lg shadow-sm cursor-pointer"
               >
                 Confirmar Exclusão
               </button>
