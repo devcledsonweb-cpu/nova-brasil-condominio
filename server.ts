@@ -14,43 +14,63 @@ import {
   createBlock,
   createCommonArea,
   createCondominium,
+  createCompanyAsset,
   createDelivery,
   createIncident,
+  createMaintenanceOrder,
+  createOperationalLog,
+  createPatrolVehicle,
   createPoll,
   createReservation,
   createResident,
+  createSecurityAgent,
   createSystemUser,
   createUnit,
   createVehicle,
   deleteAnnouncement,
   deleteBlock,
+  deleteCompanyAsset,
   deleteCondominium,
+  deleteMaintenanceOrder,
+  deleteOperationalLog,
+  deletePatrolVehicle,
   deleteResident,
+  deleteSecurityAgent,
   deleteSystemUser,
   deleteUnit,
   deleteVehicle,
+  ensureEnterpriseTables,
   getAccessLogs,
   getAnnouncements,
   getBlocks,
   getCommonAreas,
+  getCompanyAssets,
   getCondominiumById,
   getCondominiums,
   getDashboardStats,
   getDeliveries,
   getIncidents,
+  getMaintenanceOrders,
+  getOperationalLogs,
   getOrCreateUser,
+  getPatrolVehicles,
   getPolls,
   getReservations,
   getResidents,
+  getSecurityAgents,
   getUnits,
   getUsersList,
   getVehicles,
   markDeliveryPickup,
   registerAccessExit,
   updateBlock,
+  updateCompanyAsset,
   updateCondominium,
   updateIncidentStatus,
+  updateMaintenanceOrder,
+  updatePatrolVehicle,
   updateResident,
+  updateSecurityAgent,
   updateSystemUser,
   updateUnit,
   updateVehicle,
@@ -58,6 +78,7 @@ import {
 } from './src/db/queries.ts';
 
 dotenv.config();
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -221,6 +242,218 @@ app.get('/api/dashboard/stats', requireAuth, async (req, res) => {
     res.json(stats);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// --- ROTAS OPERACIONAIS DA EMPRESA (FACILITIES, SEGURANÇA E MANUTENÇÃO) ---
+
+// A. Agentes de Portaria e Colaboradores nos Postos
+app.get('/api/agents', requireAuth, async (req, res) => {
+  try {
+    const condoId = getRequestedCondoId(req);
+    const agents = await getSecurityAgents(condoId);
+    res.json(agents);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/agents', requireAuth, async (req, res) => {
+  try {
+    const { name, phone, badgeNumber } = req.body;
+    if (!name || !badgeNumber) {
+      return res.status(400).json({ error: 'Nome e número do crachá/matrícula são obrigatórios.' });
+    }
+    const agent = await createSecurityAgent(req.body);
+    res.status(201).json(agent);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.put('/api/agents/:id', requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const agent = await updateSecurityAgent(id, req.body);
+    res.json(agent);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.delete('/api/agents/:id', requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    await deleteSecurityAgent(id);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// B. Veículos de Ronda da Empresa (Motos, Carros, Viaturas Operacionais)
+app.get('/api/patrol-vehicles', requireAuth, async (req, res) => {
+  try {
+    const condoId = getRequestedCondoId(req);
+    const vehicles = await getPatrolVehicles(condoId);
+    res.json(vehicles);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/patrol-vehicles', requireAuth, async (req, res) => {
+  try {
+    const { plate, model } = req.body;
+    if (!plate || !model) {
+      return res.status(400).json({ error: 'Placa e modelo do veículo são obrigatórios.' });
+    }
+    const vehicle = await createPatrolVehicle(req.body);
+    res.status(201).json(vehicle);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.put('/api/patrol-vehicles/:id', requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const vehicle = await updatePatrolVehicle(id, req.body);
+    res.json(vehicle);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.delete('/api/patrol-vehicles/:id', requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    await deletePatrolVehicle(id);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// C. Materiais e Patrimônio da Empresa no Condomínio (HTs, CFTV, Ferramentas, EPIs)
+app.get('/api/company-assets', requireAuth, async (req, res) => {
+  try {
+    const condoId = getRequestedCondoId(req);
+    const assets = await getCompanyAssets(condoId);
+    res.json(assets);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/company-assets', requireAuth, async (req, res) => {
+  try {
+    const { name } = req.body;
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: 'O nome do material/equipamento é obrigatório.' });
+    }
+    const asset = await createCompanyAsset(req.body);
+    res.status(201).json(asset);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.put('/api/company-assets/:id', requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const asset = await updateCompanyAsset(id, req.body);
+    res.json(asset);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.delete('/api/company-assets/:id', requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    await deleteCompanyAsset(id);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// D. Manutenções Realizadas pela Empresa no Condomínio (OS Predial / Técnica)
+app.get('/api/maintenances', requireAuth, async (req, res) => {
+  try {
+    const condoId = getRequestedCondoId(req);
+    const maintenances = await getMaintenanceOrders(condoId);
+    res.json(maintenances);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/maintenances', requireAuth, async (req, res) => {
+  try {
+    const { title, technicianName, scheduledDate, description } = req.body;
+    if (!title || !technicianName || !scheduledDate || !description) {
+      return res.status(400).json({ error: 'Título, técnico, data agendada e descrição são obrigatórios.' });
+    }
+    const order = await createMaintenanceOrder(req.body);
+    res.status(201).json(order);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.put('/api/maintenances/:id', requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const order = await updateMaintenanceOrder(id, req.body);
+    res.json(order);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.delete('/api/maintenances/:id', requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    await deleteMaintenanceOrder(id);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// E. Livro de Ocorrências e Turnos da Portaria/Ronda
+app.get('/api/operational-logs', requireAuth, async (req, res) => {
+  try {
+    const condoId = getRequestedCondoId(req);
+    const logs = await getOperationalLogs(condoId);
+    res.json(logs);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/operational-logs', requireAuth, async (req, res) => {
+  try {
+    const { agentName, title, description, logDate, logTime } = req.body;
+    if (!agentName || !title || !description || !logDate || !logTime) {
+      return res.status(400).json({ error: 'Agente, título, descrição, data e hora são obrigatórios.' });
+    }
+    const log = await createOperationalLog(req.body);
+    res.status(201).json(log);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.delete('/api/operational-logs/:id', requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    await deleteOperationalLog(id);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
   }
 });
 
@@ -702,11 +935,12 @@ if (process.env.NODE_ENV === 'production') {
 app.listen(port, '0.0.0.0', () => {
   console.log(`NOVA BRASIL API and Frontend server listening at http://localhost:${port}`);
 
-  // Pré-aquece o pool de conexões do PostgreSQL e evita cold start
+  // Pré-aquece o pool de conexões do PostgreSQL e garante tabelas operacionais
   try {
     const pool = createPool();
-    pool.query('SELECT 1').then(() => {
+    pool.query('SELECT 1').then(async () => {
       console.log('PostgreSQL conectado e pronto para receber conexões.');
+      await ensureEnterpriseTables();
     }).catch((err) => {
       console.warn('Tentativa inicial de conexão PostgreSQL:', err.message);
     });
@@ -719,3 +953,4 @@ app.listen(port, '0.0.0.0', () => {
     console.warn('Erro ao inicializar pool keep-alive:', e);
   }
 });
+

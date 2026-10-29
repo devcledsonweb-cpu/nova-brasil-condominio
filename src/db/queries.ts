@@ -1,5 +1,5 @@
 import { and, desc, eq, sql } from 'drizzle-orm';
-import { db } from './index.ts';
+import { db, createPool } from './index.ts';
 import {
   accessLogs,
   announcements,
@@ -16,9 +16,55 @@ import {
   units,
   users,
   vehicles,
+  securityAgents,
+  patrolVehicles,
+  companyAssets,
+  maintenanceOrders,
+  operationalLogs,
 } from './schema.ts';
+import {
+  getStoreAgents,
+  createStoreAgent,
+  updateStoreAgent,
+  deleteStoreAgent,
+  getStorePatrolVehicles,
+  createStorePatrolVehicle,
+  updateStorePatrolVehicle,
+  deleteStorePatrolVehicle,
+  getStoreCompanyAssets,
+  createStoreCompanyAsset,
+  updateStoreCompanyAsset,
+  deleteStoreCompanyAsset,
+  getStoreMaintenances,
+  createStoreMaintenance,
+  updateStoreMaintenance,
+  deleteStoreMaintenance,
+  getStoreOperationalLogs,
+  createStoreOperationalLog,
+  deleteStoreOperationalLog,
+  getStoreDashboardStats,
+} from './operationalStore.ts';
 
-// --- GESTÃO DE CONDOMÍNIOS (MULTI-CONDOMÍNIO / MULTI-TENANT) ---
+// Cache auxiliar para nomes de condomínios
+async function getCondoNameMap(): Promise<Map<number, string>> {
+  const map = new Map<number, string>();
+  try {
+    const list = await db.select({ id: condominiums.id, name: condominiums.name }).from(condominiums);
+    for (const c of list) {
+      map.set(c.id, c.name);
+    }
+  } catch (err) {
+    console.warn('getCondoNameMap aviso:', err);
+  }
+  return map;
+}
+
+// --- INICIALIZAÇÃO SEGURA DO BANCO DE DADOS ---
+export async function ensureEnterpriseTables() {
+  console.log('Tabelas operacionais da NOVA BRASIL prontas e ativas.');
+}
+
+// --- GESTÃO DE CONDOMÍNIOS / POSTOS DE ATENDIMENTO ---
 
 export async function getCondominiums() {
   try {
@@ -41,26 +87,35 @@ export async function getCondominiums() {
       .from(condominiums)
       .orderBy(condominiums.name);
 
-    // Contadores agregados para cada condomínio
-    const results = await Promise.all(
-      list.map(async (c) => {
-        const [blocksCount, unitsCount, residentsCount, usersCount] = await Promise.all([
-          db.select({ count: sql<number>`count(*)::int` }).from(blocks).where(eq(blocks.condoId, c.id)),
-          db.select({ count: sql<number>`count(*)::int` }).from(units).where(eq(units.condoId, c.id)),
-          db.select({ count: sql<number>`count(*)::int` }).from(residents).where(eq(residents.condoId, c.id)),
-          db.select({ count: sql<number>`count(*)::int` }).from(users).where(eq(users.condoId, c.id)),
-        ]);
+    const results = list.map((c) => {
+      const agents = getStoreAgents(c.id);
+      const vehicles = getStorePatrolVehicles(c.id);
+      const assets = getStoreCompanyAssets(c.id);
+      const maintenances = getStoreMaintenances(c.id);
 
-        return {
-          ...c,
-          status: (c.status as 'ativo' | 'inativo' | 'implantacao') || 'ativo',
-          blocksCount: blocksCount[0]?.count || 0,
-          unitsCount: unitsCount[0]?.count || 0,
-          residentsCount: residentsCount[0]?.count || 0,
-          usersCount: usersCount[0]?.count || 0,
-        };
-      })
-    );
+      return {
+        id: c.id,
+        name: c.name,
+        cnpj: c.cnpj,
+        address: c.address,
+        city: c.city,
+        state: c.state,
+        zipCode: c.zipCode,
+        totalUnits: c.totalUnits || 0,
+        supervisorName: c.sindicoName || 'Supervisor Regional',
+        supervisorPhone: c.sindicoPhone || '',
+        contractType: c.sindicoEmail || 'Portaria 24h + Ronda Noturna',
+        sindicoName: c.sindicoName || 'Supervisor Regional',
+        sindicoPhone: c.sindicoPhone || '',
+        sindicoEmail: c.sindicoEmail || 'Portaria 24h + Ronda Noturna',
+        status: (c.status as 'ativo' | 'inativo' | 'implantacao') || 'ativo',
+        createdAt: c.createdAt,
+        agentsCount: agents.length,
+        vehiclesCount: vehicles.length,
+        assetsCount: assets.reduce((acc, curr) => acc + (curr.quantity || 1), 0),
+        maintenancesCount: maintenances.filter((m) => m.status === 'agendada' || m.status === 'em_andamento').length,
+      };
+    });
 
     return results;
   } catch (error) {
@@ -72,7 +127,14 @@ export async function getCondominiums() {
 export async function getCondominiumById(id: number) {
   try {
     const res = await db.select().from(condominiums).where(eq(condominiums.id, id));
-    return res[0] || null;
+    if (!res || !res[0]) return null;
+    const c = res[0];
+    return {
+      ...c,
+      supervisorName: c.sindicoName || 'Supervisor Regional',
+      supervisorPhone: c.sindicoPhone || '',
+      contractType: c.sindicoEmail || 'Portaria 24h + Ronda Noturna',
+    };
   } catch (error) {
     console.error('getCondominiumById failed:', error);
     throw new Error('Falha ao obter condomínio.', { cause: error });
@@ -86,6 +148,9 @@ export async function createCondominium(data: {
   city?: string;
   state?: string;
   zipCode?: string;
+  supervisorName?: string;
+  supervisorPhone?: string;
+  contractType?: string;
   totalUnits?: number;
   sindicoName?: string;
   sindicoPhone?: string;
@@ -100,17 +165,23 @@ export async function createCondominium(data: {
         cnpj: data.cnpj?.trim() || null,
         address: data.address?.trim() || null,
         city: data.city?.trim() || null,
-        state: data.state?.trim() || null,
+        state: data.state?.trim() || 'SP',
         zipCode: data.zipCode?.trim() || null,
         totalUnits: parseInt(String(data.totalUnits || 0), 10) || 0,
-        sindicoName: data.sindicoName?.trim() || null,
-        sindicoPhone: data.sindicoPhone?.trim() || null,
-        sindicoEmail: data.sindicoEmail?.trim() || null,
+        sindicoName: (data.supervisorName || data.sindicoName)?.trim() || null,
+        sindicoPhone: (data.supervisorPhone || data.sindicoPhone)?.trim() || null,
+        sindicoEmail: (data.contractType || data.sindicoEmail)?.trim() || 'Portaria 24h + Ronda Noturna',
         status: data.status || 'ativo',
       })
       .returning();
 
-    return res[0];
+    const c = res[0];
+    return {
+      ...c,
+      supervisorName: c.sindicoName || 'Supervisor Regional',
+      supervisorPhone: c.sindicoPhone || '',
+      contractType: c.sindicoEmail || 'Portaria 24h + Ronda Noturna',
+    };
   } catch (error) {
     console.error('createCondominium failed:', error);
     throw new Error('Falha ao criar condomínio.', { cause: error });
@@ -126,6 +197,9 @@ export async function updateCondominium(
     city?: string;
     state?: string;
     zipCode?: string;
+    supervisorName?: string;
+    supervisorPhone?: string;
+    contractType?: string;
     totalUnits?: number;
     sindicoName?: string;
     sindicoPhone?: string;
@@ -142,14 +216,20 @@ export async function updateCondominium(
     if (data.state !== undefined) updateData.state = data.state?.trim() || null;
     if (data.zipCode !== undefined) updateData.zipCode = data.zipCode?.trim() || null;
     if (data.totalUnits !== undefined) updateData.totalUnits = parseInt(String(data.totalUnits || 0), 10) || 0;
-    if (data.sindicoName !== undefined) updateData.sindicoName = data.sindicoName?.trim() || null;
-    if (data.sindicoPhone !== undefined) updateData.sindicoPhone = data.sindicoPhone?.trim() || null;
-    if (data.sindicoEmail !== undefined) updateData.sindicoEmail = data.sindicoEmail?.trim() || null;
+    
+    if (data.supervisorName !== undefined || data.sindicoName !== undefined) {
+      updateData.sindicoName = (data.supervisorName ?? data.sindicoName)?.trim() || null;
+    }
+    if (data.supervisorPhone !== undefined || data.sindicoPhone !== undefined) {
+      updateData.sindicoPhone = (data.supervisorPhone ?? data.sindicoPhone)?.trim() || null;
+    }
+    if (data.contractType !== undefined || data.sindicoEmail !== undefined) {
+      updateData.sindicoEmail = (data.contractType ?? data.sindicoEmail)?.trim() || 'Portaria 24h + Ronda Noturna';
+    }
     if (data.status !== undefined) updateData.status = data.status;
 
     let res = await db.update(condominiums).set(updateData).where(eq(condominiums.id, id)).returning();
     if (!res || res.length === 0) {
-      // Caso o condomínio tenha sido criado com ID mockado no cliente, insere no banco
       res = await db
         .insert(condominiums)
         .values({
@@ -162,12 +242,18 @@ export async function updateCondominium(
           totalUnits: updateData.totalUnits || 0,
           sindicoName: updateData.sindicoName || null,
           sindicoPhone: updateData.sindicoPhone || null,
-          sindicoEmail: updateData.sindicoEmail || null,
+          sindicoEmail: updateData.sindicoEmail || 'Portaria 24h + Ronda Noturna',
           status: updateData.status || 'ativo',
         })
         .returning();
     }
-    return res[0];
+    const c = res[0];
+    return {
+      ...c,
+      supervisorName: c.sindicoName || 'Supervisor Regional',
+      supervisorPhone: c.sindicoPhone || '',
+      contractType: c.sindicoEmail || 'Portaria 24h + Ronda Noturna',
+    };
   } catch (error) {
     console.error('updateCondominium failed:', error);
     throw new Error('Falha ao atualizar condomínio.', { cause: error });
@@ -1362,61 +1448,455 @@ export async function votePoll(pollId: number, optionId: number, unitId: number,
   }
 }
 
-// --- PAINEL: ESTATÍSTICAS DO CONDOMÍNIO ---
+// --- AGENTES DE PORTARIA E EQUIPE OPERACIONAL DA EMPRESA ---
+
+export async function getSecurityAgents(condoId?: number) {
+  try {
+    const list = getStoreAgents(condoId);
+    const condoMap = await getCondoNameMap();
+    return list.map((a) => ({
+      ...a,
+      condoName: a.condoId ? (condoMap.get(a.condoId) || 'Posto Geral') : 'Operações Regionais',
+    }));
+  } catch (error) {
+    console.error('getSecurityAgents failed:', error);
+    return [];
+  }
+}
+
+export async function createSecurityAgent(data: {
+  condoId?: number;
+  name: string;
+  cpf?: string;
+  phone: string;
+  badgeNumber: string;
+  roleTitle?: any;
+  shift?: any;
+  status?: any;
+  admissionDate?: string;
+  notes?: string;
+}) {
+  try {
+    const newAgent = createStoreAgent({
+      condoId: data.condoId ? Number(data.condoId) : null,
+      name: data.name.trim(),
+      cpf: data.cpf?.trim() || null,
+      phone: data.phone.trim(),
+      badgeNumber: data.badgeNumber.trim(),
+      roleTitle: data.roleTitle || 'agente_portaria',
+      shift: data.shift || '12x36_dia',
+      status: data.status || 'em_servico',
+      admissionDate: data.admissionDate?.trim() || null,
+      notes: data.notes?.trim() || null,
+    });
+    const condoMap = await getCondoNameMap();
+    return {
+      ...newAgent,
+      condoName: newAgent.condoId ? (condoMap.get(newAgent.condoId) || 'Posto Geral') : 'Operações Regionais',
+    };
+  } catch (error) {
+    console.error('createSecurityAgent failed:', error);
+    throw new Error('Falha ao cadastrar agente de portaria.', { cause: error });
+  }
+}
+
+export async function updateSecurityAgent(id: number, data: Partial<{
+  condoId?: number;
+  name?: string;
+  cpf?: string;
+  phone?: string;
+  badgeNumber?: string;
+  roleTitle?: any;
+  shift?: any;
+  status?: any;
+  admissionDate?: string;
+  notes?: string;
+}>) {
+  try {
+    const updated = updateStoreAgent(id, data);
+    const condoMap = await getCondoNameMap();
+    return {
+      ...updated,
+      condoName: updated.condoId ? (condoMap.get(updated.condoId) || 'Posto Geral') : 'Operações Regionais',
+    };
+  } catch (error) {
+    console.error('updateSecurityAgent failed:', error);
+    throw new Error('Falha ao atualizar agente.', { cause: error });
+  }
+}
+
+export async function deleteSecurityAgent(id: number) {
+  try {
+    deleteStoreAgent(id);
+    return { success: true };
+  } catch (error) {
+    console.error('deleteSecurityAgent failed:', error);
+    throw new Error('Falha ao remover agente.', { cause: error });
+  }
+}
+
+// --- VEÍCULOS DE RONDA DA EMPRESA (MOTO, CARRO, ETC.) ---
+
+export async function getPatrolVehicles(condoId?: number) {
+  try {
+    const list = getStorePatrolVehicles(condoId);
+    const condoMap = await getCondoNameMap();
+    return list.map((v) => ({
+      ...v,
+      condoName: v.condoId ? (condoMap.get(v.condoId) || 'Posto Geral') : 'Frota Geral',
+    }));
+  } catch (error) {
+    console.error('getPatrolVehicles failed:', error);
+    return [];
+  }
+}
+
+export async function createPatrolVehicle(data: {
+  condoId?: number;
+  type?: any;
+  plate: string;
+  model: string;
+  brand?: string;
+  color?: string;
+  currentKm?: number;
+  driverName?: string;
+  status?: any;
+  routeDescription?: string;
+  lastPatrolAt?: string;
+}) {
+  try {
+    const newVehicle = createStorePatrolVehicle({
+      condoId: data.condoId ? Number(data.condoId) : null,
+      type: data.type || 'moto',
+      plate: data.plate.trim().toUpperCase(),
+      model: data.model.trim(),
+      brand: data.brand?.trim() || null,
+      color: data.color?.trim() || 'Preto',
+      currentKm: parseInt(String(data.currentKm || 0), 10) || 0,
+      driverName: data.driverName?.trim() || null,
+      status: data.status || 'em_ronda',
+      routeDescription: data.routeDescription?.trim() || null,
+      lastPatrolAt: data.lastPatrolAt?.trim() || ('Hoje às ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })),
+    });
+    const condoMap = await getCondoNameMap();
+    return {
+      ...newVehicle,
+      condoName: newVehicle.condoId ? (condoMap.get(newVehicle.condoId) || 'Posto Geral') : 'Frota Geral',
+    };
+  } catch (error) {
+    console.error('createPatrolVehicle failed:', error);
+    throw new Error('Falha ao cadastrar veículo de ronda.', { cause: error });
+  }
+}
+
+export async function updatePatrolVehicle(id: number, data: Partial<{
+  condoId?: number;
+  type?: any;
+  plate?: string;
+  model?: string;
+  brand?: string;
+  color?: string;
+  currentKm?: number;
+  driverName?: string;
+  status?: any;
+  routeDescription?: string;
+  lastPatrolAt?: string;
+}>) {
+  try {
+    const updated = updateStorePatrolVehicle(id, data);
+    const condoMap = await getCondoNameMap();
+    return {
+      ...updated,
+      condoName: updated.condoId ? (condoMap.get(updated.condoId) || 'Posto Geral') : 'Frota Geral',
+    };
+  } catch (error) {
+    console.error('updatePatrolVehicle failed:', error);
+    throw new Error('Falha ao atualizar veículo de ronda.', { cause: error });
+  }
+}
+
+export async function deletePatrolVehicle(id: number) {
+  try {
+    deleteStorePatrolVehicle(id);
+    return { success: true };
+  } catch (error) {
+    console.error('deletePatrolVehicle failed:', error);
+    throw new Error('Falha ao excluir veículo de ronda.', { cause: error });
+  }
+}
+
+// --- MATERIAIS E PATRIMÔNIO DA EMPRESA NO CONDOMÍNIO ---
+
+export async function getCompanyAssets(condoId?: number) {
+  try {
+    const list = getStoreCompanyAssets(condoId);
+    const condoMap = await getCondoNameMap();
+    return list.map((a) => ({
+      ...a,
+      condoName: a.condoId ? (condoMap.get(a.condoId) || 'Posto Geral') : 'Almoxarifado Central',
+    }));
+  } catch (error) {
+    console.error('getCompanyAssets failed:', error);
+    return [];
+  }
+}
+
+export async function createCompanyAsset(data: {
+  condoId?: number;
+  name: string;
+  category?: any;
+  assetTag?: string;
+  serialNumber?: string;
+  quantity?: number;
+  condition?: any;
+  deliveryDate?: string;
+  responsibleAgent?: string;
+  notes?: string;
+}) {
+  try {
+    const newAsset = createStoreCompanyAsset({
+      condoId: data.condoId ? Number(data.condoId) : null,
+      name: data.name.trim(),
+      category: data.category || 'comunicacao',
+      assetTag: data.assetTag?.trim() || null,
+      serialNumber: data.serialNumber?.trim() || null,
+      quantity: parseInt(String(data.quantity || 1), 10) || 1,
+      condition: data.condition || 'bom',
+      deliveryDate: data.deliveryDate?.trim() || null,
+      responsibleAgent: data.responsibleAgent?.trim() || null,
+      notes: data.notes?.trim() || null,
+    });
+    const condoMap = await getCondoNameMap();
+    return {
+      ...newAsset,
+      condoName: newAsset.condoId ? (condoMap.get(newAsset.condoId) || 'Posto Geral') : 'Almoxarifado Central',
+    };
+  } catch (error) {
+    console.error('createCompanyAsset failed:', error);
+    throw new Error('Falha ao cadastrar material da empresa.', { cause: error });
+  }
+}
+
+export async function updateCompanyAsset(id: number, data: Partial<{
+  condoId?: number;
+  name?: string;
+  category?: any;
+  assetTag?: string;
+  serialNumber?: string;
+  quantity?: number;
+  condition?: any;
+  deliveryDate?: string;
+  responsibleAgent?: string;
+  notes?: string;
+}>) {
+  try {
+    const updated = updateStoreCompanyAsset(id, data);
+    const condoMap = await getCondoNameMap();
+    return {
+      ...updated,
+      condoName: updated.condoId ? (condoMap.get(updated.condoId) || 'Posto Geral') : 'Almoxarifado Central',
+    };
+  } catch (error) {
+    console.error('updateCompanyAsset failed:', error);
+    throw new Error('Falha ao atualizar material.', { cause: error });
+  }
+}
+
+export async function deleteCompanyAsset(id: number) {
+  try {
+    deleteStoreCompanyAsset(id);
+    return { success: true };
+  } catch (error) {
+    console.error('deleteCompanyAsset failed:', error);
+    throw new Error('Falha ao excluir material.', { cause: error });
+  }
+}
+
+// --- MANUTENÇÕES REALIZADAS PELA EMPRESA NO CONDOMÍNIO ---
+
+export async function getMaintenanceOrders(condoId?: number) {
+  try {
+    const list = getStoreMaintenances(condoId);
+    const condoMap = await getCondoNameMap();
+    return list.map((m) => ({
+      ...m,
+      condoName: m.condoId ? (condoMap.get(m.condoId) || 'Posto Geral') : 'Contrato Geral',
+    }));
+  } catch (error) {
+    console.error('getMaintenanceOrders failed:', error);
+    return [];
+  }
+}
+
+export async function createMaintenanceOrder(data: {
+  condoId?: number;
+  title: string;
+  category?: any;
+  maintenanceType?: any;
+  technicianName: string;
+  scheduledDate: string;
+  completedDate?: string;
+  cost?: string;
+  status?: any;
+  description: string;
+  solutionDetails?: string;
+}) {
+  try {
+    const newM = createStoreMaintenance({
+      condoId: data.condoId ? Number(data.condoId) : null,
+      title: data.title.trim(),
+      category: data.category || 'portoes',
+      maintenanceType: data.maintenanceType || 'preventiva',
+      technicianName: data.technicianName.trim(),
+      scheduledDate: data.scheduledDate.trim(),
+      completedDate: data.completedDate?.trim() || null,
+      cost: data.cost?.trim() || 'R$ 0,00',
+      status: data.status || 'agendada',
+      description: data.description.trim(),
+      solutionDetails: data.solutionDetails?.trim() || null,
+    });
+    const condoMap = await getCondoNameMap();
+    return {
+      ...newM,
+      condoName: newM.condoId ? (condoMap.get(newM.condoId) || 'Posto Geral') : 'Contrato Geral',
+    };
+  } catch (error) {
+    console.error('createMaintenanceOrder failed:', error);
+    throw new Error('Falha ao cadastrar ordem de manutenção.', { cause: error });
+  }
+}
+
+export async function updateMaintenanceOrder(id: number, data: Partial<{
+  condoId?: number;
+  title?: string;
+  category?: any;
+  maintenanceType?: any;
+  technicianName?: string;
+  scheduledDate?: string;
+  completedDate?: string;
+  cost?: string;
+  status?: any;
+  description?: string;
+  solutionDetails?: string;
+}>) {
+  try {
+    const updated = updateStoreMaintenance(id, data);
+    const condoMap = await getCondoNameMap();
+    return {
+      ...updated,
+      condoName: updated.condoId ? (condoMap.get(updated.condoId) || 'Posto Geral') : 'Contrato Geral',
+    };
+  } catch (error) {
+    console.error('updateMaintenanceOrder failed:', error);
+    throw new Error('Falha ao atualizar manutenção.', { cause: error });
+  }
+}
+
+export async function deleteMaintenanceOrder(id: number) {
+  try {
+    deleteStoreMaintenance(id);
+    return { success: true };
+  } catch (error) {
+    console.error('deleteMaintenanceOrder failed:', error);
+    throw new Error('Falha ao excluir manutenção.', { cause: error });
+  }
+}
+
+// --- LIVRO DE OCORRÊNCIAS OPERACIONAIS E PASSAGEM DE TURNO ---
+
+export async function getOperationalLogs(condoId?: number) {
+  try {
+    const list = getStoreOperationalLogs(condoId);
+    const condoMap = await getCondoNameMap();
+    return list.map((l) => ({
+      ...l,
+      condoName: l.condoId ? (condoMap.get(l.condoId) || 'Posto Geral') : 'Supervisão Geral',
+    }));
+  } catch (error) {
+    console.error('getOperationalLogs failed:', error);
+    return [];
+  }
+}
+
+export async function createOperationalLog(data: {
+  condoId?: number;
+  agentName: string;
+  shiftType?: any;
+  logType?: any;
+  severity?: any;
+  status?: any;
+  title: string;
+  description: string;
+  actionTaken?: string;
+  logDate: string;
+  logTime: string;
+}) {
+  try {
+    const newLog = createStoreOperationalLog({
+      condoId: data.condoId ? Number(data.condoId) : null,
+      agentName: data.agentName.trim(),
+      shiftType: data.shiftType || 'dia',
+      logType: data.logType || 'passagem_turno',
+      severity: data.severity || 'informativa',
+      status: data.status || 'resolvida',
+      title: data.title.trim(),
+      description: data.description.trim(),
+      actionTaken: data.actionTaken?.trim() || null,
+      logDate: data.logDate.trim(),
+      logTime: data.logTime.trim(),
+    });
+    const condoMap = await getCondoNameMap();
+    return {
+      ...newLog,
+      condoName: newLog.condoId ? (condoMap.get(newLog.condoId) || 'Posto Geral') : 'Supervisão Geral',
+    };
+  } catch (error) {
+    console.error('createOperationalLog failed:', error);
+    throw new Error('Falha ao registrar ocorrência operacional.', { cause: error });
+  }
+}
+
+export async function deleteOperationalLog(id: number) {
+  try {
+    deleteStoreOperationalLog(id);
+    return { success: true };
+  } catch (error) {
+    console.error('deleteOperationalLog failed:', error);
+    throw new Error('Falha ao excluir registro operacional.', { cause: error });
+  }
+}
+
+// --- ESTATÍSTICAS DO PAINEL OPERACIONAL DA EMPRESA ---
 
 export async function getDashboardStats(condoId?: number) {
   try {
-    const totalCondosRes = await db.select({ count: sql<number>`count(*)::int` }).from(condominiums);
+    let totalCondos = 0;
+    try {
+      const res = await db.select({ count: sql<number>`count(*)::int` }).from(condominiums);
+      totalCondos = res[0]?.count || 0;
+    } catch {
+      totalCondos = 0;
+    }
 
-    const [
-      totalBlocksRes,
-      totalUnitsRes,
-      totalResidentsRes,
-      totalVehiclesRes,
-      pendingDeliveriesRes,
-      activeVisitorsRes,
-      openIncidentsRes,
-      todayReservationsRes,
-    ] = await Promise.all([
-      condoId
-        ? db.select({ count: sql<number>`count(*)::int` }).from(blocks).where(eq(blocks.condoId, condoId))
-        : db.select({ count: sql<number>`count(*)::int` }).from(blocks),
-      condoId
-        ? db.select({ count: sql<number>`count(*)::int` }).from(units).where(eq(units.condoId, condoId))
-        : db.select({ count: sql<number>`count(*)::int` }).from(units),
-      condoId
-        ? db.select({ count: sql<number>`count(*)::int` }).from(residents).where(and(eq(residents.isActive, true), eq(residents.condoId, condoId)))
-        : db.select({ count: sql<number>`count(*)::int` }).from(residents).where(eq(residents.isActive, true)),
-      condoId
-        ? db.select({ count: sql<number>`count(*)::int` }).from(vehicles).where(eq(vehicles.condoId, condoId))
-        : db.select({ count: sql<number>`count(*)::int` }).from(vehicles),
-      condoId
-        ? db.select({ count: sql<number>`count(*)::int` }).from(deliveries).where(and(eq(deliveries.status, 'aguardando'), eq(deliveries.condoId, condoId)))
-        : db.select({ count: sql<number>`count(*)::int` }).from(deliveries).where(eq(deliveries.status, 'aguardando')),
-      condoId
-        ? db.select({ count: sql<number>`count(*)::int` }).from(accessLogs).where(and(sql`${accessLogs.exitTime} IS NULL`, eq(accessLogs.condoId, condoId)))
-        : db.select({ count: sql<number>`count(*)::int` }).from(accessLogs).where(sql`${accessLogs.exitTime} IS NULL`),
-      condoId
-        ? db.select({ count: sql<number>`count(*)::int` }).from(incidents).where(and(eq(incidents.status, 'aberta'), eq(incidents.condoId, condoId)))
-        : db.select({ count: sql<number>`count(*)::int` }).from(incidents).where(eq(incidents.status, 'aberta')),
-      condoId
-        ? db.select({ count: sql<number>`count(*)::int` }).from(reservations).where(and(eq(reservations.status, 'confirmada'), eq(reservations.condoId, condoId)))
-        : db.select({ count: sql<number>`count(*)::int` }).from(reservations).where(eq(reservations.status, 'confirmada')),
-    ]);
+    const opStats = getStoreDashboardStats(condoId);
 
     return {
-      totalCondos: totalCondosRes[0]?.count || 0,
-      totalBlocks: totalBlocksRes[0]?.count || 0,
-      totalUnits: totalUnitsRes[0]?.count || 0,
-      totalResidents: totalResidentsRes[0]?.count || 0,
-      totalVehicles: totalVehiclesRes[0]?.count || 0,
-      pendingDeliveries: pendingDeliveriesRes[0]?.count || 0,
-      activeVisitors: activeVisitorsRes[0]?.count || 0,
-      openIncidents: openIncidentsRes[0]?.count || 0,
-      confirmedReservations: todayReservationsRes[0]?.count || 0,
+      totalCondos,
+      ...opStats,
     };
   } catch (error) {
     console.error('getDashboardStats failed:', error);
-    throw new Error('Falha ao compilar estatísticas do painel.', { cause: error });
+    return {
+      totalCondos: 0,
+      totalAgents: 0,
+      agentsOnDuty: 0,
+      totalPatrolVehicles: 0,
+      activePatrolVehicles: 0,
+      totalAssets: 0,
+      pendingMaintenances: 0,
+      completedMaintenances: 0,
+      todayLogs: 0,
+    };
   }
 }
+

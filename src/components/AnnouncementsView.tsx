@@ -317,7 +317,7 @@ export const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({
               </div>
             ) : (
               polls.map((poll) => {
-                const hasUnitVoted = poll.votes?.some((v) => v.unitId === selectedUnitForVote);
+                const hasUnitVoted = poll.votes?.some((v: any) => v.unitId === selectedUnitForVote);
                 return (
                   <div
                     key={poll.id}
@@ -343,8 +343,9 @@ export const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({
 
                       {/* Opções de Voto com Barras de Progresso */}
                       <div className="space-y-3 mt-4">
-                        {poll.options.map((opt) => (
+                        {poll.options.map((opt: any) => (
                           <div key={opt.id} className="space-y-1">
+
                             <div className="flex items-center justify-between text-xs">
                               <span className="font-medium text-slate-800">{opt.text}</span>
                               <span className="font-mono text-slate-500 tabular-nums">

@@ -1,25 +1,111 @@
-export type UserRole = 'sindico' | 'portaria';
+export type UserRole = 'admin' | 'supervisor' | 'operador' | 'sindico' | 'portaria';
 
 export interface Condominium {
   id: number;
-  name: string;
+  name: string; // ex: "Residencial Jardins", "Edifício Alphaville Corporate"
   cnpj?: string | null;
   address?: string | null;
   city?: string | null;
   state?: string | null;
   zipCode?: string | null;
-  totalUnits?: number | null;
-  sindicoName?: string | null;
+  supervisorName?: string | null;
+  supervisorPhone?: string | null;
+  contractType?: string | null; // ex: "Portaria 24h + Ronda Noturna"
+  sindicoName?: string | null; // Contato no cliente
   sindicoPhone?: string | null;
   sindicoEmail?: string | null;
+  totalUnits?: number | null;
   status: 'ativo' | 'inativo' | 'implantacao';
   createdAt?: string;
-  // Computed / aggregated counts
-  blocksCount?: number;
-  unitsCount?: number;
-  residentsCount?: number;
+  // Métricas operacionais agregadas
+  agentsCount?: number;
   vehiclesCount?: number;
+  assetsCount?: number;
+  maintenancesCount?: number;
   usersCount?: number;
+}
+
+export interface SecurityAgent {
+  id: number;
+  condoId?: number | null;
+  condoName?: string;
+  name: string;
+  cpf?: string | null;
+  phone: string;
+  badgeNumber: string; // Crachá / Matrícula
+  roleTitle: 'agente_portaria' | 'ronda_motorizada' | 'fiscal_piso' | 'lider_posto' | 'zelador_operacional';
+  shift: '12x36_dia' | '12x36_noite' | '6x1' | 'folguista';
+  status: 'em_servico' | 'folga' | 'ferias' | 'afastado';
+  admissionDate?: string | null;
+  notes?: string | null;
+  createdAt?: string;
+}
+
+export interface PatrolVehicle {
+  id: number;
+  condoId?: number | null;
+  condoName?: string;
+  type: 'moto' | 'carro' | 'utilitario' | 'bicicleta';
+  plate: string;
+  model: string;
+  brand?: string | null;
+  color: string;
+  currentKm: number;
+  driverName?: string | null; // Rondante ou condutor designado
+  status: 'em_ronda' | 'disponivel' | 'manutencao' | 'abastecimento';
+  routeDescription?: string | null; // ex: "Perímetro externo e garagens a cada 30min"
+  lastPatrolAt?: string | null;
+  createdAt?: string;
+}
+
+export interface CompanyAsset {
+  id: number;
+  condoId?: number | null;
+  condoName?: string;
+  name: string; // ex: "Rádio Comunicador HT Baofeng UV-5R", "Bastão Vigia Guardus"
+  category: 'comunicacao' | 'seguranca_ronda' | 'cftv_ti' | 'ferramentas' | 'sinalizacao' | 'epi' | 'outro';
+  assetTag?: string | null; // Nº do Patrimônio / Tombamento
+  serialNumber?: string | null;
+  quantity: number;
+  condition: 'novo' | 'bom' | 'regular' | 'danificado';
+  deliveryDate?: string | null;
+  responsibleAgent?: string | null; // Quem assinou a cautela
+  notes?: string | null;
+  createdAt?: string;
+}
+
+export interface MaintenanceOrder {
+  id: number;
+  condoId?: number | null;
+  condoName?: string;
+  title: string;
+  category: 'portoes' | 'cftv' | 'interfonia' | 'eletrica' | 'hidraulica' | 'gerador' | 'controle_acesso' | 'alvenaria_pintura' | 'outro';
+  maintenanceType: 'preventiva' | 'corretiva' | 'emergencial';
+  technicianName: string; // Técnico ou equipe enviada pela empresa
+  scheduledDate: string; // YYYY-MM-DD
+  completedDate?: string | null;
+  cost: string; // R$ 0,00
+  status: 'agendada' | 'em_andamento' | 'aguardando_peca' | 'concluida' | 'cancelada';
+  description: string;
+  solutionDetails?: string | null;
+  createdAt?: string;
+}
+
+export interface OperationalLog {
+  id: number;
+  condoId?: number | null;
+  condoName?: string;
+  agentName: string;
+  shiftType: 'dia' | 'noite';
+  logType: 'passagem_turno' | 'ocorrencia_posto' | 'ronda_preventiva' | 'vistoria_supervisor';
+  severity: 'informativa' | 'baixa' | 'media' | 'alta' | 'grave';
+  status: 'aberta' | 'em_analise' | 'resolvida';
+  title: string;
+  description: string;
+  actionTaken?: string | null;
+  logDate: string;
+  logTime: string;
+  createdAt?: string;
 }
 
 export interface UserProfile {
@@ -47,6 +133,28 @@ export interface SystemUser {
   createdAt?: string;
 }
 
+export interface DashboardStats {
+  totalCondos: number;
+  totalAgents: number;
+  agentsOnDuty: number;
+  totalPatrolVehicles: number;
+  activePatrolVehicles: number;
+  totalAssets: number;
+  pendingMaintenances: number;
+  completedMaintenances: number;
+  todayLogs: number;
+  // Legacy fields
+  totalBlocks?: number;
+  totalUnits?: number;
+  totalResidents?: number;
+  totalVehicles?: number;
+  pendingDeliveries?: number;
+  activeVisitors?: number;
+  openIncidents?: number;
+  confirmedReservations?: number;
+}
+
+// --- TIPOS LEGADOS DE COMPATIBILIDADE ---
 export interface Block {
   id: number;
   condoId?: number | null;
@@ -115,11 +223,11 @@ export interface Incident {
   unitNumber?: string | null;
   blockName?: string | null;
   title: string;
-  category: 'barulho' | 'animais' | 'estacionamento' | 'patrimonio' | 'lixo' | 'convivencia' | 'outros';
+  category: string;
   description: string;
   involvedPersons?: string | null;
-  severity: 'baixa' | 'media' | 'alta' | 'grave';
-  status: 'aberta' | 'em_analise' | 'resolvida' | 'advertencia' | 'multa';
+  severity: string;
+  status: string;
   attachmentUrl?: string | null;
   actionTaken?: string | null;
   registeredBy: string;
@@ -152,10 +260,10 @@ export interface Reservation {
   blockName?: string;
   residentName: string;
   reservationDate: string;
-  period: 'manha' | 'tarde' | 'noite' | 'dia_todo';
+  period: string;
   startTime?: string | null;
   endTime?: string | null;
-  status: 'confirmada' | 'pendente' | 'cancelada';
+  status: string;
   notes?: string | null;
   createdAt?: string;
 }
@@ -164,7 +272,7 @@ export interface AccessLog {
   id: number;
   condoId?: number | null;
   condoName?: string;
-  visitorType: 'visitante' | 'prestador';
+  visitorType: string;
   name: string;
   document: string;
   company?: string | null;
@@ -191,7 +299,7 @@ export interface Delivery {
   carrier: string;
   packageType: string;
   location: string;
-  status: 'aguardando' | 'retirado';
+  status: string;
   receivedAt: string;
   pickedUpAt?: string | null;
   pickedUpBy?: string | null;
@@ -204,7 +312,7 @@ export interface Announcement {
   condoName?: string;
   title: string;
   content: string;
-  priority: 'informativo' | 'importante' | 'urgente';
+  priority: string;
   pinned: boolean;
   author: string;
   createdAt: string;
@@ -241,14 +349,4 @@ export interface Poll {
   votes?: PollVote[];
 }
 
-export interface DashboardStats {
-  totalCondos?: number;
-  totalBlocks: number;
-  totalUnits: number;
-  totalResidents: number;
-  totalVehicles: number;
-  pendingDeliveries: number;
-  activeVisitors: number;
-  openIncidents: number;
-  confirmedReservations: number;
-}
+

@@ -54,9 +54,10 @@ export const LoginView: React.FC = () => {
             NOVA BRASIL
           </h1>
           <p className="text-xs text-slate-500">
-            Sistema Integrado de Gestão Condominial
+            Sistema Operacional de Facilities, Portaria & Segurança Condominial
           </p>
         </div>
+
 
         {/* Card de Login */}
         <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 sm:p-8 space-y-6">

@@ -8,7 +8,7 @@ import {
   timestamp,
 } from 'drizzle-orm/pg-core';
 
-// 1. Condomínios (Empresa gerencia múltiplos condomínios)
+// 1. Condomínios / Postos de Atendimento (Empresa gerencia múltiplos condomínios clientes)
 export const condominiums = pgTable('condominiums', {
   id: serial('id').primaryKey(),
   name: text('name').notNull(), // ex: "Residencial Jardins", "Edifício Solar da Serra"
@@ -24,6 +24,7 @@ export const condominiums = pgTable('condominiums', {
   status: text('status').default('ativo'), // 'ativo', 'inativo', 'implantacao'
   createdAt: timestamp('created_at').defaultNow(),
 });
+
 
 // 2. Usuários do sistema administrativo (Administrador Geral, Síndicos e Portaria)
 export const users = pgTable('users', {
@@ -231,6 +232,92 @@ export const pollVotes = pgTable('poll_votes', {
   voterName: text('voter_name'),
   createdAt: timestamp('created_at').defaultNow(),
 });
+
+// --- OPERAÇÃO DA EMPRESA TERCEIRIZADA (FACILITIES, SEGURANÇA E MANUTENÇÃO) ---
+
+// 14. Agentes de Portaria e Colaboradores da Empresa nos Postos
+export const securityAgents = pgTable('security_agents', {
+  id: serial('id').primaryKey(),
+  condoId: integer('condo_id').references(() => condominiums.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  cpf: text('cpf'),
+  phone: text('phone').notNull(),
+  badgeNumber: text('badge_number').notNull(), // Crachá ou Matrícula
+  roleTitle: text('role_title').notNull().default('agente_portaria'), // 'agente_portaria', 'ronda_motorizada', 'fiscal_piso', 'lider_posto', 'zelador_operacional'
+  shift: text('shift').notNull().default('12x36_dia'), // '12x36_dia', '12x36_noite', '6x1', 'folguista'
+  status: text('status').notNull().default('em_servico'), // 'em_servico', 'folga', 'ferias', 'afastado'
+  admissionDate: text('admission_date'),
+  notes: text('notes'),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// 15. Veículos de Ronda da Empresa vinculados ao Condomínio
+export const patrolVehicles = pgTable('patrol_vehicles', {
+  id: serial('id').primaryKey(),
+  condoId: integer('condo_id').references(() => condominiums.id, { onDelete: 'cascade' }),
+  type: text('type').notNull().default('moto'), // 'moto', 'carro', 'utilitario', 'bicicleta'
+  plate: text('plate').notNull(),
+  model: text('model').notNull(),
+  brand: text('brand'),
+  color: text('color').notNull().default('Preto'),
+  currentKm: integer('current_km').default(0),
+  driverName: text('driver_name'),
+  status: text('status').notNull().default('em_ronda'), // 'em_ronda', 'disponivel', 'manutencao', 'abastecimento'
+  routeDescription: text('route_description'),
+  lastPatrolAt: text('last_patrol_at'),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// 16. Patrimônio e Materiais da Empresa no Condomínio
+export const companyAssets = pgTable('company_assets', {
+  id: serial('id').primaryKey(),
+  condoId: integer('condo_id').references(() => condominiums.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(), // ex: "Rádio Comunicador HT", "Bastão de Ronda Guardus"
+  category: text('category').notNull().default('comunicacao'), // 'comunicacao', 'seguranca_ronda', 'cftv_ti', 'ferramentas', 'sinalizacao', 'epi', 'outro'
+  assetTag: text('asset_tag'), // Nº Tombamento / Patrimônio
+  serialNumber: text('serial_number'),
+  quantity: integer('quantity').default(1),
+  condition: text('condition').notNull().default('bom'), // 'novo', 'bom', 'regular', 'danificado'
+  deliveryDate: text('delivery_date'),
+  responsibleAgent: text('responsible_agent'),
+  notes: text('notes'),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// 17. Manutenções que a Empresa Faz no Condomínio (OS Predial / Técnica)
+export const maintenanceOrders = pgTable('maintenance_orders', {
+  id: serial('id').primaryKey(),
+  condoId: integer('condo_id').references(() => condominiums.id, { onDelete: 'cascade' }),
+  title: text('title').notNull(),
+  category: text('category').notNull().default('portoes'), // 'portoes', 'cftv', 'interfonia', 'eletrica', 'hidraulica', 'gerador', 'controle_acesso', 'alvenaria_pintura', 'outro'
+  maintenanceType: text('maintenance_type').notNull().default('preventiva'), // 'preventiva', 'corretiva', 'emergencial'
+  technicianName: text('technician_name').notNull(),
+  scheduledDate: text('scheduled_date').notNull(),
+  completedDate: text('completed_date'),
+  cost: text('cost').default('R$ 0,00'),
+  status: text('status').notNull().default('agendada'), // 'agendada', 'em_andamento', 'aguardando_peca', 'concluida', 'cancelada'
+  description: text('description').notNull(),
+  solutionDetails: text('solution_details'),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// 18. Livro de Ocorrências e Passagem de Turno Operacional da Empresa
+export const operationalLogs = pgTable('operational_logs', {
+  id: serial('id').primaryKey(),
+  condoId: integer('condo_id').references(() => condominiums.id, { onDelete: 'cascade' }),
+  agentName: text('agent_name').notNull(),
+  shiftType: text('shift_type').notNull().default('dia'), // 'dia', 'noite'
+  logType: text('log_type').notNull().default('passagem_turno'), // 'passagem_turno', 'ocorrencia_posto', 'ronda_preventiva', 'vistoria_supervisor'
+  severity: text('severity').notNull().default('informativa'), // 'informativa', 'baixa', 'media', 'alta', 'grave'
+  status: text('status').notNull().default('resolvida'), // 'aberta', 'em_analise', 'resolvida'
+  title: text('title').notNull(),
+  description: text('description').notNull(),
+  actionTaken: text('action_taken'),
+  logDate: text('log_date').notNull(),
+  logTime: text('log_time').notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
 
 // Relacionamentos Drizzle
 export const condominiumsRelations = relations(condominiums, ({ many }) => ({

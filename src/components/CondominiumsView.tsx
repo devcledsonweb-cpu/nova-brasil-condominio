@@ -54,12 +54,16 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
     city: '',
     state: 'SP',
     zipCode: '',
-    totalUnits: 24,
+    supervisorName: '',
+    supervisorPhone: '',
+    contractType: 'Portaria 24h + Ronda Noturna',
+    totalUnits: 0,
     sindicoName: '',
     sindicoPhone: '',
     sindicoEmail: '',
     status: 'ativo',
   });
+
 
   const [isSearchingCep, setIsSearchingCep] = useState(false);
   const [cepFeedback, setCepFeedback] = useState<string>('');
@@ -108,7 +112,10 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
       city: '',
       state: 'SP',
       zipCode: '',
-      totalUnits: 24,
+      supervisorName: '',
+      supervisorPhone: '',
+      contractType: 'Portaria 24h + Ronda Noturna',
+      totalUnits: 0,
       sindicoName: '',
       sindicoPhone: '',
       sindicoEmail: '',
@@ -128,6 +135,9 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
       city: condo.city || '',
       state: condo.state || 'SP',
       zipCode: condo.zipCode ? maskCEP(condo.zipCode) : '',
+      supervisorName: condo.supervisorName || '',
+      supervisorPhone: condo.supervisorPhone ? maskPhone(condo.supervisorPhone) : '',
+      contractType: condo.contractType || 'Portaria 24h + Ronda Noturna',
       totalUnits: condo.totalUnits || 0,
       sindicoName: condo.sindicoName || '',
       sindicoPhone: condo.sindicoPhone ? maskPhone(condo.sindicoPhone) : '',
@@ -138,6 +148,7 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
     setCepFeedback('');
     setIsAddModalOpen(true);
   };
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -191,9 +202,12 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
                 state: formData.state || 'SP',
                 zipCode: formData.zipCode || null,
                 totalUnits: Number(formData.totalUnits) || 0,
-                sindicoName: formData.sindicoName || null,
-                sindicoPhone: formData.sindicoPhone || null,
-                sindicoEmail: formData.sindicoEmail || null,
+                supervisorName: formData.supervisorName?.trim() || formData.sindicoName?.trim() || null,
+                supervisorPhone: formData.supervisorPhone?.trim() || formData.sindicoPhone?.trim() || null,
+                contractType: formData.contractType?.trim() || 'Portaria 24h + Ronda Noturna',
+                sindicoName: formData.supervisorName?.trim() || formData.sindicoName || null,
+                sindicoPhone: formData.supervisorPhone?.trim() || formData.sindicoPhone || null,
+                sindicoEmail: formData.contractType?.trim() || formData.sindicoEmail || 'Portaria 24h + Ronda Noturna',
                 status: (formData.status as 'ativo' | 'implantacao' | 'inativo') || 'ativo',
               }
             : c
@@ -208,13 +222,16 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
           state: formData.state || 'SP',
           zipCode: formData.zipCode || null,
           totalUnits: Number(formData.totalUnits) || 0,
-          blocksCount: 0,
-          unitsCount: 0,
-          residentsCount: 0,
-          usersCount: 0,
-          sindicoName: formData.sindicoName || null,
-          sindicoPhone: formData.sindicoPhone || null,
-          sindicoEmail: formData.sindicoEmail || null,
+          supervisorName: formData.supervisorName?.trim() || formData.sindicoName?.trim() || null,
+          supervisorPhone: formData.supervisorPhone?.trim() || formData.sindicoPhone?.trim() || null,
+          contractType: formData.contractType?.trim() || 'Portaria 24h + Ronda Noturna',
+          agentsCount: 0,
+          vehiclesCount: 0,
+          assetsCount: 0,
+          maintenancesCount: 0,
+          sindicoName: formData.supervisorName?.trim() || formData.sindicoName || null,
+          sindicoPhone: formData.supervisorPhone?.trim() || formData.sindicoPhone || null,
+          sindicoEmail: formData.contractType?.trim() || formData.sindicoEmail || 'Portaria 24h + Ronda Noturna',
           status: (formData.status as 'ativo' | 'implantacao' | 'inativo') || 'ativo',
           createdAt: new Date().toISOString(),
         };
@@ -405,46 +422,87 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
                   </div>
                 )}
 
-                {/* Métricas do Condomínio */}
-                <div className="grid grid-cols-4 gap-2 pt-3 border-t border-slate-100 text-center">
-                  <div className="p-2 bg-slate-50 rounded-lg">
-                    <p className="text-[10px] text-slate-500 font-medium">Blocos</p>
-                    <p className="text-xs font-bold text-slate-900 font-mono mt-0.5">
-                      {condo.blocksCount ?? 0}
+                {/* Informações de Contrato e Supervisão da Empresa */}
+                <div className="p-3 bg-blue-50/60 rounded-xl border border-blue-100 text-xs space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-blue-900 flex items-center gap-1.5">
+                      <Shield className="w-3.5 h-3.5 text-blue-600" />
+                      {condo.contractType || 'Portaria 24h + Ronda Noturna'}
+                    </span>
+                  </div>
+                  {condo.supervisorName && (
+                    <div className="flex items-center justify-between text-[11px] text-blue-800 pt-1 border-t border-blue-100/60">
+                      <span>Supervisor: <strong>{condo.supervisorName}</strong></span>
+                      {condo.supervisorPhone && <span>{condo.supervisorPhone}</span>}
+                    </div>
+                  )}
+                </div>
+
+                {/* Métricas Operacionais do Condomínio */}
+                <div className="grid grid-cols-4 gap-2 pt-1 text-center">
+                  <div
+                    onClick={() => {
+                      onSelectCondo(condo.id);
+                      onNavigateToTab('agentes');
+                    }}
+                    className="p-2 bg-slate-50 hover:bg-blue-50 rounded-lg cursor-pointer transition-colors border border-slate-100"
+                    title="Ver Agentes de Portaria neste condomínio"
+                  >
+                    <p className="text-[10px] text-slate-500 font-medium">Agentes</p>
+                    <p className="text-xs font-bold text-blue-700 font-mono mt-0.5">
+                      {condo.agentsCount ?? 0}
                     </p>
                   </div>
-                  <div className="p-2 bg-slate-50 rounded-lg">
-                    <p className="text-[10px] text-slate-500 font-medium">Aptos</p>
-                    <p className="text-xs font-bold text-slate-900 font-mono mt-0.5">
-                      {condo.unitsCount ?? 0}
+                  <div
+                    onClick={() => {
+                      onSelectCondo(condo.id);
+                      onNavigateToTab('ronda');
+                    }}
+                    className="p-2 bg-slate-50 hover:bg-amber-50 rounded-lg cursor-pointer transition-colors border border-slate-100"
+                    title="Ver Veículos de Ronda neste condomínio"
+                  >
+                    <p className="text-[10px] text-slate-500 font-medium">Rondas</p>
+                    <p className="text-xs font-bold text-amber-700 font-mono mt-0.5">
+                      {condo.vehiclesCount ?? 0}
                     </p>
                   </div>
-                  <div className="p-2 bg-slate-50 rounded-lg">
-                    <p className="text-[10px] text-slate-500 font-medium">Moradores</p>
-                    <p className="text-xs font-bold text-slate-900 font-mono mt-0.5">
-                      {condo.residentsCount ?? 0}
+                  <div
+                    onClick={() => {
+                      onSelectCondo(condo.id);
+                      onNavigateToTab('patrimonio');
+                    }}
+                    className="p-2 bg-slate-50 hover:bg-indigo-50 rounded-lg cursor-pointer transition-colors border border-slate-100"
+                    title="Ver Materiais da Empresa neste condomínio"
+                  >
+                    <p className="text-[10px] text-slate-500 font-medium">Materiais</p>
+                    <p className="text-xs font-bold text-indigo-700 font-mono mt-0.5">
+                      {condo.assetsCount ?? 0}
                     </p>
                   </div>
-                  <div className="p-2 bg-slate-50 rounded-lg">
-                    <p className="text-[10px] text-slate-500 font-medium">Equipe</p>
-                    <p className="text-xs font-bold text-slate-900 font-mono mt-0.5">
-                      {condo.usersCount ?? 0}
+                  <div
+                    onClick={() => {
+                      onSelectCondo(condo.id);
+                      onNavigateToTab('manutencoes');
+                    }}
+                    className="p-2 bg-slate-50 hover:bg-emerald-50 rounded-lg cursor-pointer transition-colors border border-slate-100"
+                    title="Ver Manutenções da Empresa neste condomínio"
+                  >
+                    <p className="text-[10px] text-slate-500 font-medium">Manutenções</p>
+                    <p className="text-xs font-bold text-emerald-700 font-mono mt-0.5">
+                      {condo.maintenancesCount ?? 0}
                     </p>
                   </div>
                 </div>
 
-                {/* Informações de Gestão */}
+                {/* Contato no Cliente (Síndico/Administração) */}
                 {condo.sindicoName && (
-                  <div className="p-2.5 bg-slate-50/70 rounded-lg border border-slate-100 text-[11px] text-slate-600 space-y-1">
+                  <div className="p-2 bg-slate-50 rounded-lg border border-slate-100 text-[11px] text-slate-600 flex items-center justify-between">
                     <div className="flex items-center gap-1.5 font-medium text-slate-800">
                       <UserCheck className="w-3.5 h-3.5 text-slate-500" />
-                      <span>Síndico: {condo.sindicoName}</span>
+                      <span>Contato: {condo.sindicoName}</span>
                     </div>
                     {condo.sindicoPhone && (
-                      <div className="flex items-center gap-1.5 text-slate-500">
-                        <Phone className="w-3 h-3" />
-                        <span>{condo.sindicoPhone}</span>
-                      </div>
+                      <span className="text-slate-500 font-mono">{condo.sindicoPhone}</span>
                     )}
                   </div>
                 )}
@@ -456,14 +514,14 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
                   <button
                     onClick={() => openEditModal(condo)}
                     className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-white rounded-md transition-colors cursor-pointer"
-                    title="Editar Condomínio"
+                    title="Editar Posto"
                   >
                     <Edit2 className="w-3.5 h-3.5" />
                   </button>
                   <button
                     onClick={() => handleDelete(condo)}
                     className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-white rounded-md transition-colors cursor-pointer"
-                    title="Excluir Condomínio"
+                    title="Excluir Posto"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -473,15 +531,15 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
                   <button
                     onClick={() => {
                       onSelectCondo(condo.id);
-                      onNavigateToTab('estrutura');
+                      onNavigateToTab('agentes');
                     }}
                     className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
                       isSelected
-                        ? 'bg-slate-900 text-white hover:bg-slate-800'
+                        ? 'bg-blue-600 text-white hover:bg-blue-700'
                         : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
                     }`}
                   >
-                    <span>{isSelected ? 'Gerenciando Agora' : 'Acessar Condomínio'}</span>
+                    <span>{isSelected ? 'Posto Selecionado' : 'Gerenciar Operação'}</span>
                     <ArrowRight className="w-3 h-3" />
                   </button>
                 </div>
@@ -490,6 +548,7 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
           );
         })}
       </div>
+
 
       {filteredCondos.length === 0 && (
         <div className="text-center py-12 bg-white rounded-xl border border-slate-200">
@@ -665,10 +724,59 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
                 </div>
               </div>
 
+              {/* Contrato e Supervisão Operacional da Empresa */}
               <div className="pt-2 border-t border-slate-100">
                 <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
-                  Contato do Síndico / Gestor do Condomínio
+                  Contrato & Supervisão da Empresa Terceirizada
                 </p>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                      Tipo de Contrato / Escopo Contratado
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ex: Portaria 24h + Ronda Noturna Motorizada"
+                      value={formData.contractType}
+                      onChange={(e) => setFormData({ ...formData, contractType: e.target.value })}
+                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-hidden focus:border-slate-900"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700 mb-1">
+                        Supervisor Operacional (Empresa)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ex: Supervisor Roberto Alves"
+                        value={formData.supervisorName}
+                        onChange={(e) => setFormData({ ...formData, supervisorName: e.target.value })}
+                        className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-hidden focus:border-slate-900"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700 mb-1">
+                        Telefone do Supervisor
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="(11) 98888-8888"
+                        maxLength={15}
+                        value={formData.supervisorPhone}
+                        onChange={(e) => setFormData({ ...formData, supervisorPhone: maskPhone(e.target.value) })}
+                        className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-hidden focus:border-slate-900 font-mono"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-slate-100">
+                <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                  Contato no Cliente (Síndico / Administradora)
+                </p>
+
                 <div className="space-y-3">
                   <div>
                     <label className="block text-xs font-medium text-slate-700 mb-1">

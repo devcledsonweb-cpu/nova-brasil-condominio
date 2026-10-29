@@ -1,7 +1,7 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext.tsx';
 import { UserRole } from '../types/index.ts';
-import { ShieldAlert, ShieldCheck, UserCheck, X } from 'lucide-react';
+import { ShieldCheck, UserCheck, X, ShieldAlert, Building2 } from 'lucide-react';
 
 interface RoleModalProps {
   isOpen: boolean;
@@ -23,7 +23,7 @@ export const RoleModal: React.FC<RoleModalProps> = ({ isOpen, onClose }) => {
       <div className="bg-white rounded-xl shadow-xl border border-slate-200 max-w-md w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         <div className="flex items-center justify-between p-4 border-b border-slate-100">
           <div>
-            <h3 className="font-semibold text-slate-900 text-sm">Nível de Acesso do Sistema</h3>
+            <h3 className="font-semibold text-slate-900 text-sm">Perfil de Acesso na Empresa</h3>
             <p className="text-xs text-slate-500 mt-0.5">Selecione o perfil operacional para navegar na plataforma</p>
           </div>
           <button
@@ -35,66 +35,66 @@ export const RoleModal: React.FC<RoleModalProps> = ({ isOpen, onClose }) => {
         </div>
 
         <div className="p-4 space-y-3">
-          {/* Opção 1: Síndico */}
+          {/* Opção 1: Gestor da Empresa */}
           <div
             onClick={() => handleSelectRole('sindico')}
             className={`p-4 rounded-lg border text-left cursor-pointer transition-all ${
-              role === 'sindico'
-                ? 'border-slate-900 bg-slate-50/80 shadow-xs'
+              role === 'sindico' || role === 'admin'
+                ? 'border-blue-600 bg-blue-50/60 shadow-xs'
                 : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'
             }`}
           >
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-2.5">
-                <div className={`p-2 rounded-md ${role === 'sindico' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700'}`}>
+                <div className={`p-2 rounded-md ${role === 'sindico' || role === 'admin' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700'}`}>
                   <ShieldCheck className="w-5 h-5" />
                 </div>
                 <div>
-                  <h4 className="text-sm font-semibold text-slate-900">Síndico / Administração</h4>
-                  <span className="text-xs text-emerald-700 font-medium">Acesso Completo</span>
+                  <h4 className="text-sm font-semibold text-slate-900">Gestor Geral da Empresa</h4>
+                  <span className="text-xs text-blue-700 font-medium">Controle Total</span>
                 </div>
               </div>
-              {role === 'sindico' && (
-                <span className="text-xs bg-slate-900 text-white font-medium px-2 py-0.5 rounded">Ativo</span>
+              {(role === 'sindico' || role === 'admin') && (
+                <span className="text-xs bg-blue-600 text-white font-medium px-2 py-0.5 rounded">Ativo</span>
               )}
             </div>
             <p className="text-xs text-slate-600 mt-2.5 leading-relaxed">
-              Gestão integral: criação de blocos e apartamentos, gerenciamento de moradores, aplicação de multas no livro de ocorrências, aprovação de áreas comuns e criação de enquetes.
+              Gestão executiva da empresa: cadastro de condomínios atendidos, alocação de agentes de portaria, gestão de viaturas e motos de ronda, controle de patrimônio/materiais e abertura de ordens de manutenção predial.
             </p>
           </div>
 
-          {/* Opção 2: Portaria */}
+          {/* Opção 2: Supervisor / Operação */}
           <div
             onClick={() => handleSelectRole('portaria')}
             className={`p-4 rounded-lg border text-left cursor-pointer transition-all ${
-              role === 'portaria'
-                ? 'border-slate-900 bg-slate-50/80 shadow-xs'
+              role === 'portaria' || role === 'operador'
+                ? 'border-blue-600 bg-blue-50/60 shadow-xs'
                 : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'
             }`}
           >
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-2.5">
-                <div className={`p-2 rounded-md ${role === 'portaria' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700'}`}>
+                <div className={`p-2 rounded-md ${role === 'portaria' || role === 'operador' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700'}`}>
                   <UserCheck className="w-5 h-5" />
                 </div>
                 <div>
-                  <h4 className="text-sm font-semibold text-slate-900">Portaria / Operador</h4>
-                  <span className="text-xs text-blue-700 font-medium">Acesso Operacional</span>
+                  <h4 className="text-sm font-semibold text-slate-900">Supervisor / Posto de Portaria</h4>
+                  <span className="text-xs text-slate-700 font-medium">Operação Diária</span>
                 </div>
               </div>
-              {role === 'portaria' && (
+              {(role === 'portaria' || role === 'operador') && (
                 <span className="text-xs bg-slate-900 text-white font-medium px-2 py-0.5 rounded">Ativo</span>
               )}
             </div>
             <p className="text-xs text-slate-600 mt-2.5 leading-relaxed">
-              Foco na portaria: registro rápido de entrada/saída de visitantes e prestadores de serviço, recepção e baixa de encomendas, e busca rápida de veículos e vagas.
+              Foco na operação do posto: registro de passagem de serviço entre turnos, relatórios de rondas preventivas e conferência dos materiais da empresa cautelados no condomínio.
             </p>
           </div>
 
-          <div className="p-3 bg-amber-50/70 border border-amber-200/80 rounded-lg flex items-start gap-2.5">
-            <ShieldAlert className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
-            <p className="text-[11px] text-amber-800 leading-normal">
-              Conforme os requisitos do sistema, moradores não possuem acesso a este painel administrativo. O acesso é exclusivo para a equipe de gestão (Síndico) e operação (Portaria).
+          <div className="p-3 bg-blue-50/70 border border-blue-200/80 rounded-lg flex items-start gap-2.5">
+            <Building2 className="w-4 h-4 text-blue-700 shrink-0 mt-0.5" />
+            <p className="text-[11px] text-blue-900 leading-normal">
+              <strong>Atenção:</strong> Este sistema pertence e é operado exclusivamente pela empresa terceirizada. Não há acesso para síndicos ou moradores.
             </p>
           </div>
         </div>
