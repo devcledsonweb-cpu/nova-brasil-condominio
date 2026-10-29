@@ -1,7 +1,0 @@
-{
-  "name": "CondoSys - Gestão Condominial",
-  "description": "Sistema completo e responsivo para gestão condominial com controle de portaria, ocorrências, reservas e moradores.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
-
