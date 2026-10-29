@@ -1479,15 +1479,15 @@ export async function createSecurityAgent(data: {
   try {
     const newAgent = createStoreAgent({
       condoId: data.condoId ? Number(data.condoId) : null,
-      name: data.name.trim(),
-      cpf: data.cpf?.trim() || null,
-      phone: data.phone.trim(),
-      badgeNumber: data.badgeNumber.trim(),
+      name: (data.name || '').trim(),
+      cpf: data.cpf ? String(data.cpf).trim() : null,
+      phone: (data.phone || '').trim(),
+      badgeNumber: (data.badgeNumber || `AG-${Math.floor(1000 + Math.random() * 9000)}`).trim(),
       roleTitle: data.roleTitle || 'agente_portaria',
       shift: data.shift || '12x36_dia',
       status: data.status || 'em_servico',
-      admissionDate: data.admissionDate?.trim() || null,
-      notes: data.notes?.trim() || null,
+      admissionDate: data.admissionDate ? String(data.admissionDate).trim() : null,
+      notes: data.notes ? String(data.notes).trim() : null,
     });
     const condoMap = await getCondoNameMap();
     return {
@@ -1513,7 +1513,12 @@ export async function updateSecurityAgent(id: number, data: Partial<{
   notes?: string;
 }>) {
   try {
-    const updated = updateStoreAgent(id, data);
+    const safeData: any = { ...data };
+    if (data.name !== undefined) safeData.name = (data.name || '').trim();
+    if (data.phone !== undefined) safeData.phone = (data.phone || '').trim();
+    if (data.badgeNumber !== undefined) safeData.badgeNumber = (data.badgeNumber || '').trim();
+    if (data.condoId !== undefined) safeData.condoId = data.condoId ? Number(data.condoId) : null;
+    const updated = updateStoreAgent(id, safeData);
     const condoMap = await getCondoNameMap();
     return {
       ...updated,

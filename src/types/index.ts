@@ -39,6 +39,9 @@ export interface SecurityAgent {
   admissionDate?: string | null;
   notes?: string | null;
   createdAt?: string;
+  createAccess?: boolean;
+  accessEmail?: string;
+  accessPassword?: string;
 }
 
 export interface PatrolVehicle {

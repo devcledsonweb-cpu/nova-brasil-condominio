@@ -260,11 +260,32 @@ app.get('/api/agents', requireAuth, async (req, res) => {
 
 app.post('/api/agents', requireAuth, async (req, res) => {
   try {
-    const { name, phone, badgeNumber } = req.body;
-    if (!name || !badgeNumber) {
-      return res.status(400).json({ error: 'Nome e número do crachá/matrícula são obrigatórios.' });
+    const { name, phone, badgeNumber, createAccess, accessEmail, accessPassword } = req.body;
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: 'Nome do colaborador é obrigatório.' });
     }
-    const agent = await createSecurityAgent(req.body);
+    const finalBadgeNumber = (badgeNumber && badgeNumber.trim()) || `AG-${Math.floor(1000 + Math.random() * 9000)}`;
+    const agent = await createSecurityAgent({
+      ...req.body,
+      badgeNumber: finalBadgeNumber,
+    });
+
+    // Se solicitado, gera automaticamente o acesso de login do operador de portaria
+    if (createAccess && accessEmail && accessPassword) {
+      try {
+        await createSystemUser({
+          name: name.trim(),
+          email: accessEmail.trim().toLowerCase(),
+          password: accessPassword.trim(),
+          role: 'portaria',
+          condoId: req.body.condoId ? Number(req.body.condoId) : null,
+          permissions: JSON.stringify(['portaria', 'ronda', 'materiais', 'ocorrencias']),
+        });
+      } catch (userErr: any) {
+        console.warn('Agente salvo, aviso ao criar usuário de acesso:', userErr.message);
+      }
+    }
+
     res.status(201).json(agent);
   } catch (error: any) {
     res.status(400).json({ error: error.message });

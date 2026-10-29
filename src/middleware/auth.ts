@@ -3,8 +3,8 @@ import { adminAuth } from '../lib/firebase-admin.ts';
 import { DecodedIdToken } from 'firebase-admin/auth';
 
 export interface AuthRequest extends Request {
-  user?: DecodedIdToken | { uid: string; email: string; name: string; role: 'sindico' | 'portaria' };
-  userRole?: 'sindico' | 'portaria';
+  user?: DecodedIdToken | { uid: string; email: string; name: string; role: 'sindico' | 'portaria' | 'admin' | 'supervisor' };
+  userRole?: 'sindico' | 'portaria' | 'admin' | 'supervisor';
 }
 
 export const requireAuth = async (
@@ -15,6 +15,7 @@ export const requireAuth = async (
   const authHeader = req.headers.authorization;
   const roleHeader = req.headers['x-user-role'] as string | undefined;
   const nameHeader = req.headers['x-user-name'] as string | undefined;
+  const emailHeader = req.headers['x-user-email'] as string | undefined;
 
   // 1. If Firebase Bearer token is provided, verify it
   if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -29,23 +30,25 @@ export const requireAuth = async (
     }
   }
 
-  // 2. Administrative role context fallback (e.g., local administrative portaria or síndico console)
-  if (roleHeader === 'sindico' || roleHeader === 'portaria') {
+  // 2. Role context fallback
+  if (roleHeader) {
+    const isPortaria = roleHeader === 'portaria' || roleHeader === 'operador';
+    const effectiveRole = isPortaria ? 'portaria' : 'sindico';
     req.user = {
       uid: `local-${roleHeader}`,
-      email: `${roleHeader}@condosys.local`,
-      name: nameHeader || (roleHeader === 'sindico' ? 'Síndico Geral' : 'Operador da Portaria'),
-      role: roleHeader,
+      email: emailHeader || `${roleHeader}@novabrasil.com`,
+      name: nameHeader || (isPortaria ? 'Operador de Portaria' : 'Gestor Geral'),
+      role: effectiveRole,
     };
-    req.userRole = roleHeader;
+    req.userRole = effectiveRole;
     return next();
   }
 
-  // Default to Síndico role if no specific header to ensure smooth operation
+  // Default to Síndico/Admin role if no specific header to ensure smooth operation
   req.user = {
     uid: 'default-admin',
-    email: 'admin@condosys.local',
-    name: 'Síndico Administrador',
+    email: 'administrativo@novabrasil.com',
+    name: 'Administrador Geral',
     role: 'sindico',
   };
   req.userRole = 'sindico';
@@ -57,8 +60,8 @@ export const requireSindico = (
   res: Response,
   next: NextFunction
 ) => {
-  if (req.userRole !== 'sindico') {
-    return res.status(403).json({ error: 'Acesso restrito ao Síndico / Administração.' });
+  if (req.userRole && req.userRole === 'portaria') {
+    return res.status(403).json({ error: 'Acesso restrito ao Gestor / Administração da Empresa.' });
   }
   next();
 };

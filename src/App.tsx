@@ -67,11 +67,11 @@ function NovaBrasilMain() {
       ] = await Promise.all([
         fetch('/api/condominiums', { headers }),
         fetch(`/api/dashboard/stats${queryParam}`, { headers }),
-        fetch(`/api/agents${queryParam}`, { headers }),
-        fetch(`/api/patrol-vehicles${queryParam}`, { headers }),
-        fetch(`/api/company-assets${queryParam}`, { headers }),
-        fetch(`/api/maintenances${queryParam}`, { headers }),
-        fetch(`/api/operational-logs${queryParam}`, { headers }),
+        fetch('/api/agents', { headers }),
+        fetch('/api/patrol-vehicles', { headers }),
+        fetch('/api/company-assets', { headers }),
+        fetch('/api/maintenances', { headers }),
+        fetch('/api/operational-logs', { headers }),
       ]);
 
       // Helper para ler JSON com segurança e prevenir erros de parse caso o host retorne HTML
@@ -435,13 +435,24 @@ function NovaBrasilMain() {
       }
       setOperationalLogs(loadedLogs);
 
+      // Sincronizar dinamicamente as contagens de agentes, rondas, materiais e O.S. nos condomínios
+      const condosWithDynamicCounts = loadedCondos.map((c) => ({
+        ...c,
+        agentsCount: loadedAgents.filter((a) => Number(a.condoId) === Number(c.id)).length,
+        vehiclesCount: loadedVehicles.filter((v) => Number(v.condoId) === Number(c.id)).length,
+        assetsCount: loadedAssets.filter((a) => Number(a.condoId) === Number(c.id)).length,
+        maintenancesCount: loadedMaintenances.filter((m) => Number(m.condoId) === Number(c.id)).length,
+      }));
+      setCondominiums(condosWithDynamicCounts);
+      localStorage.setItem('novabrasil_condos', JSON.stringify(condosWithDynamicCounts));
+
       // 7. Estatísticas Consolidadas
       const statsData = await parseJsonRes<DashboardStats>(statsRes);
       if (statsData) {
         setStats(statsData);
       } else {
         setStats({
-          totalCondos: loadedCondos.length,
+          totalCondos: condosWithDynamicCounts.length,
           totalAgents: loadedAgents.length,
           agentsOnDuty: loadedAgents.filter((a) => a.status === 'em_servico').length,
           totalPatrolVehicles: loadedVehicles.length,
@@ -476,7 +487,10 @@ function NovaBrasilMain() {
           headers: { ...headers, 'Content-Type': 'application/json' },
           body: JSON.stringify(agentData),
         });
-        if (res.ok) created = await res.json();
+        if (res.ok) {
+          const text = await res.text();
+          if (text) created = JSON.parse(text);
+        }
       } catch {
         // Fallback local
       }
@@ -487,9 +501,79 @@ function NovaBrasilMain() {
         createdAt: new Date().toISOString(),
       };
 
-      const updated = [newAgent, ...agents];
+      const updated = [newAgent, ...agents.filter((a) => a.id !== newAgent.id)];
       setAgents(updated);
       localStorage.setItem('novabrasil_agents', JSON.stringify(updated));
+
+      // Sincroniza dinamicamente as estatísticas do painel
+      setStats((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          totalAgents: updated.length,
+          agentsOnDuty: updated.filter((a) => a.status === 'em_servico').length,
+        };
+      });
+
+      // Sincroniza as contagens dos condomínios
+      setCondominiums((prev) => {
+        const next = prev.map((c) => ({
+          ...c,
+          agentsCount: updated.filter((a) => Number(a.condoId) === Number(c.id)).length,
+        }));
+        localStorage.setItem('novabrasil_condos', JSON.stringify(next));
+        return next;
+      });
+
+      // Se foi solicitado gerar acesso ao sistema, adiciona automaticamente na Gestão de Usuários
+      const dataWithAccess = agentData as any;
+      if (dataWithAccess.createAccess && dataWithAccess.accessEmail && dataWithAccess.accessPassword) {
+        const cleanEmail = dataWithAccess.accessEmail.trim().toLowerCase();
+        const cleanPassword = dataWithAccess.accessPassword.trim();
+        const selectedCondo = condominiums.find((c) => c.id === Number(agentData.condoId));
+
+        // 1. Tenta cadastrar na API /api/users
+        try {
+          await fetch('/api/users', {
+            method: 'POST',
+            headers: { ...headers, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: agentData.name,
+              email: cleanEmail,
+              password: cleanPassword,
+              role: 'portaria',
+              permissions: ['portaria', 'ronda', 'materiais', 'ocorrencias'],
+              condoId: agentData.condoId ? Number(agentData.condoId) : null,
+            }),
+          });
+        } catch (uErr) {
+          console.warn('Aviso ao sincronizar usuário do agente:', uErr);
+        }
+
+        // 2. Salva em novabrasil_users_list para persistência e login imediato
+        try {
+          const savedUsers = localStorage.getItem('novabrasil_users_list');
+          const usersList = savedUsers ? JSON.parse(savedUsers) : [];
+          const filtered = usersList.filter((u: any) => u.email.toLowerCase() !== cleanEmail);
+          const newUserObj = {
+            id: Date.now() + 1,
+            uid: `usr-agent-${Date.now()}`,
+            name: agentData.name,
+            email: cleanEmail,
+            password: cleanPassword,
+            role: 'portaria',
+            permissions: JSON.stringify(['portaria', 'ronda', 'materiais', 'ocorrencias']),
+            condoId: agentData.condoId ? Number(agentData.condoId) : null,
+            condoName: selectedCondo?.name || null,
+            isActive: true,
+            createdAt: new Date().toISOString(),
+          };
+          localStorage.setItem('novabrasil_users_list', JSON.stringify([newUserObj, ...filtered]));
+        } catch (lsErr) {
+          console.warn('Erro ao salvar usuário no localStorage:', lsErr);
+        }
+      }
+
       return true;
     } catch {
       return false;
@@ -512,6 +596,72 @@ function NovaBrasilMain() {
       const updated = agents.map((a) => (a.id === id ? { ...a, ...patch } : a));
       setAgents(updated);
       localStorage.setItem('novabrasil_agents', JSON.stringify(updated));
+
+      // Sincroniza dinamicamente as estatísticas e condomínios
+      setStats((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          totalAgents: updated.length,
+          agentsOnDuty: updated.filter((a) => a.status === 'em_servico').length,
+        };
+      });
+
+      setCondominiums((prev) => {
+        const next = prev.map((c) => ({
+          ...c,
+          agentsCount: updated.filter((a) => Number(a.condoId) === Number(c.id)).length,
+        }));
+        localStorage.setItem('novabrasil_condos', JSON.stringify(next));
+        return next;
+      });
+
+      // Se na edição foi solicitado gerar acesso que não existia
+      const patchWithAccess = patch as any;
+      if (patchWithAccess.createAccess && patchWithAccess.accessEmail && patchWithAccess.accessPassword) {
+        const cleanEmail = patchWithAccess.accessEmail.trim().toLowerCase();
+        const cleanPassword = patchWithAccess.accessPassword.trim();
+        const agentObj = agents.find((a) => a.id === id);
+        const agentName = patch.name || agentObj?.name || 'Agente de Portaria';
+        const condoIdVal = patch.condoId !== undefined ? patch.condoId : agentObj?.condoId;
+        const selectedCondo = condominiums.find((c) => c.id === Number(condoIdVal));
+
+        try {
+          await fetch('/api/users', {
+            method: 'POST',
+            headers: { ...headers, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: agentName,
+              email: cleanEmail,
+              password: cleanPassword,
+              role: 'portaria',
+              permissions: ['portaria', 'ronda', 'materiais', 'ocorrencias'],
+              condoId: condoIdVal ? Number(condoIdVal) : null,
+            }),
+          });
+        } catch {}
+
+        try {
+          const savedUsers = localStorage.getItem('novabrasil_users_list');
+          const usersList = savedUsers ? JSON.parse(savedUsers) : [];
+          const filtered = usersList.filter((u: any) => u.email.toLowerCase() !== cleanEmail);
+          const newUserObj = {
+            id: Date.now() + 1,
+            uid: `usr-agent-${Date.now()}`,
+            name: agentName,
+            email: cleanEmail,
+            password: cleanPassword,
+            role: 'portaria',
+            permissions: JSON.stringify(['portaria', 'ronda', 'materiais', 'ocorrencias']),
+            condoId: condoIdVal ? Number(condoIdVal) : null,
+            condoName: selectedCondo?.name || null,
+            isActive: true,
+            createdAt: new Date().toISOString(),
+          };
+          localStorage.setItem('novabrasil_users_list', JSON.stringify([newUserObj, ...filtered]));
+        } catch {}
+      }
+
       return true;
     } catch {
       return false;
@@ -530,6 +680,26 @@ function NovaBrasilMain() {
       const updated = agents.filter((a) => a.id !== id);
       setAgents(updated);
       localStorage.setItem('novabrasil_agents', JSON.stringify(updated));
+
+      // Sincroniza dinamicamente as estatísticas e condomínios
+      setStats((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          totalAgents: updated.length,
+          agentsOnDuty: updated.filter((a) => a.status === 'em_servico').length,
+        };
+      });
+
+      setCondominiums((prev) => {
+        const next = prev.map((c) => ({
+          ...c,
+          agentsCount: updated.filter((a) => Number(a.condoId) === Number(c.id)).length,
+        }));
+        localStorage.setItem('novabrasil_condos', JSON.stringify(next));
+        return next;
+      });
+
       return true;
     } catch {
       return false;
@@ -865,6 +1035,7 @@ function NovaBrasilMain() {
               agents={agents}
               condominiums={condominiums}
               selectedCondoId={selectedCondoId}
+              onSelectCondo={setSelectedCondoId}
               onAddAgent={handleAddAgent}
               onUpdateAgent={handleUpdateAgent}
               onDeleteAgent={handleDeleteAgent}

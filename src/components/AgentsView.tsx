@@ -16,6 +16,9 @@ import {
   AlertCircle,
   X,
   CheckCircle2,
+  KeyRound,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { SecurityAgent, Condominium } from '../types/index.ts';
 import { maskCPF, maskPhone, maskDate } from '../utils/masks.ts';
@@ -27,6 +30,7 @@ interface AgentsViewProps {
   onAddAgent: (agent: Omit<SecurityAgent, 'id' | 'createdAt'>) => Promise<boolean>;
   onUpdateAgent: (id: number, agent: Partial<SecurityAgent>) => Promise<boolean>;
   onDeleteAgent: (id: number) => Promise<boolean>;
+  onSelectCondo?: (id: number | 'all') => void;
 }
 
 export const AgentsView: React.FC<AgentsViewProps> = ({
@@ -36,6 +40,7 @@ export const AgentsView: React.FC<AgentsViewProps> = ({
   onAddAgent,
   onUpdateAgent,
   onDeleteAgent,
+  onSelectCondo,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
@@ -45,6 +50,7 @@ export const AgentsView: React.FC<AgentsViewProps> = ({
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [successBanner, setSuccessBanner] = useState('');
 
   // Form State
   const [condoId, setCondoId] = useState<number | ''>(
@@ -60,6 +66,28 @@ export const AgentsView: React.FC<AgentsViewProps> = ({
   const [admissionDate, setAdmissionDate] = useState('');
   const [notes, setNotes] = useState('');
 
+  // Acesso ao sistema (Gestão de Usuários)
+  const [createAccess, setCreateAccess] = useState(true);
+  const [accessEmail, setAccessEmail] = useState('');
+  const [accessPassword, setAccessPassword] = useState('Portaria@123');
+  const [showAccessPassword, setShowAccessPassword] = useState(false);
+  const [isEmailManuallyEdited, setIsEmailManuallyEdited] = useState(false);
+
+  const suggestEmail = (agentName: string) => {
+    if (!agentName.trim()) return '';
+    const clean = agentName
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9\s]/g, '')
+      .trim()
+      .split(/\s+/);
+    if (clean.length === 1) {
+      return `${clean[0]}@novabrasil.com`;
+    }
+    return `${clean[0]}.${clean[clean.length - 1]}@novabrasil.com`;
+  };
+
   const openAddModal = () => {
     setEditingAgent(null);
     setCondoId(selectedCondoId !== 'all' ? selectedCondoId : (condominiums[0]?.id || ''));
@@ -72,6 +100,11 @@ export const AgentsView: React.FC<AgentsViewProps> = ({
     setStatus('em_servico');
     setAdmissionDate(new Date().toLocaleDateString('pt-BR'));
     setNotes('');
+    setCreateAccess(true);
+    setAccessEmail('');
+    setAccessPassword('Portaria@123');
+    setShowAccessPassword(false);
+    setIsEmailManuallyEdited(false);
     setErrorMessage('');
     setIsModalOpen(true);
   };
@@ -88,6 +121,11 @@ export const AgentsView: React.FC<AgentsViewProps> = ({
     setStatus(agent.status);
     setAdmissionDate(agent.admissionDate ? maskDate(agent.admissionDate) : '');
     setNotes(agent.notes || '');
+    setCreateAccess(false);
+    setAccessEmail(agent.accessEmail || suggestEmail(agent.name));
+    setAccessPassword('Portaria@123');
+    setShowAccessPassword(false);
+    setIsEmailManuallyEdited(false);
     setErrorMessage('');
     setIsModalOpen(true);
   };
@@ -107,12 +145,27 @@ export const AgentsView: React.FC<AgentsViewProps> = ({
       return;
     }
 
+    if (createAccess) {
+      if (!accessEmail.trim()) {
+        setErrorMessage('Informe o e-mail de login para gerar acesso ao sistema.');
+        return;
+      }
+      if (!accessPassword.trim()) {
+        setErrorMessage('Informe a senha inicial de acesso.');
+        return;
+      }
+      if (accessPassword.trim().length < 6) {
+        setErrorMessage('A senha de acesso deve ter pelo menos 6 caracteres.');
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     setErrorMessage('');
 
     try {
       const selectedCondo = condominiums.find((c) => c.id === Number(condoId));
-      const payload = {
+      const payload: any = {
         condoId: condoId ? Number(condoId) : null,
         condoName: selectedCondo?.name || 'Posto Geral',
         name: name.trim(),
@@ -124,6 +177,9 @@ export const AgentsView: React.FC<AgentsViewProps> = ({
         status,
         admissionDate: admissionDate.trim() || null,
         notes: notes.trim() || null,
+        createAccess,
+        accessEmail: createAccess ? accessEmail.trim().toLowerCase() : undefined,
+        accessPassword: createAccess ? accessPassword.trim() : undefined,
       };
 
       let success = false;
@@ -135,6 +191,13 @@ export const AgentsView: React.FC<AgentsViewProps> = ({
 
       if (success) {
         setIsModalOpen(false);
+        setSuccessBanner(`Agente "${name.trim()}" salvo com sucesso!`);
+        // Se o agente foi cadastrado em outro condomínio ou posto geral, atualiza o filtro para exibi-lo imediatamente
+        if (selectedCondoId !== 'all' && Number(payload.condoId) !== Number(selectedCondoId)) {
+          if (onSelectCondo) {
+            onSelectCondo(payload.condoId || 'all');
+          }
+        }
       } else {
         setErrorMessage('Falha ao salvar agente. Tente novamente.');
       }
@@ -145,9 +208,19 @@ export const AgentsView: React.FC<AgentsViewProps> = ({
     }
   };
 
+  const currentCondo =
+    selectedCondoId === 'all'
+      ? null
+      : condominiums.find((c) => Number(c.id) === Number(selectedCondoId));
+
   const filteredAgents = agents.filter((ag) => {
-    if (selectedCondoId !== 'all' && ag.condoId !== selectedCondoId) {
-      return false;
+    if (selectedCondoId !== 'all') {
+      const matchCondo = ag.condoId != null && Number(ag.condoId) === Number(selectedCondoId);
+      // Colaboradores da reserva técnica / posto geral sem posto exclusivo são volantes
+      const isGeneralPost = ag.condoId == null;
+      if (!matchCondo && !isGeneralPost) {
+        return false;
+      }
     }
     if (roleFilter !== 'all' && ag.roleTitle !== roleFilter) {
       return false;
@@ -157,10 +230,10 @@ export const AgentsView: React.FC<AgentsViewProps> = ({
     }
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
-      const matchName = ag.name.toLowerCase().includes(term);
-      const matchBadge = ag.badgeNumber.toLowerCase().includes(term);
+      const matchName = ag.name?.toLowerCase().includes(term);
+      const matchBadge = ag.badgeNumber?.toLowerCase().includes(term);
       const matchCondo = ag.condoName?.toLowerCase().includes(term);
-      const matchPhone = ag.phone.includes(term);
+      const matchPhone = ag.phone?.includes(term);
       return matchName || matchBadge || matchCondo || matchPhone;
     }
     return true;
@@ -241,7 +314,7 @@ export const AgentsView: React.FC<AgentsViewProps> = ({
             <span>Agentes de Portaria & Equipe Operacional</span>
           </div>
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-            Gestão dos colaboradores da empresa terceirizada alocados nos postos de portaria e segurança.
+            Gestão dos colaboradores da empresa terceirizada com opção de geração automática de login e acesso ao sistema.
           </p>
         </div>
 
@@ -254,13 +327,70 @@ export const AgentsView: React.FC<AgentsViewProps> = ({
         </button>
       </div>
 
+      {/* Success Notification Banner */}
+      {successBanner && (
+        <div className="p-3 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 rounded-xl flex items-center justify-between gap-2 text-xs text-emerald-800 dark:text-emerald-200 animate-in fade-in transition-colors">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span className="font-medium">{successBanner}</span>
+          </div>
+          <button
+            onClick={() => setSuccessBanner('')}
+            className="text-emerald-600 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-100 p-1 rounded-md cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* Active Condo Filter Notice */}
+      {selectedCondoId !== 'all' && (
+        <div className="p-3 bg-blue-50/90 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-900 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs transition-colors">
+          <div className="flex items-center gap-2 text-blue-900 dark:text-blue-200">
+            <Building2 className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+            <span>
+              Filtrando agentes do posto: <strong>{currentCondo?.name || `Condomínio #${selectedCondoId}`}</strong>
+              {' '}({filteredAgents.length} {filteredAgents.length === 1 ? 'agente exibido' : 'agentes exibidos'})
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => onSelectCondo && onSelectCondo('all')}
+            className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer flex items-center gap-1 self-start sm:self-auto"
+          >
+            Exibir todos os {agents.length} agentes da empresa →
+          </button>
+        </div>
+      )}
+
       {/* Metrics Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs transition-colors">
-          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Total de Agentes</p>
-          <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">{filteredAgents.length}</p>
-          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">Equipe cadastrada</p>
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Total de Agentes</p>
+            {selectedCondoId !== 'all' && (
+              <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-800">
+                Posto Ativo
+              </span>
+            )}
+          </div>
+          <div className="flex items-baseline gap-2 mt-1">
+            <p className="text-2xl font-bold text-slate-900 dark:text-white">
+              {filteredAgents.length}
+            </p>
+            {selectedCondoId !== 'all' && (
+              <span className="text-xs text-slate-400 dark:text-slate-500">
+                de {agents.length} na empresa
+              </span>
+            )}
+          </div>
+          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 truncate">
+            {selectedCondoId !== 'all'
+              ? `Alocados em ${currentCondo?.name || 'posto selecionado'}`
+              : 'Equipe total cadastrada na empresa'}
+          </p>
         </div>
+
         <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs transition-colors">
           <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400">Em Serviço Agora</p>
           <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">
@@ -268,6 +398,7 @@ export const AgentsView: React.FC<AgentsViewProps> = ({
           </p>
           <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">Escalados no posto</p>
         </div>
+
         <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs transition-colors">
           <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Em Folga</p>
           <p className="text-2xl font-bold text-slate-700 dark:text-slate-300 mt-1">
@@ -275,6 +406,7 @@ export const AgentsView: React.FC<AgentsViewProps> = ({
           </p>
           <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">Escala de descanso</p>
         </div>
+
         <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs transition-colors">
           <p className="text-xs font-medium text-amber-600 dark:text-amber-400">Rondas Motorizadas</p>
           <p className="text-2xl font-bold text-amber-600 dark:text-amber-400 mt-1">
@@ -300,8 +432,28 @@ export const AgentsView: React.FC<AgentsViewProps> = ({
         <div className="flex items-center gap-2 flex-wrap">
           <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
             <Filter className="w-3.5 h-3.5" />
-            <span>Filtros:</span>
+            <span>Posto:</span>
           </div>
+
+          <select
+            value={selectedCondoId === 'all' ? 'all' : String(selectedCondoId)}
+            onChange={(e) => {
+              const val = e.target.value;
+              if (onSelectCondo) onSelectCondo(val === 'all' ? 'all' : Number(val));
+            }}
+            className="text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-2 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+            title="Selecionar posto para visualizar colaboradores"
+          >
+            <option value="all">🏢 Todos os Postos ({agents.length} agentes)</option>
+            {condominiums.map((c) => {
+              const count = agents.filter((a) => Number(a.condoId) === Number(c.id)).length;
+              return (
+                <option key={c.id} value={c.id}>
+                  📍 {c.name} ({count} {count === 1 ? 'agente' : 'agentes'})
+                </option>
+              );
+            })}
+          </select>
 
           <select
             value={roleFilter}
@@ -332,21 +484,34 @@ export const AgentsView: React.FC<AgentsViewProps> = ({
 
       {/* Agents List / Grid */}
       {filteredAgents.length === 0 ? (
-        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-12 text-center shadow-xs">
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-8 sm:p-12 text-center shadow-xs">
           <ShieldCheck className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
           <h3 className="text-base font-semibold text-slate-900 dark:text-white">Nenhum agente encontrado</h3>
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-1 max-w-md mx-auto">
-            {searchTerm || roleFilter !== 'all' || statusFilter !== 'all'
+            {selectedCondoId !== 'all' && agents.length > 0
+              ? `Nenhum agente alocado no posto "${currentCondo?.name}". Existem ${agents.length} colaboradores cadastrados em outros postos da sua empresa.`
+              : searchTerm || roleFilter !== 'all' || statusFilter !== 'all'
               ? 'Tente ajustar os filtros ou termo de busca acima.'
               : 'Cadastre o primeiro colaborador da sua empresa alocado aos condomínios.'}
           </p>
-          <button
-            onClick={openAddModal}
-            className="mt-4 inline-flex items-center gap-2 px-4 py-2 min-h-[44px] bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            Cadastrar Primeiro Agente
-          </button>
+          <div className="mt-4 flex items-center justify-center gap-2 flex-wrap">
+            {selectedCondoId !== 'all' && agents.length > 0 && (
+              <button
+                type="button"
+                onClick={() => onSelectCondo && onSelectCondo('all')}
+                className="px-4 py-2 min-h-[44px] bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm font-semibold rounded-lg shadow-sm transition-colors cursor-pointer"
+              >
+                Ver Todos os {agents.length} Agentes da Empresa
+              </button>
+            )}
+            <button
+              onClick={openAddModal}
+              className="inline-flex items-center gap-2 px-4 py-2 min-h-[44px] bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              Cadastrar Agente de Portaria
+            </button>
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -486,7 +651,13 @@ export const AgentsView: React.FC<AgentsViewProps> = ({
                     required
                     placeholder="Ex: Carlos Eduardo de Oliveira"
                     value={name}
-                    onChange={(e) => setName(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setName(val);
+                      if (!isEmailManuallyEdited) {
+                        setAccessEmail(suggestEmail(val));
+                      }
+                    }}
                     className="w-full text-sm border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -605,6 +776,83 @@ export const AgentsView: React.FC<AgentsViewProps> = ({
                     onChange={(e) => setNotes(e.target.value)}
                     className="w-full text-sm border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
+                </div>
+
+                {/* Seção Gerar Acesso ao Sistema e Sincronizar com Gestão de Usuários */}
+                <div className="sm:col-span-2 p-3.5 bg-blue-50/70 dark:bg-blue-950/40 rounded-xl border border-blue-200/80 dark:border-blue-900/60 space-y-3 transition-colors">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                        <KeyRound className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-slate-900 dark:text-white block">
+                          Gerar Acesso ao Sistema (Login do Operador)
+                        </span>
+                        <span className="text-[11px] text-slate-600 dark:text-slate-400">
+                          Adiciona automaticamente este agente na tela de Gestão de Usuários
+                        </span>
+                      </div>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={createAccess}
+                        onChange={(e) => setCreateAccess(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-9 h-5 bg-slate-300 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-slate-600 peer-checked:bg-blue-600"></div>
+                    </label>
+                  </div>
+
+                  {createAccess && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2.5 border-t border-blue-200/70 dark:border-blue-900/40">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          E-mail de Login *
+                        </label>
+                        <input
+                          type="email"
+                          required={createAccess}
+                          placeholder="carlos.oliveira@novabrasil.com"
+                          value={accessEmail}
+                          onChange={(e) => {
+                            setAccessEmail(e.target.value);
+                            setIsEmailManuallyEdited(true);
+                          }}
+                          className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          Senha Inicial *
+                        </label>
+                        <div className="relative">
+                          <input
+                            type={showAccessPassword ? 'text' : 'password'}
+                            required={createAccess}
+                            placeholder="Mínimo 6 caracteres"
+                            value={accessPassword}
+                            onChange={(e) => setAccessPassword(e.target.value)}
+                            className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-3 pr-10 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowAccessPassword(!showAccessPassword)}
+                            className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5"
+                          >
+                            {showAccessPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="sm:col-span-2 text-[11px] text-blue-800 dark:text-blue-300 flex items-center gap-1.5 font-medium">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                        <span>O agente receberá permissão para registrar passagens de turno, rondas e visualizar materiais do posto.</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

@@ -1,6 +1,62 @@
 {
   "agents": [
     {
+      "condoId": 1,
+      "name": "Francisco Oliveira Costa",
+      "cpf": null,
+      "phone": "(11) 98123-4567",
+      "badgeNumber": "AG-5544",
+      "roleTitle": "agente_portaria",
+      "shift": "12x36_dia",
+      "status": "em_servico",
+      "admissionDate": null,
+      "notes": null,
+      "id": 9,
+      "createdAt": "2026-10-29T19:32:04.272Z"
+    },
+    {
+      "condoId": 5,
+      "name": "Teste Agente Verificacao",
+      "cpf": null,
+      "phone": "(11) 99999-8888",
+      "badgeNumber": "AG-TEST1",
+      "roleTitle": "agente_portaria",
+      "shift": "12x36_dia",
+      "status": "em_servico",
+      "admissionDate": null,
+      "notes": null,
+      "id": 8,
+      "createdAt": "2026-10-29T19:23:47.907Z"
+    },
+    {
+      "condoId": null,
+      "name": "Marcos Vinicius",
+      "cpf": null,
+      "phone": "(11) 97777-8888",
+      "badgeNumber": "AG-7788",
+      "roleTitle": "agente_portaria",
+      "shift": "12x36_dia",
+      "status": "em_servico",
+      "admissionDate": null,
+      "notes": null,
+      "id": 7,
+      "createdAt": "2026-10-29T19:14:21.390Z"
+    },
+    {
+      "condoId": null,
+      "name": "Valter Silveira",
+      "cpf": null,
+      "phone": "(11) 98765-4321",
+      "badgeNumber": "AG-9999",
+      "roleTitle": "agente_portaria",
+      "shift": "12x36_dia",
+      "status": "em_servico",
+      "admissionDate": null,
+      "notes": null,
+      "id": 6,
+      "createdAt": "2026-10-29T19:13:43.702Z"
+    },
+    {
       "condoId": 10,
       "name": "Guilherme Albuquerque",
       "cpf": null,
@@ -330,7 +386,7 @@
     }
   ],
   "nextIds": {
-    "agent": 6,
+    "agent": 10,
     "vehicle": 5,
     "asset": 6,
     "maintenance": 5,
