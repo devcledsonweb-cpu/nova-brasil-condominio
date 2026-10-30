@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useAuth } from '../context/AuthContext.tsx';
 import { Condominium } from '../types/index.ts';
 import { maskCNPJ, maskCEP, maskPhone, cleanDigits } from '../utils/masks.ts';
 import { fetchAddressByCep } from '../services/cep.ts';
@@ -39,6 +40,18 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
   onNavigateToTab,
   getAuthHeaders,
 }) => {
+  const { user, role } = useAuth();
+  const isSuperAdmin = role === 'sindico' || role === 'admin';
+  const isSupervisor = role === 'supervisor';
+
+  const userAssignedIds: number[] = Array.isArray(user?.condoIds) && user.condoIds.length > 0
+    ? user.condoIds
+    : (user?.condoId ? [user.condoId] : []);
+
+  const accessibleCondominiums = isSuperAdmin || userAssignedIds.length === 0
+    ? condominiums
+    : condominiums.filter((c) => userAssignedIds.includes(c.id));
+
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -291,7 +304,7 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
     }
   };
 
-  const filteredCondos = condominiums.filter((c) => {
+  const filteredCondos = accessibleCondominiums.filter((c) => {
     const matchesSearch =
       c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (c.city && c.city.toLowerCase().includes(searchTerm.toLowerCase())) ||
@@ -311,7 +324,7 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
               Postos & Condomínios Atendidos
             </h1>
             <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-blue-600 text-white font-mono">
-              {condominiums.length} {condominiums.length === 1 ? 'posto' : 'postos'}
+              {accessibleCondominiums.length} {accessibleCondominiums.length === 1 ? 'posto' : 'postos'}
             </span>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
@@ -319,13 +332,15 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
           </p>
         </div>
 
-        <button
-          onClick={openAddModal}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-colors shadow-xs cursor-pointer shrink-0 min-h-[40px]"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Novo Condomínio / Posto</span>
-        </button>
+        {isSuperAdmin && (
+          <button
+            onClick={openAddModal}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-colors shadow-xs cursor-pointer shrink-0 min-h-[40px]"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Novo Condomínio / Posto</span>
+          </button>
+        )}
       </div>
 
       {/* Filtros e Busca */}
@@ -511,20 +526,24 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
               {/* Ações do Card */}
               <div className="p-3.5 sm:p-4 bg-slate-50/80 dark:bg-slate-850 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => openEditModal(condo)}
-                    className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center"
-                    title="Editar Posto"
-                  >
-                    <Edit2 className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(condo)}
-                    className="p-2 text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center"
-                    title="Excluir Posto"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  {(isSuperAdmin || isSupervisor) && (
+                    <button
+                      onClick={() => openEditModal(condo)}
+                      className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center"
+                      title="Editar Posto"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  {isSuperAdmin && (
+                    <button
+                      onClick={() => handleDelete(condo)}
+                      className="p-2 text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center"
+                      title="Excluir Posto"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2">

@@ -28,7 +28,9 @@ export interface Condominium {
 export interface SecurityAgent {
   id: number;
   condoId?: number | null;
+  condoIds?: number[]; // Um ou mais condomínios vinculados
   condoName?: string;
+  condoNames?: string[];
   name: string;
   cpf?: string | null;
   phone: string;
@@ -117,9 +119,12 @@ export interface UserProfile {
   email: string;
   name: string;
   role: UserRole;
+  originalRole?: UserRole; // Papel real autenticado nas credenciais
   permissions?: string | null;
   condoId?: number | null;
+  condoIds?: number[]; // Lista de condomínios que o usuário pode acessar
   condoName?: string;
+  condoNames?: string[];
   isActive?: boolean;
 }
 
@@ -131,7 +136,9 @@ export interface SystemUser {
   role: UserRole;
   permissions?: string | null;
   condoId?: number | null;
+  condoIds?: number[]; // Lista de condomínios designados
   condoName?: string;
+  condoNames?: string[];
   isActive: boolean;
   createdAt?: string;
 }

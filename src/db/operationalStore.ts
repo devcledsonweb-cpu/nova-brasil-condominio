@@ -4,6 +4,7 @@ import path from 'path';
 export interface StoredSecurityAgent {
   id: number;
   condoId: number | null;
+  condoIds?: number[];
   name: string;
   cpf: string | null;
   phone: string;
@@ -404,7 +405,11 @@ function saveDataFile() {
 export function getStoreAgents(condoId?: number): StoredSecurityAgent[] {
   const db = ensureDataFile();
   if (condoId) {
-    return db.agents.filter((a) => a.condoId === condoId);
+    return db.agents.filter((a) => {
+      if (a.condoId === condoId) return true;
+      if (Array.isArray(a.condoIds) && a.condoIds.includes(condoId)) return true;
+      return false;
+    });
   }
   return [...db.agents].sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -616,7 +621,9 @@ export function deleteStoreOperationalLog(id: number): boolean {
 // --- ESTATÍSTICAS OPERACIONAIS ---
 export function getStoreDashboardStats(condoId?: number) {
   const db = ensureDataFile();
-  const agents = condoId ? db.agents.filter((a) => a.condoId === condoId) : db.agents;
+  const agents = condoId
+    ? db.agents.filter((a) => a.condoId === condoId || (Array.isArray(a.condoIds) && a.condoIds.includes(condoId)))
+    : db.agents;
   const vehicles = condoId ? db.patrolVehicles.filter((v) => v.condoId === condoId) : db.patrolVehicles;
   const assets = condoId ? db.companyAssets.filter((a) => a.condoId === condoId) : db.companyAssets;
   const maintenances = condoId ? db.maintenances.filter((m) => m.condoId === condoId) : db.maintenances;

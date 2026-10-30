@@ -94,30 +94,50 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </a>
 
-          {/* Global Condominium / Posto Selector */}
-          <div className="relative flex items-center min-w-0">
-            <div className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 bg-slate-100 dark:bg-slate-800/80 hover:bg-slate-200/80 dark:hover:bg-slate-800 rounded-lg text-xs font-medium text-slate-800 dark:text-slate-200 transition-colors cursor-pointer border border-slate-200 dark:border-slate-700/80">
-              <Building2 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
-              <select
-                value={selectedCondoId === 'all' ? 'all' : String(selectedCondoId)}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  onSelectCondo(val === 'all' ? 'all' : Number(val));
-                }}
-                className="bg-transparent text-[11px] sm:text-xs font-semibold text-slate-900 dark:text-slate-100 focus:outline-hidden cursor-pointer max-w-[110px] xs:max-w-[150px] sm:max-w-[220px] md:max-w-[260px] truncate pr-1"
-                title="Filtrar posto / condomínio atendido"
-              >
-                <option value="all" className="dark:bg-slate-900 dark:text-slate-100">
-                  🏢 Todos os Postos (Visão da Empresa)
-                </option>
-                {condominiums.map((c) => (
-                  <option key={c.id} value={c.id} className="dark:bg-slate-900 dark:text-slate-100">
-                    📍 {c.name} {c.city ? `(${c.city})` : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
+          {/* Global / Assigned Condominium Selector */}
+          {(() => {
+            const isSuperUser = role === 'sindico' || role === 'admin';
+            const userAssignedIds: number[] = Array.isArray(user?.condoIds) && user.condoIds.length > 0
+              ? user.condoIds
+              : (user?.condoId ? [user.condoId] : []);
+
+            const accessibleCondos = isSuperUser || userAssignedIds.length === 0
+              ? condominiums
+              : condominiums.filter((c) => userAssignedIds.includes(c.id));
+
+            return (
+              <div className="relative flex items-center min-w-0">
+                <div className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 bg-slate-100 dark:bg-slate-800/80 hover:bg-slate-200/80 dark:hover:bg-slate-800 rounded-lg text-xs font-medium text-slate-800 dark:text-slate-200 transition-colors cursor-pointer border border-slate-200 dark:border-slate-700/80">
+                  <Building2 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                  <select
+                    value={selectedCondoId === 'all' ? 'all' : String(selectedCondoId)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      onSelectCondo(val === 'all' ? 'all' : Number(val));
+                    }}
+                    className="bg-transparent text-[11px] sm:text-xs font-semibold text-slate-900 dark:text-slate-100 focus:outline-hidden cursor-pointer max-w-[110px] xs:max-w-[150px] sm:max-w-[220px] md:max-w-[260px] truncate pr-1"
+                    title="Filtrar posto / condomínio atendido"
+                  >
+                    {isSuperUser ? (
+                      <option value="all" className="dark:bg-slate-900 dark:text-slate-100">
+                        🏢 Todos os Postos (Visão da Empresa)
+                      </option>
+                    ) : accessibleCondos.length > 1 ? (
+                      <option value="all" className="dark:bg-slate-900 dark:text-slate-100">
+                        🏢 Meus Postos Atribuídos ({accessibleCondos.length})
+                      </option>
+                    ) : null}
+
+                    {accessibleCondos.map((c) => (
+                      <option key={c.id} value={c.id} className="dark:bg-slate-900 dark:text-slate-100">
+                        📍 {c.name} {c.city ? `(${c.city})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Quick Nav Links (Desktop) */}
@@ -160,7 +180,13 @@ export const Header: React.FC<HeaderProps> = ({
             className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border border-slate-200 dark:border-slate-700 rounded-lg text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors whitespace-nowrap shrink-0 cursor-pointer min-h-[36px]"
           >
             <ShieldCheck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-            <span>{role === 'sindico' ? 'Gestão da Empresa' : 'Supervisão / Posto'}</span>
+            <span>
+              {role === 'sindico' || role === 'admin'
+                ? 'Gestão da Empresa'
+                : role === 'supervisor'
+                ? 'Gestor do Condomínio'
+                : 'Agente de Portaria'}
+            </span>
           </button>
 
           {/* Sair */}
@@ -210,7 +236,11 @@ export const Header: React.FC<HeaderProps> = ({
               <div className="p-3 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700/80">
                 <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{user?.name}</p>
                 <p className="text-[11px] text-blue-600 dark:text-blue-400 font-semibold mt-0.5">
-                  {role === 'sindico' || role === 'admin' ? 'Gestor Geral da Empresa' : 'Supervisor de Posto'}
+                  {role === 'sindico' || role === 'admin'
+                    ? 'Gestor Geral da Empresa'
+                    : role === 'supervisor'
+                    ? 'Gestor do Condomínio'
+                    : 'Agente de Portaria'}
                 </p>
                 <div className="mt-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between">
                   <span className="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">

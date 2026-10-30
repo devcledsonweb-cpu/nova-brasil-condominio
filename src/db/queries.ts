@@ -1454,10 +1454,28 @@ export async function getSecurityAgents(condoId?: number) {
   try {
     const list = getStoreAgents(condoId);
     const condoMap = await getCondoNameMap();
-    return list.map((a) => ({
-      ...a,
-      condoName: a.condoId ? (condoMap.get(a.condoId) || 'Posto Geral') : 'Operações Regionais',
-    }));
+    return list.map((a) => {
+      const ids: number[] = Array.isArray(a.condoIds) && a.condoIds.length > 0
+        ? a.condoIds
+        : (a.condoId ? [a.condoId] : []);
+      const names = ids.map((id) => condoMap.get(id)).filter(Boolean) as string[];
+
+      let mainCondoName = 'Operações Regionais';
+      if (names.length === 1) {
+        mainCondoName = names[0];
+      } else if (names.length > 1) {
+        mainCondoName = `${names[0]} (+${names.length - 1} postos)`;
+      } else if (a.condoId) {
+        mainCondoName = condoMap.get(a.condoId) || 'Posto Geral';
+      }
+
+      return {
+        ...a,
+        condoIds: ids,
+        condoNames: names,
+        condoName: mainCondoName,
+      };
+    });
   } catch (error) {
     console.error('getSecurityAgents failed:', error);
     return [];
@@ -1466,6 +1484,7 @@ export async function getSecurityAgents(condoId?: number) {
 
 export async function createSecurityAgent(data: {
   condoId?: number;
+  condoIds?: number[];
   name: string;
   cpf?: string;
   phone: string;
@@ -1477,8 +1496,14 @@ export async function createSecurityAgent(data: {
   notes?: string;
 }) {
   try {
+    const ids: number[] = Array.isArray(data.condoIds) && data.condoIds.length > 0
+      ? data.condoIds.map(Number)
+      : (data.condoId ? [Number(data.condoId)] : []);
+    const primaryCondoId = ids[0] ?? (data.condoId ? Number(data.condoId) : null);
+
     const newAgent = createStoreAgent({
-      condoId: data.condoId ? Number(data.condoId) : null,
+      condoId: primaryCondoId,
+      condoIds: ids,
       name: (data.name || '').trim(),
       cpf: data.cpf ? String(data.cpf).trim() : null,
       phone: (data.phone || '').trim(),
@@ -1490,9 +1515,16 @@ export async function createSecurityAgent(data: {
       notes: data.notes ? String(data.notes).trim() : null,
     });
     const condoMap = await getCondoNameMap();
+    const names = ids.map((id) => condoMap.get(id)).filter(Boolean) as string[];
+    const mainCondoName = names.length > 1
+      ? `${names[0]} (+${names.length - 1} postos)`
+      : (names[0] || (newAgent.condoId ? condoMap.get(newAgent.condoId) || 'Posto Geral' : 'Operações Regionais'));
+
     return {
       ...newAgent,
-      condoName: newAgent.condoId ? (condoMap.get(newAgent.condoId) || 'Posto Geral') : 'Operações Regionais',
+      condoIds: ids,
+      condoNames: names,
+      condoName: mainCondoName,
     };
   } catch (error) {
     console.error('createSecurityAgent failed:', error);
@@ -1502,6 +1534,7 @@ export async function createSecurityAgent(data: {
 
 export async function updateSecurityAgent(id: number, data: Partial<{
   condoId?: number;
+  condoIds?: number[];
   name?: string;
   cpf?: string;
   phone?: string;
@@ -1517,12 +1550,28 @@ export async function updateSecurityAgent(id: number, data: Partial<{
     if (data.name !== undefined) safeData.name = (data.name || '').trim();
     if (data.phone !== undefined) safeData.phone = (data.phone || '').trim();
     if (data.badgeNumber !== undefined) safeData.badgeNumber = (data.badgeNumber || '').trim();
-    if (data.condoId !== undefined) safeData.condoId = data.condoId ? Number(data.condoId) : null;
+    if (data.condoIds !== undefined && Array.isArray(data.condoIds)) {
+      safeData.condoIds = data.condoIds.map(Number);
+      safeData.condoId = safeData.condoIds[0] ?? null;
+    } else if (data.condoId !== undefined) {
+      safeData.condoId = data.condoId ? Number(data.condoId) : null;
+      safeData.condoIds = safeData.condoId ? [safeData.condoId] : [];
+    }
     const updated = updateStoreAgent(id, safeData);
     const condoMap = await getCondoNameMap();
+    const ids: number[] = Array.isArray(updated.condoIds) && updated.condoIds.length > 0
+      ? updated.condoIds
+      : (updated.condoId ? [updated.condoId] : []);
+    const names = ids.map((cid) => condoMap.get(cid)).filter(Boolean) as string[];
+    const mainCondoName = names.length > 1
+      ? `${names[0]} (+${names.length - 1} postos)`
+      : (names[0] || (updated.condoId ? condoMap.get(updated.condoId) || 'Posto Geral' : 'Operações Regionais'));
+
     return {
       ...updated,
-      condoName: updated.condoId ? (condoMap.get(updated.condoId) || 'Posto Geral') : 'Operações Regionais',
+      condoIds: ids,
+      condoNames: names,
+      condoName: mainCondoName,
     };
   } catch (error) {
     console.error('updateSecurityAgent failed:', error);

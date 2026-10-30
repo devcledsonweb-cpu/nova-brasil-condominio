@@ -46,10 +46,26 @@ function NovaBrasilMain() {
 
   // Sincronizar condomínio padrão se o usuário for restrito a um condomínio específico
   useEffect(() => {
-    if (user?.condoId) {
-      setSelectedCondoId(user.condoId);
+    const isSuper = role === 'sindico' || role === 'admin';
+    if (!isSuper && user) {
+      const userAssignedIds: number[] = Array.isArray(user.condoIds) && user.condoIds.length > 0
+        ? user.condoIds
+        : (user.condoId ? [user.condoId] : []);
+
+      if (userAssignedIds.length === 1) {
+        setSelectedCondoId(userAssignedIds[0]);
+      } else if (userAssignedIds.length > 1) {
+        if (selectedCondoId !== 'all' && !userAssignedIds.includes(Number(selectedCondoId))) {
+          setSelectedCondoId(userAssignedIds[0]);
+        }
+      }
+
+      // Se tentar navegar para o módulo de gestão de usuários da empresa sem ser administrador geral
+      if (activeTab === 'usuarios') {
+        setActiveTab('dashboard');
+      }
     }
-  }, [user]);
+  }, [user, role, activeTab]);
 
   const fetchAllData = async () => {
     try {
@@ -530,6 +546,10 @@ function NovaBrasilMain() {
       if (dataWithAccess.createAccess && dataWithAccess.accessEmail && dataWithAccess.accessPassword) {
         const cleanEmail = dataWithAccess.accessEmail.trim().toLowerCase();
         const cleanPassword = dataWithAccess.accessPassword.trim();
+        const assignedIds = Array.isArray(agentData.condoIds) && agentData.condoIds.length > 0
+          ? agentData.condoIds
+          : (agentData.condoId ? [agentData.condoId] : []);
+        const assignedNames = agentData.condoNames || (agentData.condoName ? [agentData.condoName] : []);
         const selectedCondo = condominiums.find((c) => c.id === Number(agentData.condoId));
 
         // 1. Tenta cadastrar na API /api/users
@@ -544,6 +564,7 @@ function NovaBrasilMain() {
               role: 'portaria',
               permissions: ['portaria', 'ronda', 'materiais', 'ocorrencias'],
               condoId: agentData.condoId ? Number(agentData.condoId) : null,
+              condoIds: assignedIds,
             }),
           });
         } catch (uErr) {
@@ -564,7 +585,9 @@ function NovaBrasilMain() {
             role: 'portaria',
             permissions: JSON.stringify(['portaria', 'ronda', 'materiais', 'ocorrencias']),
             condoId: agentData.condoId ? Number(agentData.condoId) : null,
-            condoName: selectedCondo?.name || null,
+            condoIds: assignedIds,
+            condoName: selectedCondo?.name || agentData.condoName || null,
+            condoNames: assignedNames,
             isActive: true,
             createdAt: new Date().toISOString(),
           };

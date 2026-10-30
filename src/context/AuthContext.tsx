@@ -11,6 +11,7 @@ interface AuthContextType {
   loading: boolean;
   loginWithCredentials: (email: string, password: string) => Promise<UserProfile>;
   setRole: (role: UserRole) => void;
+  verifyAndSwitchRole: (targetRole: UserRole, adminPassword?: string) => Promise<{ success: boolean; message?: string }>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   getAuthHeaders: () => Promise<Record<string, string>>;
@@ -27,7 +28,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const saved = localStorage.getItem('novabrasil_user');
       if (saved) {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (!parsed.originalRole) {
+          parsed.originalRole = parsed.role || 'sindico';
+        }
+        return parsed;
       }
     } catch (e) {
       console.warn('Erro ao restaurar sessão salva:', e);
@@ -74,9 +79,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (contentType.includes('application/json')) {
         const data = await res.json();
         if (res.ok && data) {
-          setUser(data);
-          localStorage.setItem('novabrasil_user', JSON.stringify(data));
-          return data;
+          const profileWithOriginal: UserProfile = {
+            ...data,
+            originalRole: data.originalRole || data.role || 'portaria',
+            condoIds: Array.isArray(data.condoIds) && data.condoIds.length > 0
+              ? data.condoIds
+              : (data.condoId ? [data.condoId] : []),
+            condoNames: data.condoNames || (data.condoName ? [data.condoName] : []),
+          };
+          setUser(profileWithOriginal);
+          localStorage.setItem('novabrasil_user', JSON.stringify(profileWithOriginal));
+          return profileWithOriginal;
         }
 
         // Se a API validou explicitamente e a senha está errada
@@ -110,8 +123,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           email: 'administrativo@novabrasil.com',
           name: 'Administrador Geral',
           role: 'sindico',
+          originalRole: 'sindico',
           permissions: '["all"]',
           condoId: null,
+          condoIds: [],
+          condoNames: ['Todos os Condomínios'],
           isActive: true,
         };
         setUser(masterUser);
@@ -131,8 +147,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           email: 'portaria@novabrasil.com',
           name: 'Portaria Central',
           role: 'portaria',
-          permissions: '["portaria"]',
+          originalRole: 'portaria',
+          permissions: '["portaria","ronda","materiais","ocorrencias"]',
           condoId: null,
+          condoIds: [],
+          condoNames: ['Posto Central'],
           isActive: true,
         };
         setUser(portariaUser);
@@ -151,14 +170,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const match = localUsers.find((u: any) => u.email.toLowerCase() === cleanEmail);
         if (match) {
           if (match.password === cleanPassword) {
+            const assignedIds: number[] = Array.isArray(match.condoIds) && match.condoIds.length > 0
+              ? match.condoIds
+              : (match.condoId ? [match.condoId] : []);
+            const assignedNames: string[] = Array.isArray(match.condoNames) && match.condoNames.length > 0
+              ? match.condoNames
+              : (match.condoName ? [match.condoName] : []);
+
             const userProfile: UserProfile = {
               id: match.id || Date.now(),
               uid: `local-${match.id || Date.now()}`,
               email: match.email,
               name: match.name,
               role: match.role || 'portaria',
+              originalRole: match.role || 'portaria',
               permissions: typeof match.permissions === 'string' ? match.permissions : JSON.stringify(match.permissions || []),
               condoId: match.condoId || null,
+              condoIds: assignedIds,
+              condoName: match.condoName || null,
+              condoNames: assignedNames,
               isActive: true,
             };
             setUser(userProfile);
@@ -178,9 +208,42 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const setRole = (newRole: UserRole) => {
     if (!user) return;
+    const isSuperRole = newRole === 'sindico' || newRole === 'admin';
+    const wasOriginallySuper = user.originalRole === 'sindico' || user.originalRole === 'admin';
+    if (isSuperRole && !wasOriginallySuper) {
+      console.warn('Bloqueio de segurança: troca para Gestor Geral requer autenticação com senha.');
+      return;
+    }
     const updated = { ...user, role: newRole };
     setUser(updated);
     localStorage.setItem('novabrasil_user', JSON.stringify(updated));
+  };
+
+  const verifyAndSwitchRole = async (targetRole: UserRole, adminPassword?: string): Promise<{ success: boolean; message?: string }> => {
+    if (!user) {
+      return { success: false, message: 'Nenhum usuário conectado.' };
+    }
+
+    const isElevatingToAdmin = targetRole === 'sindico' || targetRole === 'admin';
+    const originallyAdmin = user.originalRole === 'sindico' || user.originalRole === 'admin';
+
+    // Se o usuário não é originariamente Administrador Master, exige senha do Gestor Geral
+    if (isElevatingToAdmin && !originallyAdmin) {
+      if (!adminPassword || adminPassword.trim() !== '@nb32573515') {
+        return {
+          success: false,
+          message: 'Senha do Gestor Geral incorreta. Apenas o Gestor da Empresa pode acessar este perfil.',
+        };
+      }
+    }
+
+    const updated: UserProfile = {
+      ...user,
+      role: targetRole,
+    };
+    setUser(updated);
+    localStorage.setItem('novabrasil_user', JSON.stringify(updated));
+    return { success: true };
   };
 
   const signInWithGoogle = async () => {
@@ -244,6 +307,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loading,
         loginWithCredentials,
         setRole,
+        verifyAndSwitchRole,
         signInWithGoogle,
         signOut,
         getAuthHeaders,

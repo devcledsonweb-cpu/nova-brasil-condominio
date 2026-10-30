@@ -90,9 +90,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="p-3 bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700/80 rounded-xl shadow-2xs">
           <div className="flex items-start justify-between">
             <div className="min-w-0 pr-1">
-              <p className="text-xs font-bold text-slate-900 dark:text-white truncate max-w-[140px]">{user?.name}</p>
               <p className="text-[11px] text-blue-600 dark:text-blue-400 font-semibold mt-0.5 truncate">
-                {role === 'sindico' || role === 'admin' ? 'Gestor da Empresa' : 'Supervisor de Operações'}
+                {role === 'sindico' || role === 'admin'
+                  ? 'Gestor da Empresa'
+                  : role === 'supervisor'
+                  ? 'Gestor do Condomínio'
+                  : 'Agente de Portaria'}
               </p>
             </div>
             <button
