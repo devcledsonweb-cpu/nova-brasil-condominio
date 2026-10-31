@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext.tsx';
+import { PhotoField } from './PhotoField.tsx';
 import {
   ShieldCheck,
   Plus,
@@ -22,6 +23,7 @@ import {
   EyeOff,
   CheckSquare,
   Square,
+  Briefcase,
 } from 'lucide-react';
 import { SecurityAgent, Condominium } from '../types/index.ts';
 import { maskCPF, maskPhone, maskDate } from '../utils/masks.ts';
@@ -56,11 +58,13 @@ export const AgentsView: React.FC<AgentsViewProps> = ({
   const [errorMessage, setErrorMessage] = useState('');
   const [successBanner, setSuccessBanner] = useState('');
 
-  // Form State: Multi-Condomínio
+  // Form State: Multi-Condomínio & Foto & Posto
   const [selectedCondoIds, setSelectedCondoIds] = useState<number[]>(
     selectedCondoId !== 'all' ? [Number(selectedCondoId)] : (condominiums.length > 0 ? [condominiums[0].id] : [])
   );
   const [name, setName] = useState('');
+  const [photoUrl, setPhotoUrl] = useState('');
+  const [assignedStation, setAssignedStation] = useState('');
   const [cpf, setCpf] = useState('');
   const [phone, setPhone] = useState('');
   const [badgeNumber, setBadgeNumber] = useState('');
@@ -98,6 +102,8 @@ export const AgentsView: React.FC<AgentsViewProps> = ({
       selectedCondoId !== 'all' ? [Number(selectedCondoId)] : (condominiums.length > 0 ? [condominiums[0].id] : [])
     );
     setName('');
+    setPhotoUrl('');
+    setAssignedStation('Portaria Principal (Social)');
     setCpf('');
     setPhone('');
     setBadgeNumber(`AG-${Math.floor(1000 + Math.random() * 9000)}`);
@@ -122,6 +128,8 @@ export const AgentsView: React.FC<AgentsViewProps> = ({
       : (agent.condoId ? [agent.condoId] : []);
     setSelectedCondoIds(existingIds);
     setName(agent.name);
+    setPhotoUrl(agent.photoUrl || '');
+    setAssignedStation(agent.assignedStation || '');
     setCpf(agent.cpf ? maskCPF(agent.cpf) : '');
     setPhone(maskPhone(agent.phone));
     setBadgeNumber(agent.badgeNumber);
@@ -200,6 +208,8 @@ export const AgentsView: React.FC<AgentsViewProps> = ({
         condoName,
         condoNames,
         name: name.trim(),
+        photoUrl: photoUrl.trim() || null,
+        assignedStation: assignedStation.trim() || null,
         cpf: cpf.trim() || null,
         phone: phone.trim(),
         badgeNumber: badgeNumber.trim().toUpperCase(),
@@ -561,26 +571,56 @@ export const AgentsView: React.FC<AgentsViewProps> = ({
             >
               <div>
                 <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <h3 className="font-semibold text-slate-900 dark:text-white text-base">{agent.name}</h3>
-                    <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mt-1">
-                      <span className="font-mono text-slate-700 dark:text-slate-300 font-medium">
-                        {agent.badgeNumber}
-                      </span>
-                      <span>·</span>
-                      <span className="font-medium text-blue-600 dark:text-blue-400">
-                        {getRoleLabel(agent.roleTitle)}
-                      </span>
+                  <div className="flex items-center gap-3 min-w-0">
+                    {/* Foto do Agente (visível para todos) */}
+                    {agent.photoUrl ? (
+                      <img
+                        src={agent.photoUrl}
+                        alt={agent.name}
+                        className="w-12 h-12 rounded-xl object-cover border border-slate-200 dark:border-slate-700 shadow-xs shrink-0"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded-xl bg-blue-100 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 font-bold flex items-center justify-center text-sm border border-blue-200 dark:border-blue-900 shrink-0">
+                        {agent.name
+                          .split(' ')
+                          .map((n) => n[0])
+                          .slice(0, 2)
+                          .join('')}
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <h3 className="font-semibold text-slate-900 dark:text-white text-base leading-tight truncate">
+                        {agent.name}
+                      </h3>
+                      <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mt-1">
+                        <span className="font-mono text-slate-700 dark:text-slate-300 font-medium">
+                          {agent.badgeNumber}
+                        </span>
+                        <span>·</span>
+                        <span className="font-medium text-blue-600 dark:text-blue-400 truncate">
+                          {getRoleLabel(agent.roleTitle)}
+                        </span>
+                      </div>
                     </div>
                   </div>
                   <div>{getStatusIndicator(agent.status)}</div>
                 </div>
 
-                <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2 text-xs text-slate-600 dark:text-slate-300">
+                {/* Posto de Serviço Escalado (visível para todos e no painel do agente) */}
+                {agent.assignedStation && (
+                  <div className="mt-3 p-2 bg-emerald-50 dark:bg-emerald-950/40 rounded-lg border border-emerald-200 dark:border-emerald-900/60 flex items-center gap-2 text-xs text-emerald-800 dark:text-emerald-300">
+                    <Briefcase className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span className="font-medium truncate">
+                      Posto Escalado: <strong>{agent.assignedStation}</strong>
+                    </span>
+                  </div>
+                )}
+
+                <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2 text-xs text-slate-600 dark:text-slate-300">
                   <div className="space-y-1">
                     <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300 text-xs font-semibold">
                       <Building2 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
-                      <span>Posto(s) Designado(s):</span>
+                      <span>Condomínio(s) Vinculado(s):</span>
                     </div>
                     <div className="flex flex-wrap gap-1 pl-5">
                       {agent.condoNames && agent.condoNames.length > 0 ? (
@@ -855,6 +895,44 @@ export const AgentsView: React.FC<AgentsViewProps> = ({
                     <option value="ferias">Em Férias</option>
                     <option value="afastado">Afastado / Licença</option>
                   </select>
+                </div>
+
+                {/* Foto do Agente (visível para todos) */}
+                <div className="sm:col-span-2">
+                  <PhotoField
+                    label="Foto do Agente / Colaborador"
+                    value={photoUrl}
+                    onChange={setPhotoUrl}
+                    type="agent"
+                    helperText="A foto ficará visível no crachá e nos registros operacionais para toda a equipe."
+                  />
+                </div>
+
+                {/* Posto de Serviço Escalado */}
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Posto de Serviço Escalado *
+                  </label>
+                  <input
+                    type="text"
+                    list="stations-suggestions"
+                    placeholder="Ex: Portaria Principal (Social), Área de Lazer, Garagem..."
+                    value={assignedStation}
+                    onChange={(e) => setAssignedStation(e.target.value)}
+                    className="w-full text-sm border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <datalist id="stations-suggestions">
+                    <option value="Portaria Principal (Social)" />
+                    <option value="Portaria de Serviços & Entregas" />
+                    <option value="Área de Lazer & Piscinas" />
+                    <option value="Garagem Subterrânea & Subsolos" />
+                    <option value="Ronda Noturna Perimetral" />
+                    <option value="Guarita de Acesso Pedestres" />
+                    <option value="Posto Geral / Reserva Técnica" />
+                  </datalist>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                    O agente escalado visualizará o posto em destaque no seu painel operacional.
+                  </p>
                 </div>
 
                 <div className="sm:col-span-2">

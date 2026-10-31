@@ -12,6 +12,8 @@ export interface StoredSecurityAgent {
   roleTitle: 'agente_portaria' | 'vigilante_patrimonial' | 'controlador_acesso' | 'fiscal_piso' | 'supervisor_posto';
   shift: '12x36_dia' | '12x36_noite' | '6x1_manha' | '6x1_tarde' | '6x1_noite';
   status: 'em_servico' | 'folga' | 'ferias' | 'afastado';
+  servicePost?: string | null;
+  photoUrl?: string | null;
   admissionDate: string | null;
   notes: string | null;
   createdAt: string;
@@ -27,9 +29,15 @@ export interface StoredPatrolVehicle {
   color: string;
   currentKm: number;
   driverName: string | null;
+  activeDriver?: string | null;
+  checkoutKm?: number | null;
+  checkoutFuel?: string | null;
+  checkoutAt?: string | null;
+  checkoutChecklist?: string[];
   status: 'em_ronda' | 'posto_base' | 'em_manutencao' | 'inativo';
   routeDescription: string | null;
   lastPatrolAt: string | null;
+  photoUrl?: string | null;
   createdAt: string;
 }
 
@@ -44,8 +52,18 @@ export interface StoredCompanyAsset {
   condition: 'novo' | 'bom' | 'necessita_reparo' | 'danificado';
   deliveryDate: string | null;
   responsibleAgent: string | null;
+  cautelaAt?: string | null;
+  cautelaNotes?: string | null;
+  cautelaItems?: string[];
+  photoUrl?: string | null;
   notes: string | null;
   createdAt: string;
+}
+
+export interface StoredCondoMeta {
+  condoId: number;
+  servicePosts?: string[];
+  photoUrl?: string | null;
 }
 
 export interface StoredMaintenanceOrder {
@@ -86,6 +104,7 @@ interface OperationalDatabase {
   companyAssets: StoredCompanyAsset[];
   maintenances: StoredMaintenanceOrder[];
   operationalLogs: StoredOperationalLog[];
+  condoMetas?: StoredCondoMeta[];
   nextIds: {
     agent: number;
     vehicle: number;
@@ -99,10 +118,23 @@ const dataDir = path.join(process.cwd(), 'data');
 const dataFilePath = path.join(dataDir, 'operations.json');
 
 const INITIAL_DATA: OperationalDatabase = {
+  condoMetas: [
+    {
+      condoId: 1,
+      servicePosts: ['Portaria Principal (Social)', 'Portaria de Serviço / Entregas', 'Garagem / Portões', 'Área de Lazer / Piscina', 'Ronda Perimetral'],
+      photoUrl: 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&auto=format&fit=crop&q=80',
+    },
+    {
+      condoId: 2,
+      servicePosts: ['Recepção Torre A', 'Recepção Torre B', 'Docas de Carga & Descarga', 'Estacionamento Subsolo', 'Ronda Externa'],
+      photoUrl: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=800&auto=format&fit=crop&q=80',
+    },
+  ],
   agents: [
     {
       id: 1,
       condoId: 1,
+      condoIds: [1],
       name: 'Carlos Alberto Mendes',
       cpf: '234.567.890-12',
       phone: '(11) 98765-4321',
@@ -110,6 +142,8 @@ const INITIAL_DATA: OperationalDatabase = {
       roleTitle: 'agente_portaria',
       shift: '12x36_dia',
       status: 'em_servico',
+      servicePost: 'Portaria Principal (Social)',
+      photoUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&auto=format&fit=crop&q=80',
       admissionDate: '15/02/2023',
       notes: 'Líder da guarnição diurna. Curso de atendimento tático e CFTV atualizado.',
       createdAt: new Date().toISOString(),
@@ -117,6 +151,7 @@ const INITIAL_DATA: OperationalDatabase = {
     {
       id: 2,
       condoId: 1,
+      condoIds: [1],
       name: 'Roberto Silveira Santos',
       cpf: '345.678.901-23',
       phone: '(11) 97654-3210',
@@ -124,6 +159,8 @@ const INITIAL_DATA: OperationalDatabase = {
       roleTitle: 'vigilante_patrimonial',
       shift: '12x36_noite',
       status: 'em_servico',
+      servicePost: 'Ronda Perimetral',
+      photoUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&auto=format&fit=crop&q=80',
       admissionDate: '10/05/2023',
       notes: 'Responsável pela ronda perimetral e bastão vigia noturno.',
       createdAt: new Date().toISOString(),
@@ -131,6 +168,7 @@ const INITIAL_DATA: OperationalDatabase = {
     {
       id: 3,
       condoId: 2,
+      condoIds: [1, 2],
       name: 'Valdemar Costa Lima',
       cpf: '456.789.012-34',
       phone: '(11) 96543-2109',
@@ -138,6 +176,8 @@ const INITIAL_DATA: OperationalDatabase = {
       roleTitle: 'supervisor_posto',
       shift: '12x36_dia',
       status: 'em_servico',
+      servicePost: 'Supervisão Geral de Posto',
+      photoUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=80',
       admissionDate: '01/11/2022',
       notes: 'Supervisor operacional do Posto Alphaville e bairros adjacentes.',
       createdAt: new Date().toISOString(),
@@ -145,6 +185,7 @@ const INITIAL_DATA: OperationalDatabase = {
     {
       id: 4,
       condoId: 2,
+      condoIds: [2],
       name: 'Marcos Vinicius Rezende',
       cpf: '567.890.123-45',
       phone: '(11) 95432-1098',
@@ -152,6 +193,8 @@ const INITIAL_DATA: OperationalDatabase = {
       roleTitle: 'controlador_acesso',
       shift: '6x1_manha',
       status: 'folga',
+      servicePost: 'Docas de Carga & Descarga',
+      photoUrl: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=400&auto=format&fit=crop&q=80',
       admissionDate: '20/01/2024',
       notes: 'Controle de triagem de caminhões e prestadores de serviços.',
       createdAt: new Date().toISOString(),
@@ -168,9 +211,15 @@ const INITIAL_DATA: OperationalDatabase = {
       color: 'Preto Fosco',
       currentKm: 14850,
       driverName: 'Roberto Silveira Santos',
+      activeDriver: 'Roberto Silveira Santos',
+      checkoutKm: 14835,
+      checkoutFuel: '3/4',
+      checkoutAt: 'Hoje às 14:30',
+      checkoutChecklist: ['Faróis e lanternas funcionando', 'Pneus calibrados', 'Rádio HT acoplado', 'Sem novas avarias'],
       status: 'em_ronda',
       routeDescription: 'Perímetro externo dos muros, cerca elétrica e portões 01 e 02',
       lastPatrolAt: 'Hoje às 14:30',
+      photoUrl: 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?w=600&auto=format&fit=crop&q=80',
       createdAt: new Date().toISOString(),
     },
     {
@@ -186,6 +235,7 @@ const INITIAL_DATA: OperationalDatabase = {
       status: 'posto_base',
       routeDescription: 'Ronda de apoio tático, suporte a incidentes e inspeção de postos',
       lastPatrolAt: 'Hoje às 13:00',
+      photoUrl: 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?w=600&auto=format&fit=crop&q=80',
       createdAt: new Date().toISOString(),
     },
     {
@@ -198,9 +248,15 @@ const INITIAL_DATA: OperationalDatabase = {
       color: 'Preto',
       currentKm: 8900,
       driverName: 'Marcos Vinicius Rezende',
+      activeDriver: 'Marcos Vinicius Rezende',
+      checkoutKm: 8880,
+      checkoutFuel: 'Cheio',
+      checkoutAt: 'Hoje às 15:10',
+      checkoutChecklist: ['Faróis e lanternas', 'Pneus calibrados', 'HT conectado'],
       status: 'em_ronda',
       routeDescription: 'Alameda Principal, Área de Lazer e Reservatórios Técnicos',
       lastPatrolAt: 'Hoje às 15:10',
+      photoUrl: 'https://images.unsplash.com/photo-1568772585407-9361f9bf3a87?w=600&auto=format&fit=crop&q=80',
       createdAt: new Date().toISOString(),
     },
   ],
@@ -216,6 +272,9 @@ const INITIAL_DATA: OperationalDatabase = {
       condition: 'bom',
       deliveryDate: '10/01/2024',
       responsibleAgent: 'Carlos Alberto Mendes',
+      cautelaAt: 'Hoje às 07:00',
+      cautelaNotes: 'Cautelado para turno diurno. Base e fone de ouvido inclusos.',
+      photoUrl: 'https://images.unsplash.com/photo-1588508065123-287b28e013da?w=600&auto=format&fit=crop&q=80',
       notes: 'Com base carregadora quádrupla e microfone de lapela tático.',
       createdAt: new Date().toISOString(),
     },
@@ -230,6 +289,8 @@ const INITIAL_DATA: OperationalDatabase = {
       condition: 'bom',
       deliveryDate: '15/02/2024',
       responsibleAgent: 'Roberto Silveira Santos',
+      cautelaAt: 'Hoje às 19:00',
+      photoUrl: 'https://images.unsplash.com/photo-1584438784894-089d6a62b8fa?w=600&auto=format&fit=crop&q=80',
       notes: '12 botons de ronda perimetral espalhados pelo muro norte e sul.',
       createdAt: new Date().toISOString(),
     },
@@ -244,6 +305,7 @@ const INITIAL_DATA: OperationalDatabase = {
       condition: 'bom',
       deliveryDate: '05/11/2023',
       responsibleAgent: 'Valdemar Costa Lima',
+      photoUrl: 'https://images.unsplash.com/photo-1557597774-9d273605dfa9?w=600&auto=format&fit=crop&q=80',
       notes: 'Equipamento pertencente à NOVA BRASIL cedido sob contrato.',
       createdAt: new Date().toISOString(),
     },
@@ -258,6 +320,7 @@ const INITIAL_DATA: OperationalDatabase = {
       condition: 'bom',
       deliveryDate: '20/08/2023',
       responsibleAgent: 'Valdemar Costa Lima',
+      photoUrl: 'https://images.unsplash.com/photo-1589718539308-168361730999?w=600&auto=format&fit=crop&q=80',
       notes: 'Capa tática com identificação da empresa. Validade até 2028.',
       createdAt: new Date().toISOString(),
     },
@@ -639,4 +702,39 @@ export function getStoreDashboardStats(condoId?: number) {
     completedMaintenances: maintenances.filter((m) => m.status === 'concluida').length,
     todayLogs: logs.length,
   };
+}
+
+// --- METADADOS DE CONDOMÍNIO (POSTOS DE SERVIÇO & FOTOS) ---
+export function getStoreCondoMeta(condoId: number): StoredCondoMeta {
+  const db = ensureDataFile();
+  if (!db.condoMetas) db.condoMetas = [];
+  const found = db.condoMetas.find((m) => m.condoId === condoId);
+  if (found) return found;
+  const defaultMeta: StoredCondoMeta = {
+    condoId,
+    servicePosts: ['Portaria Principal (Social)', 'Portaria de Serviço / Entregas', 'Garagem / Portões', 'Área de Lazer / Piscina', 'Ronda Perimetral'],
+    photoUrl: 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&auto=format&fit=crop&q=80',
+  };
+  db.condoMetas.push(defaultMeta);
+  saveDataFile();
+  return defaultMeta;
+}
+
+export function updateStoreCondoMeta(condoId: number, data: Partial<StoredCondoMeta>): StoredCondoMeta {
+  const db = ensureDataFile();
+  if (!db.condoMetas) db.condoMetas = [];
+  const idx = db.condoMetas.findIndex((m) => m.condoId === condoId);
+  if (idx !== -1) {
+    db.condoMetas[idx] = { ...db.condoMetas[idx], ...data };
+    saveDataFile();
+    return db.condoMetas[idx];
+  }
+  const newMeta: StoredCondoMeta = {
+    condoId,
+    servicePosts: data.servicePosts || ['Portaria Principal (Social)', 'Portaria de Serviço / Entregas', 'Garagem / Portões', 'Área de Lazer / Piscina', 'Ronda Perimetral'],
+    photoUrl: data.photoUrl ?? 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&auto=format&fit=crop&q=80',
+  };
+  db.condoMetas.push(newMeta);
+  saveDataFile();
+  return newMeta;
 }

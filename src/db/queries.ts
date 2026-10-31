@@ -43,6 +43,8 @@ import {
   createStoreOperationalLog,
   deleteStoreOperationalLog,
   getStoreDashboardStats,
+  getStoreCondoMeta,
+  updateStoreCondoMeta,
 } from './operationalStore.ts';
 
 // Cache auxiliar para nomes de condomínios
@@ -92,6 +94,7 @@ export async function getCondominiums() {
       const vehicles = getStorePatrolVehicles(c.id);
       const assets = getStoreCompanyAssets(c.id);
       const maintenances = getStoreMaintenances(c.id);
+      const meta = getStoreCondoMeta(c.id);
 
       return {
         id: c.id,
@@ -109,6 +112,8 @@ export async function getCondominiums() {
         sindicoPhone: c.sindicoPhone || '',
         sindicoEmail: c.sindicoEmail || 'Portaria 24h + Ronda Noturna',
         status: (c.status as 'ativo' | 'inativo' | 'implantacao') || 'ativo',
+        photoUrl: meta.photoUrl || null,
+        servicePosts: meta.servicePosts || ['Portaria Principal', 'Garagem / Portões', 'Área de Lazer / Piscina', 'Ronda Perimetral'],
         createdAt: c.createdAt,
         agentsCount: agents.length,
         vehiclesCount: vehicles.length,
@@ -129,11 +134,14 @@ export async function getCondominiumById(id: number) {
     const res = await db.select().from(condominiums).where(eq(condominiums.id, id));
     if (!res || !res[0]) return null;
     const c = res[0];
+    const meta = getStoreCondoMeta(id);
     return {
       ...c,
       supervisorName: c.sindicoName || 'Supervisor Regional',
       supervisorPhone: c.sindicoPhone || '',
       contractType: c.sindicoEmail || 'Portaria 24h + Ronda Noturna',
+      photoUrl: meta.photoUrl || null,
+      servicePosts: meta.servicePosts || ['Portaria Principal', 'Garagem / Portões', 'Área de Lazer / Piscina', 'Ronda Perimetral'],
     };
   } catch (error) {
     console.error('getCondominiumById failed:', error);
@@ -156,6 +164,8 @@ export async function createCondominium(data: {
   sindicoPhone?: string;
   sindicoEmail?: string;
   status?: string;
+  photoUrl?: string;
+  servicePosts?: string[];
 }) {
   try {
     const res = await db
@@ -176,11 +186,21 @@ export async function createCondominium(data: {
       .returning();
 
     const c = res[0];
+    if (data.servicePosts || data.photoUrl) {
+      updateStoreCondoMeta(c.id, {
+        servicePosts: data.servicePosts,
+        photoUrl: data.photoUrl,
+      });
+    }
+    const meta = getStoreCondoMeta(c.id);
+
     return {
       ...c,
       supervisorName: c.sindicoName || 'Supervisor Regional',
       supervisorPhone: c.sindicoPhone || '',
       contractType: c.sindicoEmail || 'Portaria 24h + Ronda Noturna',
+      photoUrl: meta.photoUrl || null,
+      servicePosts: meta.servicePosts || ['Portaria Principal', 'Garagem / Portões', 'Área de Lazer / Piscina', 'Ronda Perimetral'],
     };
   } catch (error) {
     console.error('createCondominium failed:', error);
@@ -205,6 +225,8 @@ export async function updateCondominium(
     sindicoPhone?: string;
     sindicoEmail?: string;
     status?: string;
+    photoUrl?: string;
+    servicePosts?: string[];
   }
 ) {
   try {
@@ -248,11 +270,22 @@ export async function updateCondominium(
         .returning();
     }
     const c = res[0];
+
+    if (data.servicePosts !== undefined || data.photoUrl !== undefined) {
+      updateStoreCondoMeta(id, {
+        ...(data.servicePosts !== undefined ? { servicePosts: data.servicePosts } : {}),
+        ...(data.photoUrl !== undefined ? { photoUrl: data.photoUrl } : {}),
+      });
+    }
+    const meta = getStoreCondoMeta(id);
+
     return {
       ...c,
       supervisorName: c.sindicoName || 'Supervisor Regional',
       supervisorPhone: c.sindicoPhone || '',
       contractType: c.sindicoEmail || 'Portaria 24h + Ronda Noturna',
+      photoUrl: meta.photoUrl || null,
+      servicePosts: meta.servicePosts || ['Portaria Principal', 'Garagem / Portões', 'Área de Lazer / Piscina', 'Ronda Perimetral'],
     };
   } catch (error) {
     console.error('updateCondominium failed:', error);
@@ -1492,6 +1525,8 @@ export async function createSecurityAgent(data: {
   roleTitle?: any;
   shift?: any;
   status?: any;
+  servicePost?: string;
+  photoUrl?: string;
   admissionDate?: string;
   notes?: string;
 }) {
@@ -1511,6 +1546,8 @@ export async function createSecurityAgent(data: {
       roleTitle: data.roleTitle || 'agente_portaria',
       shift: data.shift || '12x36_dia',
       status: data.status || 'em_servico',
+      servicePost: data.servicePost?.trim() || null,
+      photoUrl: data.photoUrl?.trim() || null,
       admissionDate: data.admissionDate ? String(data.admissionDate).trim() : null,
       notes: data.notes ? String(data.notes).trim() : null,
     });
@@ -1542,6 +1579,8 @@ export async function updateSecurityAgent(id: number, data: Partial<{
   roleTitle?: any;
   shift?: any;
   status?: any;
+  servicePost?: string;
+  photoUrl?: string;
   admissionDate?: string;
   notes?: string;
 }>) {
@@ -1550,6 +1589,8 @@ export async function updateSecurityAgent(id: number, data: Partial<{
     if (data.name !== undefined) safeData.name = (data.name || '').trim();
     if (data.phone !== undefined) safeData.phone = (data.phone || '').trim();
     if (data.badgeNumber !== undefined) safeData.badgeNumber = (data.badgeNumber || '').trim();
+    if (data.servicePost !== undefined) safeData.servicePost = data.servicePost?.trim() || null;
+    if (data.photoUrl !== undefined) safeData.photoUrl = data.photoUrl?.trim() || null;
     if (data.condoIds !== undefined && Array.isArray(data.condoIds)) {
       safeData.condoIds = data.condoIds.map(Number);
       safeData.condoId = safeData.condoIds[0] ?? null;
@@ -1614,9 +1655,15 @@ export async function createPatrolVehicle(data: {
   color?: string;
   currentKm?: number;
   driverName?: string;
+  activeDriver?: string;
+  checkoutKm?: number;
+  checkoutFuel?: string;
+  checkoutAt?: string;
+  checkoutChecklist?: string[];
   status?: any;
   routeDescription?: string;
   lastPatrolAt?: string;
+  photoUrl?: string;
 }) {
   try {
     const newVehicle = createStorePatrolVehicle({
@@ -1628,9 +1675,15 @@ export async function createPatrolVehicle(data: {
       color: data.color?.trim() || 'Preto',
       currentKm: parseInt(String(data.currentKm || 0), 10) || 0,
       driverName: data.driverName?.trim() || null,
-      status: data.status || 'em_ronda',
+      activeDriver: data.activeDriver?.trim() || null,
+      checkoutKm: data.checkoutKm !== undefined ? Number(data.checkoutKm) : null,
+      checkoutFuel: data.checkoutFuel || null,
+      checkoutAt: data.checkoutAt || null,
+      checkoutChecklist: Array.isArray(data.checkoutChecklist) ? data.checkoutChecklist : [],
+      status: data.status || 'disponivel',
       routeDescription: data.routeDescription?.trim() || null,
       lastPatrolAt: data.lastPatrolAt?.trim() || ('Hoje às ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })),
+      photoUrl: data.photoUrl?.trim() || null,
     });
     const condoMap = await getCondoNameMap();
     return {
@@ -1652,9 +1705,15 @@ export async function updatePatrolVehicle(id: number, data: Partial<{
   color?: string;
   currentKm?: number;
   driverName?: string;
+  activeDriver?: string;
+  checkoutKm?: number | null;
+  checkoutFuel?: string | null;
+  checkoutAt?: string | null;
+  checkoutChecklist?: string[];
   status?: any;
   routeDescription?: string;
   lastPatrolAt?: string;
+  photoUrl?: string;
 }>) {
   try {
     const updated = updateStorePatrolVehicle(id, data);
@@ -1705,6 +1764,10 @@ export async function createCompanyAsset(data: {
   condition?: any;
   deliveryDate?: string;
   responsibleAgent?: string;
+  cautelaAt?: string;
+  cautelaNotes?: string;
+  cautelaItems?: string[];
+  photoUrl?: string;
   notes?: string;
 }) {
   try {
@@ -1718,6 +1781,10 @@ export async function createCompanyAsset(data: {
       condition: data.condition || 'bom',
       deliveryDate: data.deliveryDate?.trim() || null,
       responsibleAgent: data.responsibleAgent?.trim() || null,
+      cautelaAt: data.cautelaAt?.trim() || null,
+      cautelaNotes: data.cautelaNotes?.trim() || null,
+      cautelaItems: Array.isArray(data.cautelaItems) ? data.cautelaItems : [],
+      photoUrl: data.photoUrl?.trim() || null,
       notes: data.notes?.trim() || null,
     });
     const condoMap = await getCondoNameMap();
@@ -1741,6 +1808,10 @@ export async function updateCompanyAsset(id: number, data: Partial<{
   condition?: any;
   deliveryDate?: string;
   responsibleAgent?: string;
+  cautelaAt?: string;
+  cautelaNotes?: string;
+  cautelaItems?: string[];
+  photoUrl?: string;
   notes?: string;
 }>) {
   try {

@@ -45,12 +45,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   selectedCondoId = 'all',
   onNavigate,
 }) => {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
 
   const currentCondo =
     selectedCondoId === 'all'
       ? null
       : condominiums.find((c) => c.id === selectedCondoId);
+
+  // Identifica o colaborador logado e seu posto de serviço atribuído
+  const myAgentRecord = agents.find(
+    (a) =>
+      (user?.email && a.accessEmail?.toLowerCase() === user.email.toLowerCase()) ||
+      (user?.name && a.name.toLowerCase() === user.name.toLowerCase())
+  );
 
   // Filtros conforme seleção global de condomínio
   const filteredAgents =
@@ -86,6 +93,57 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   return (
     <div className="space-y-5 sm:space-y-6">
+      {/* Banner de Escala do Agente (Visível no painel do operador) */}
+      {(role === 'portaria' || role === 'operador') && (
+        <div className="bg-blue-600 dark:bg-blue-700 text-white rounded-xl p-4 sm:p-5 shadow-xs border border-blue-500 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in">
+          <div className="flex items-center gap-3">
+            {myAgentRecord?.photoUrl ? (
+              <img
+                src={myAgentRecord.photoUrl}
+                alt={myAgentRecord.name}
+                className="w-11 h-11 rounded-xl object-cover border-2 border-white/40 shadow-xs shrink-0"
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center shrink-0">
+                <ShieldCheck className="w-6 h-6 text-white" />
+              </div>
+            )}
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-white/20 text-white">
+                  Sua Escala de Serviço Ativa
+                </span>
+                <span className="text-xs font-semibold text-blue-100">
+                  {myAgentRecord?.badgeNumber ? `Matrícula: ${myAgentRecord.badgeNumber}` : 'Colaborador Operacional'}
+                </span>
+              </div>
+              <p className="text-sm sm:text-base font-bold text-white mt-0.5">
+                Posto: {myAgentRecord?.assignedStation || 'Portaria Principal (Social)'}
+                {myAgentRecord?.condoName ? ` · ${myAgentRecord.condoName}` : currentCondo ? ` · ${currentCondo.name}` : ''}
+              </p>
+              <p className="text-xs text-blue-100">
+                Escala: {myAgentRecord?.shift === '12x36_noite' ? '12x36 Noturno (18h às 06h)' : '12x36 Diurno (06h às 18h)'} · Status: <span className="underline font-semibold">Em Serviço no Posto</span>
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-stretch sm:self-auto shrink-0">
+            <button
+              onClick={() => onNavigate('ocorrencias')}
+              className="px-3 py-1.5 bg-white text-blue-700 hover:bg-blue-50 font-semibold rounded-lg text-xs shadow-xs transition-colors cursor-pointer"
+            >
+              Passagem de Turno
+            </button>
+            <button
+              onClick={() => onNavigate('ronda')}
+              className="px-3 py-1.5 bg-blue-800/80 hover:bg-blue-900 text-white font-semibold rounded-lg text-xs transition-colors cursor-pointer"
+            >
+              Receber Viatura
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Banner Principal de Operações da Empresa */}
       <div className="relative overflow-hidden rounded-2xl border border-slate-800 dark:border-slate-800/90 bg-linear-to-r from-slate-950 via-slate-900 to-blue-950 p-5 sm:p-7 md:p-8 text-white shadow-md">
         <div className="relative z-10 max-w-3xl space-y-3">
@@ -101,7 +159,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <h1 className="text-xl sm:text-2xl md:text-3xl font-black tracking-tight text-white">
             {currentCondo
               ? `Operação: ${currentCondo.name}`
-              : 'Centro de Controle Operacional de Condomínios'}
+              : 'CCO Nova Brasil · Gestão Operacional'}
           </h1>
 
           <p className="text-xs sm:text-sm text-slate-300 leading-relaxed max-w-2xl">

@@ -1,5 +1,16 @@
 export type UserRole = 'admin' | 'supervisor' | 'operador' | 'sindico' | 'portaria';
 
+export interface ServiceStation {
+  id: string;
+  condoId: number;
+  name: string; // ex: "Portaria Principal (Social)", "Portaria de Serviços", "Área de Lazer / Piscina", "Garagem Subterrânea"
+  type?: 'portaria_principal' | 'portaria_servico' | 'area_lazer' | 'garagem' | 'ronda_perimetro' | 'outro';
+  shiftSchedule?: string; // ex: "12x36 Diurno (06h às 18h)"
+  assignedAgentName?: string | null;
+  assignedAgentId?: number | null;
+  instructions?: string | null;
+}
+
 export interface Condominium {
   id: number;
   name: string; // ex: "Residencial Jardins", "Edifício Alphaville Corporate"
@@ -17,6 +28,8 @@ export interface Condominium {
   totalUnits?: number | null;
   status: 'ativo' | 'inativo' | 'implantacao';
   createdAt?: string;
+  imageUrl?: string | null; // Foto da fachada do condomínio
+  serviceStations?: ServiceStation[]; // Postos de serviço internos (Portaria Principal, Lazer, Garagem, etc.)
   // Métricas operacionais agregadas
   agentsCount?: number;
   vehiclesCount?: number;
@@ -44,6 +57,9 @@ export interface SecurityAgent {
   createAccess?: boolean;
   accessEmail?: string;
   accessPassword?: string;
+  photoUrl?: string | null; // Foto do colaborador
+  assignedStation?: string | null; // Posto de serviço específico onde está escalado (ex: "Portaria Principal")
+  assignedStationId?: string | null;
 }
 
 export interface PatrolVehicle {
@@ -61,6 +77,13 @@ export interface PatrolVehicle {
   routeDescription?: string | null; // ex: "Perímetro externo e garagens a cada 30min"
   lastPatrolAt?: string | null;
   createdAt?: string;
+  photoUrl?: string | null; // Foto do veículo / viatura / moto
+  inServiceWithAgentName?: string | null; // Agente que está em serviço agora com o veículo
+  serviceStartedAt?: string | null; // Data/Hora em que assumiu
+  startKm?: number | null; // Odômetro inicial ao assumir
+  fuelLevel?: string | null; // Nível de combustível atual
+  checklistItems?: string[]; // Itens verificados no checklist
+  lastChecklistNotes?: string | null;
 }
 
 export interface CompanyAsset {
@@ -77,6 +100,11 @@ export interface CompanyAsset {
   responsibleAgent?: string | null; // Quem assinou a cautela
   notes?: string | null;
   createdAt?: string;
+  photoUrl?: string | null; // Foto do equipamento/material
+  inUseWithAgentName?: string | null; // Agente em serviço com o material
+  inUseSince?: string | null; // Horário em que retirou
+  cautelaNotes?: string | null;
+  cautelaChecklist?: string[];
 }
 
 export interface MaintenanceOrder {

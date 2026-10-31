@@ -110,8 +110,7 @@ function NovaBrasilMain() {
         loadedCondos = condosData;
         localStorage.setItem('novabrasil_condos', JSON.stringify(loadedCondos));
       } else {
-        const saved = localStorage.getItem('novabrasil_condos');
-        loadedCondos = saved ? JSON.parse(saved) : [
+        const defaultCondos: Condominium[] = [
           {
             id: 1,
             name: 'Condomínio Residencial Jardins',
@@ -126,6 +125,48 @@ function NovaBrasilMain() {
             sindicoName: 'Administradora Predial Aliança',
             sindicoPhone: '(11) 3250-9000',
             status: 'ativo',
+            imageUrl: 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=600&q=80',
+            serviceStations: [
+              {
+                id: 'st-jardins-1',
+                condoId: 1,
+                name: 'Portaria Principal (Social)',
+                type: 'portaria_principal',
+                shiftSchedule: '12x36 Diurno (06h às 18h)',
+                assignedAgentName: 'Carlos Eduardo da Silva',
+                assignedAgentId: 1,
+                instructions: 'Controle de pedestres e identificação biométrica de visitantes',
+              },
+              {
+                id: 'st-jardins-2',
+                condoId: 1,
+                name: 'Portaria de Serviços & Entregas',
+                type: 'portaria_servico',
+                shiftSchedule: '12x36 Diurno',
+                assignedAgentName: 'Marcos Antônio Ribeiro',
+                assignedAgentId: 2,
+                instructions: 'Triagem de prestadores, entregadores de aplicativo e encomendas',
+              },
+              {
+                id: 'st-jardins-3',
+                condoId: 1,
+                name: 'Área de Lazer & Piscinas',
+                type: 'area_lazer',
+                shiftSchedule: 'Finais de semana e feriados',
+                assignedAgentName: null,
+                instructions: 'Fiscalização de convidados nas piscinas e quiosques gourmet',
+              },
+              {
+                id: 'st-jardins-4',
+                condoId: 1,
+                name: 'Ronda Noturna Perimetral',
+                type: 'ronda_perimetro',
+                shiftSchedule: '12x36 Noturno (18h às 06h)',
+                assignedAgentName: 'Lucas Ferreira dos Santos',
+                assignedAgentId: 3,
+                instructions: 'Ronda motorizada com bastão nos muros e subsolos',
+              },
+            ],
             agentsCount: 4,
             vehiclesCount: 2,
             assetsCount: 8,
@@ -146,6 +187,27 @@ function NovaBrasilMain() {
             sindicoName: 'CondoPrime Gestão Imobiliária',
             sindicoPhone: '(11) 3100-4400',
             status: 'ativo',
+            imageUrl: 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=600&q=80',
+            serviceStations: [
+              {
+                id: 'st-solar-1',
+                condoId: 2,
+                name: 'Guarita Principal',
+                type: 'portaria_principal',
+                shiftSchedule: 'Escala 6x1 Diurno',
+                assignedAgentName: 'José Roberto de Oliveira',
+                assignedAgentId: 4,
+                instructions: 'Atendimento geral e conferência de portões de garagem',
+              },
+              {
+                id: 'st-solar-2',
+                condoId: 2,
+                name: 'Área de Lazer & Salão de Festas',
+                type: 'area_lazer',
+                shiftSchedule: 'Escala diurna',
+                assignedAgentName: null,
+              },
+            ],
             agentsCount: 2,
             vehiclesCount: 1,
             assetsCount: 5,
@@ -153,6 +215,20 @@ function NovaBrasilMain() {
             createdAt: new Date().toISOString(),
           },
         ];
+
+        const saved = localStorage.getItem('novabrasil_condos');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          // Migração de fotos e postos se não existirem
+          loadedCondos = parsed.map((c: Condominium, idx: number) => ({
+            ...c,
+            imageUrl: c.imageUrl || defaultCondos[idx]?.imageUrl || 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=600&q=80',
+            serviceStations: c.serviceStations && c.serviceStations.length > 0 ? c.serviceStations : defaultCondos[idx]?.serviceStations || [],
+          }));
+        } else {
+          loadedCondos = defaultCondos;
+        }
+        localStorage.setItem('novabrasil_condos', JSON.stringify(loadedCondos));
       }
       setCondominiums(loadedCondos);
 
@@ -163,13 +239,15 @@ function NovaBrasilMain() {
         loadedAgents = agentsData;
         localStorage.setItem('novabrasil_agents', JSON.stringify(loadedAgents));
       } else {
-        const saved = localStorage.getItem('novabrasil_agents');
-        loadedAgents = saved ? JSON.parse(saved) : [
+        const defaultAgents: SecurityAgent[] = [
           {
             id: 1,
             condoId: 1,
             condoName: 'Condomínio Residencial Jardins',
             name: 'Carlos Eduardo da Silva',
+            photoUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80',
+            assignedStation: 'Portaria Principal (Social)',
+            assignedStationId: 'st-jardins-1',
             cpf: '123.456.789-00',
             phone: '(11) 98111-2233',
             badgeNumber: 'AG-101',
@@ -184,6 +262,9 @@ function NovaBrasilMain() {
             condoId: 1,
             condoName: 'Condomínio Residencial Jardins',
             name: 'Marcos Antônio Ribeiro',
+            photoUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=300&q=80',
+            assignedStation: 'Portaria de Serviços & Entregas',
+            assignedStationId: 'st-jardins-2',
             cpf: '234.567.890-11',
             phone: '(11) 98222-3344',
             badgeNumber: 'AG-102',
@@ -198,6 +279,9 @@ function NovaBrasilMain() {
             condoId: 1,
             condoName: 'Condomínio Residencial Jardins',
             name: 'Lucas Ferreira dos Santos',
+            photoUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=300&q=80',
+            assignedStation: 'Ronda Noturna Perimetral',
+            assignedStationId: 'st-jardins-4',
             cpf: '345.678.901-22',
             phone: '(11) 98333-4455',
             badgeNumber: 'RD-201',
@@ -212,6 +296,9 @@ function NovaBrasilMain() {
             condoId: 2,
             condoName: 'Condomínio Solar das Palmeiras',
             name: 'José Roberto de Oliveira',
+            photoUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=300&q=80',
+            assignedStation: 'Guarita Principal',
+            assignedStationId: 'st-solar-1',
             cpf: '456.789.012-33',
             phone: '(11) 98444-5566',
             badgeNumber: 'AG-103',
@@ -222,6 +309,19 @@ function NovaBrasilMain() {
             notes: 'Líder de guarita e conferência de materiais.',
           },
         ];
+
+        const saved = localStorage.getItem('novabrasil_agents');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          loadedAgents = parsed.map((ag: SecurityAgent, idx: number) => ({
+            ...ag,
+            photoUrl: ag.photoUrl || defaultAgents[idx]?.photoUrl || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80',
+            assignedStation: ag.assignedStation || defaultAgents[idx]?.assignedStation || 'Portaria Principal (Social)',
+          }));
+        } else {
+          loadedAgents = defaultAgents;
+        }
+        localStorage.setItem('novabrasil_agents', JSON.stringify(loadedAgents));
       }
       setAgents(loadedAgents);
 
@@ -232,8 +332,7 @@ function NovaBrasilMain() {
         loadedVehicles = vehiclesData;
         localStorage.setItem('novabrasil_patrol_vehicles', JSON.stringify(loadedVehicles));
       } else {
-        const saved = localStorage.getItem('novabrasil_patrol_vehicles');
-        loadedVehicles = saved ? JSON.parse(saved) : [
+        const defaultVehicles: PatrolVehicle[] = [
           {
             id: 1,
             condoId: 1,
@@ -244,8 +343,13 @@ function NovaBrasilMain() {
             brand: 'Honda',
             color: 'Preto',
             currentKm: 14250,
-            driverName: 'Lucas Ferreira (Ronda Noturna)',
+            driverName: 'Lucas Ferreira dos Santos',
+            inServiceWithAgentName: 'Lucas Ferreira dos Santos',
+            serviceStartedAt: '19:00',
+            startKm: 14230,
+            fuelLevel: '3/4',
             status: 'em_ronda',
+            photoUrl: 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=600&q=80',
             routeDescription: 'Ronda perimetral nos muros externos e checagem de garagens a cada 30min',
             lastPatrolAt: '20:45',
           },
@@ -259,8 +363,10 @@ function NovaBrasilMain() {
             brand: 'Fiat',
             color: 'Branco',
             currentKm: 48900,
-            driverName: 'Supervisor Roberto Alves',
+            driverName: null,
+            inServiceWithAgentName: null,
             status: 'disponivel',
+            photoUrl: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=600&q=80',
             routeDescription: 'Viatura de apoio operacional e rondas de perímetro expandido',
             lastPatrolAt: '19:10',
           },
@@ -274,12 +380,33 @@ function NovaBrasilMain() {
             brand: 'Yamaha',
             color: 'Azul',
             currentKm: 9800,
-            driverName: 'Rondante Volante',
+            driverName: 'Agente Ronda Moema',
+            inServiceWithAgentName: 'Agente Ronda Moema',
+            serviceStartedAt: '20:15',
+            startKm: 9785,
+            fuelLevel: 'Cheio',
             status: 'em_ronda',
+            photoUrl: 'https://images.unsplash.com/photo-1568772585407-9361f9bf3a87?auto=format&fit=crop&w=600&q=80',
             routeDescription: 'Perímetro dos portões e garagens dos blocos',
             lastPatrolAt: '21:00',
           },
         ];
+
+        const saved = localStorage.getItem('novabrasil_patrol_vehicles');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          loadedVehicles = parsed.map((v: PatrolVehicle, idx: number) => ({
+            ...v,
+            photoUrl: v.photoUrl || defaultVehicles[idx]?.photoUrl || 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=600&q=80',
+            inServiceWithAgentName: v.inServiceWithAgentName ?? (v.status === 'em_ronda' ? (v.driverName || 'Agente de Ronda') : null),
+            serviceStartedAt: v.serviceStartedAt ?? (v.status === 'em_ronda' ? '19:00' : null),
+            startKm: v.startKm ?? v.currentKm,
+            fuelLevel: v.fuelLevel || '3/4',
+          }));
+        } else {
+          loadedVehicles = defaultVehicles;
+        }
+        localStorage.setItem('novabrasil_patrol_vehicles', JSON.stringify(loadedVehicles));
       }
       setPatrolVehicles(loadedVehicles);
 
@@ -290,8 +417,7 @@ function NovaBrasilMain() {
         loadedAssets = assetsData;
         localStorage.setItem('novabrasil_company_assets', JSON.stringify(loadedAssets));
       } else {
-        const saved = localStorage.getItem('novabrasil_company_assets');
-        loadedAssets = saved ? JSON.parse(saved) : [
+        const defaultAssets: CompanyAsset[] = [
           {
             id: 1,
             condoId: 1,
@@ -304,7 +430,10 @@ function NovaBrasilMain() {
             condition: 'bom',
             deliveryDate: '15/01/2023',
             responsibleAgent: 'Agente Carlos Silva (Guarita)',
+            inUseWithAgentName: 'Carlos Eduardo da Silva',
+            inUseSince: '18:00',
             notes: 'Acompanha 4 bases carregadoras e fones PTT.',
+            photoUrl: 'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?auto=format&fit=crop&w=600&q=80',
           },
           {
             id: 2,
@@ -318,7 +447,10 @@ function NovaBrasilMain() {
             condition: 'novo',
             deliveryDate: '01/02/2023',
             responsibleAgent: 'Lucas Ferreira (Ronda)',
+            inUseWithAgentName: 'Lucas Ferreira dos Santos',
+            inUseSince: '19:00',
             notes: 'Com 12 botões iButton instalados nos pontos de ronda.',
+            photoUrl: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=600&q=80',
           },
           {
             id: 3,
@@ -332,7 +464,9 @@ function NovaBrasilMain() {
             condition: 'bom',
             deliveryDate: '20/02/2023',
             responsibleAgent: 'Equipe de Manutenção Predial',
+            inUseWithAgentName: null,
             notes: 'Alicates, chaves de fenda/phillips, multímetro e furadeira Bosch.',
+            photoUrl: 'https://images.unsplash.com/photo-1581244277943-fe4a9c777189?auto=format&fit=crop&w=600&q=80',
           },
           {
             id: 4,
@@ -346,9 +480,26 @@ function NovaBrasilMain() {
             condition: 'bom',
             deliveryDate: '10/03/2023',
             responsibleAgent: 'José Roberto (Líder)',
+            inUseWithAgentName: 'José Roberto de Oliveira',
+            inUseSince: '07:00',
             notes: 'Baterias revisadas.',
+            photoUrl: 'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?auto=format&fit=crop&w=600&q=80',
           },
         ];
+
+        const saved = localStorage.getItem('novabrasil_company_assets');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          loadedAssets = parsed.map((a: CompanyAsset, idx: number) => ({
+            ...a,
+            photoUrl: a.photoUrl || defaultAssets[idx]?.photoUrl || 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=600&q=80',
+            inUseWithAgentName: a.inUseWithAgentName ?? (a.responsibleAgent?.includes('(') ? a.responsibleAgent.split('(')[0].trim() : a.responsibleAgent || null),
+            inUseSince: a.inUseSince ?? (a.inUseWithAgentName ? '18:00' : null),
+          }));
+        } else {
+          loadedAssets = defaultAssets;
+        }
+        localStorage.setItem('novabrasil_company_assets', JSON.stringify(loadedAssets));
       }
       setCompanyAssets(loadedAssets);
 
@@ -1045,6 +1196,7 @@ function NovaBrasilMain() {
           {activeTab === 'condominios' && (
             <CondominiumsView
               condominiums={condominiums}
+              agents={agents}
               selectedCondoId={selectedCondoId}
               onSelectCondo={setSelectedCondoId}
               onRefresh={fetchAllData}

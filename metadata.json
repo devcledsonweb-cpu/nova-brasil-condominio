@@ -1,6 +1,6 @@
 {
-  "name": "CondoSys - Gestão Condominial",
-  "description": "Sistema completo e responsivo para gestão condominial com controle de portaria, ocorrências, reservas e moradores.",
+  "name": "CCO · NOVA BRASIL - Operações & Facilities",
+  "description": "Central de Controle Operacional para gestão integrada de condomínios, postos de serviço de portaria, frotas de ronda e patrimônio.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
