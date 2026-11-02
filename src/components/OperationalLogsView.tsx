@@ -248,9 +248,6 @@ export const OperationalLogsView: React.FC<OperationalLogsViewProps> = ({
       return matchTitle || matchAgent || matchCondo || matchDesc || matchIncoming || matchDesignated;
     }
     return true;
-      return matchTitle || matchAgent || matchCondo || matchDesc || matchIncoming;
-    }
-    return true;
   });
 
   const getLogTypeLabel = (type: OperationalLog['logType']) => {
@@ -668,16 +665,31 @@ export const OperationalLogsView: React.FC<OperationalLogsViewProps> = ({
             </div>
 
             {/* Informações da Passagem Entregue */}
-            <div className="mt-3 p-3 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 rounded-xl text-xs space-y-1">
-              <p className="text-slate-500">
-                Posto: <strong className="text-slate-900 dark:text-white">{acceptingLog.condoName || 'Posto'}</strong>
-              </p>
-              <p className="text-slate-500">
-                Transmitido por:{' '}
+            <div className="mt-3 p-3.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 rounded-xl text-xs space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">
+                  Posto: <strong className="text-slate-900 dark:text-white">{acceptingLog.condoName || 'Posto Geral'}</strong>
+                </span>
+                <span className="text-[10px] bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 font-bold px-2 py-0.5 rounded-full">
+                  Termo de Recebimento
+                </span>
+              </div>
+              <p className="text-slate-600 dark:text-slate-400">
+                Sainte (Transmitido por):{' '}
                 <strong className="text-slate-900 dark:text-white">{acceptingLog.agentName}</strong> em{' '}
                 {acceptingLog.logDate} às {acceptingLog.logTime}
               </p>
-              <p className="text-slate-700 dark:text-slate-300 text-[11px] mt-1 bg-white dark:bg-slate-900 p-2 rounded-lg border border-slate-100 dark:border-slate-800">
+              {acceptingLog.designatedIncomingAgentName && (
+                <p className="text-amber-800 dark:text-amber-300 font-medium">
+                  Designado para assumir:{' '}
+                  <strong className="text-amber-950 dark:text-amber-100 font-bold">{acceptingLog.designatedIncomingAgentName}</strong>
+                </p>
+              )}
+              <p className="text-slate-500 dark:text-slate-400">
+                Assinando o recebimento agora:{' '}
+                <strong className="text-blue-700 dark:text-blue-300 font-bold">{user?.name || acceptingLog.designatedIncomingAgentName || 'Agente Entrante'}</strong>
+              </p>
+              <p className="text-slate-700 dark:text-slate-300 text-[11px] mt-1.5 bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200/60 dark:border-slate-800">
                 "{acceptingLog.description}"
               </p>
             </div>
@@ -896,6 +908,85 @@ export const OperationalLogsView: React.FC<OperationalLogsViewProps> = ({
                   </select>
                 </div>
               </div>
+
+              {/* QUEM IRÁ RECEBER O SERVIÇO (Passagem de Turno) */}
+              {logType === 'passagem_turno' && (
+                <div className="p-3.5 bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/70 rounded-xl space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <label className="font-bold text-xs text-amber-950 dark:text-amber-200 flex items-center gap-1.5">
+                      <UserCheck className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                      <span>Quem irá receber o serviço? (Agente Entrante) *</span>
+                    </label>
+                    <span className="text-[10px] bg-amber-200 dark:bg-amber-900/80 text-amber-900 dark:text-amber-200 font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                      <BellRing className="w-3 h-3 text-amber-600 animate-bounce" />
+                      <span>Aviso Automático no Painel</span>
+                    </span>
+                  </div>
+
+                  <p className="text-[11px] text-amber-900/80 dark:text-amber-300">
+                    Selecione o profissional que está assumindo o posto agora. <strong>Ele receberá um aviso prioritário no painel dele</strong> com o checklist obrigatório para conferir chaves, rádios e assinar o recebimento.
+                  </p>
+
+                  <select
+                    value={designatedIncomingAgentName}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setDesignatedIncomingAgentName(val);
+                      const match = agents.find((a) => a.name === val);
+                      setDesignatedIncomingAgentId(match ? match.id : undefined);
+                    }}
+                    className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-xl text-slate-900 dark:text-white font-medium text-xs focus:ring-2 focus:ring-amber-500"
+                    required
+                  >
+                    <option value="">-- Selecione quem irá receber o serviço --</option>
+                    {agents.map((ag) => (
+                      <option key={ag.id} value={ag.name}>
+                        {ag.name} {ag.badgeNumber ? `(${ag.badgeNumber})` : ''} - {ag.assignedStation || 'Portaria Principal'}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* Card Preview do Agente Entrante Selecionado */}
+                  {(() => {
+                    const selectedIncoming = agents.find((a) => a.name === designatedIncomingAgentName);
+                    if (!selectedIncoming) return null;
+                    return (
+                      <div className="flex items-center justify-between p-2.5 bg-white dark:bg-slate-900/90 rounded-lg border border-amber-200/80 dark:border-amber-800 text-xs">
+                        <div className="flex items-center gap-2.5">
+                          {selectedIncoming.photoUrl ? (
+                            <img
+                              src={selectedIncoming.photoUrl}
+                              alt={selectedIncoming.name}
+                              className="w-8 h-8 rounded-full object-cover border border-amber-300 shrink-0"
+                            />
+                          ) : (
+                            <div className="w-8 h-8 rounded-full bg-amber-600 text-white font-bold flex items-center justify-center text-xs shrink-0">
+                              {selectedIncoming.name.slice(0, 2).toUpperCase()}
+                            </div>
+                          )}
+                          <div>
+                            <p className="font-bold text-slate-900 dark:text-white leading-tight">
+                              {selectedIncoming.name}
+                            </p>
+                            <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                              {selectedIncoming.badgeNumber ? `Crachá: ${selectedIncoming.badgeNumber} • ` : ''}
+                              {selectedIncoming.assignedStation || 'Portaria Principal'}
+                            </p>
+                          </div>
+                        </div>
+                        {selectedIncoming.phone && (
+                          <WhatsAppButton
+                            phone={selectedIncoming.phone}
+                            name={selectedIncoming.name}
+                            badgeOnly
+                            customMessage={`Olá ${selectedIncoming.name}, estou passando o serviço do posto para você no sistema NOVA BRASIL.`}
+                          />
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>

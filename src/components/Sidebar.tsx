@@ -18,11 +18,13 @@ interface SidebarProps {
   setActiveTab: (tab: string) => void;
   pendingDeliveriesCount?: number;
   openIncidentsCount?: number;
+  pendingHandoverCount?: number;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
   setActiveTab,
+  pendingHandoverCount = 0,
 }) => {
   const { role, user } = useAuth();
 
@@ -160,8 +162,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     }`}
                   />
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-1">
                       <span className="text-xs truncate">{item.label}</span>
+                      {item.id === 'ocorrencias' && pendingHandoverCount > 0 && (
+                        <span className="text-[10px] font-black px-1.5 py-0.2 rounded-full bg-amber-500 text-white animate-pulse shrink-0">
+                          {pendingHandoverCount}
+                        </span>
+                      )}
                     </div>
                     <p
                       className={`text-[10px] truncate ${

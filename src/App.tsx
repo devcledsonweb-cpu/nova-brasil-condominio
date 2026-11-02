@@ -25,7 +25,7 @@ import {
   OperationalLog,
   ShiftCoverage,
 } from './types/index.ts';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Bell } from 'lucide-react';
 
 function NovaBrasilMain() {
   const { user, getAuthHeaders, role, isAuthenticated, loading: authLoading } = useAuth();
@@ -1306,6 +1306,15 @@ function NovaBrasilMain() {
     return <LoginView />;
   }
 
+  // Identifica se há passagens de serviço pendentes onde o usuário conectado é o agente entrante designado
+  const pendingHandoversForMe = operationalLogs.filter((log) => {
+    if (log.logType !== 'passagem_turno' || log.incomingAgentAccepted) return false;
+    if (!user?.name) return false;
+    const uName = user.name.trim().toLowerCase();
+    const designated = log.designatedIncomingAgentName?.trim().toLowerCase();
+    return Boolean(designated && (designated === uName || uName.includes(designated) || designated.includes(uName)));
+  });
+
   return (
     <div className="min-h-screen bg-slate-100/70 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors">
       <Header
@@ -1316,12 +1325,39 @@ function NovaBrasilMain() {
         onSelectCondo={setSelectedCondoId}
         isMobileMenuOpen={isMobileMenuOpen}
         setIsMobileMenuOpen={setIsMobileMenuOpen}
+        pendingHandoverCount={pendingHandoversForMe.length}
       />
+
+      {/* Aviso Global Flutuante de Passagem de Serviço Designada para o Agente Entrante */}
+      {pendingHandoversForMe.length > 0 && activeTab !== 'ocorrencias' && (
+        <div className="bg-amber-500 dark:bg-amber-600 text-white px-3 sm:px-6 py-2.5 shadow-md flex items-center justify-between gap-3 text-xs border-b border-amber-600 dark:border-amber-700 animate-in fade-in sticky top-[57px] z-30">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="p-1 rounded-full bg-white/20 shrink-0">
+              <Bell className="w-4 h-4 text-white animate-bounce" />
+            </span>
+            <div className="truncate">
+              <strong className="font-extrabold mr-1.5 uppercase text-[10px] tracking-wider bg-white/25 px-2 py-0.5 rounded-full">
+                Passagem de Serviço
+              </strong>
+              <span className="truncate">
+                O agente <strong>{pendingHandoversForMe[0].agentName}</strong> designou você para receber o serviço no <strong>{pendingHandoversForMe[0].condoName || 'Posto'}</strong> ({pendingHandoversForMe[0].logTime}).
+              </span>
+            </div>
+          </div>
+          <button
+            onClick={() => setActiveTab('ocorrencias')}
+            className="px-3.5 py-1.5 bg-white text-amber-950 font-extrabold rounded-xl hover:bg-amber-50 transition-transform hover:scale-105 shrink-0 cursor-pointer shadow-xs"
+          >
+            Receber Serviço Agora
+          </button>
+        </div>
+      )}
 
       <div className="flex-1 flex flex-col md:flex-row">
         <Sidebar
           activeTab={activeTab}
           setActiveTab={setActiveTab}
+          pendingHandoverCount={pendingHandoversForMe.length}
         />
 
         <main className="flex-1 p-3 sm:p-4 md:p-6 lg:p-8 pb-24 md:pb-8 max-w-7xl mx-auto w-full transition-colors">

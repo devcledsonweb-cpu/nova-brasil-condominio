@@ -19,6 +19,7 @@ import {
   CheckCircle2,
   CalendarDays,
   FileDown,
+  Bell,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -29,6 +30,7 @@ interface HeaderProps {
   onSelectCondo: (id: number | 'all') => void;
   isMobileMenuOpen?: boolean;
   setIsMobileMenuOpen?: (open: boolean) => void;
+  pendingHandoverCount?: number;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -39,6 +41,7 @@ export const Header: React.FC<HeaderProps> = ({
   onSelectCondo,
   isMobileMenuOpen: externalIsMobileMenuOpen,
   setIsMobileMenuOpen: externalSetIsMobileMenuOpen,
+  pendingHandoverCount = 0,
 }) => {
   const { user, role, signOut } = useAuth();
   const { toggleTheme, isDark } = useTheme();
@@ -161,6 +164,19 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Right Actions: Dark Mode, Profile Card (View-Only) & Logout */}
         <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+          {/* Notificação de Passagem de Turno */}
+          {pendingHandoverCount > 0 && (
+            <button
+              onClick={() => setActiveTab('ocorrencias')}
+              title={`Atenção: Você possui ${pendingHandoverCount} passagem de serviço aguardando seu aceite!`}
+              className="relative p-2 text-amber-500 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 rounded-lg transition-colors cursor-pointer min-h-[40px] min-w-[40px] flex items-center justify-center animate-pulse"
+              aria-label="Aviso de passagem de serviço pendente"
+            >
+              <Bell className="w-5 h-5" />
+              <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-rose-500 rounded-full ring-2 ring-white dark:ring-slate-900" />
+            </button>
+          )}
+
           {/* Dark Mode Toggle Button */}
           <button
             onClick={toggleTheme}

@@ -23,6 +23,9 @@ import {
   UserCheck,
   CalendarDays,
   FileDown,
+  Bell,
+  BellRing,
+  CheckCircle2,
 } from 'lucide-react';
 import { exportOperationalLogsPDF, exportMaintenancesPDF } from '../utils/pdfExport.ts';
 
@@ -96,8 +99,51 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     (m) => m.status === 'agendada' || m.status === 'em_andamento' || m.status === 'aguardando_peca'
   ).length;
 
+  const pendingHandoversForMe = operationalLogs.filter((log) => {
+    if (log.logType !== 'passagem_turno' || log.incomingAgentAccepted) return false;
+    if (!user?.name) return false;
+    const uName = user.name.trim().toLowerCase();
+    const designated = log.designatedIncomingAgentName?.trim().toLowerCase();
+    return Boolean(designated && (designated === uName || uName.includes(designated) || designated.includes(uName)));
+  });
+
   return (
     <div className="space-y-5 sm:space-y-6">
+      {/* AVISO DESTACADO AO AGENTE ENTRANTE: PASSAGEM DE SERVIÇO PENDENTE */}
+      {pendingHandoversForMe.length > 0 && (
+        <div className="bg-linear-to-r from-amber-500 via-amber-600 to-orange-600 rounded-2xl p-4 sm:p-5 text-white shadow-lg border border-amber-400 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-in fade-in">
+          <div className="flex items-start gap-3.5">
+            <div className="w-11 h-11 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center shrink-0">
+              <BellRing className="w-6 h-6 text-white animate-bounce" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] font-black uppercase tracking-wider bg-white/25 px-2.5 py-0.5 rounded-full">
+                  🚨 Aviso Operacional Prioritário
+                </span>
+                <span className="text-xs text-amber-100 font-semibold">
+                  {pendingHandoversForMe.length} passagem de serviço aguardando seu aceite
+                </span>
+              </div>
+              <h2 className="text-base sm:text-lg font-black mt-1">
+                {pendingHandoversForMe[0].agentName} designou você para RECEBER O SERVIÇO!
+              </h2>
+              <p className="text-xs text-amber-100 mt-0.5">
+                Posto: <strong>{pendingHandoversForMe[0].condoName || 'Posto Geral'}</strong> · Transmissão às {pendingHandoversForMe[0].logTime} ({pendingHandoversForMe[0].logDate}). Realize o checklist de chaves e rádios para assinar o termo de recebimento.
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => onNavigate('ocorrencias')}
+            className="px-5 py-2.5 bg-white hover:bg-amber-50 text-amber-950 font-black rounded-xl text-xs shadow-md transition-all hover:scale-105 shrink-0 flex items-center gap-2 cursor-pointer self-stretch sm:self-auto justify-center"
+          >
+            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+            <span>Receber Serviço Agora</span>
+          </button>
+        </div>
+      )}
+
       {/* Banner de Escala do Agente (Visível no painel do operador) */}
       {(role === 'portaria' || role === 'operador') && (
         <div className="bg-blue-600 dark:bg-blue-700 text-white rounded-xl p-4 sm:p-5 shadow-xs border border-blue-500 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in">
