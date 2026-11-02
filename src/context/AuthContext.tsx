@@ -208,10 +208,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const setRole = (newRole: UserRole) => {
     if (!user) return;
-    const isSuperRole = newRole === 'sindico' || newRole === 'admin';
-    const wasOriginallySuper = user.originalRole === 'sindico' || user.originalRole === 'admin';
-    if (isSuperRole && !wasOriginallySuper) {
-      console.warn('Bloqueio de segurança: troca para Gestor Geral requer autenticação com senha.');
+    const isTargetManager = newRole === 'sindico' || newRole === 'admin' || newRole === 'supervisor';
+    const isCurrentAgent = role === 'portaria' || role === 'operador';
+    if (isCurrentAgent && isTargetManager) {
+      console.warn('Bloqueio de segurança: troca de Agente para Gestor requer autenticação com senha master.');
       return;
     }
     const updated = { ...user, role: newRole };
@@ -224,15 +224,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, message: 'Nenhum usuário conectado.' };
     }
 
-    const isElevatingToAdmin = targetRole === 'sindico' || targetRole === 'admin';
-    const originallyAdmin = user.originalRole === 'sindico' || user.originalRole === 'admin';
+    const isTargetManager = targetRole === 'sindico' || targetRole === 'admin' || targetRole === 'supervisor';
+    const isCurrentAgent = role === 'portaria' || role === 'operador' || user.role === 'portaria';
 
-    // Se o usuário não é originariamente Administrador Master, exige senha do Gestor Geral
-    if (isElevatingToAdmin && !originallyAdmin) {
-      if (!adminPassword || adminPassword.trim() !== '@nb32573515') {
+    // Sempre que estiver como agente e tentar mudar para Gestor (Empresa ou Condomínio), exige senha
+    if (isCurrentAgent && isTargetManager) {
+      const cleanPass = adminPassword ? adminPassword.trim() : '';
+      if (!cleanPass) {
         return {
           success: false,
-          message: 'Senha do Gestor Geral incorreta. Apenas o Gestor da Empresa pode acessar este perfil.',
+          message: 'É obrigatório informar a senha de Gestor para alterar o perfil de acesso.',
+        };
+      }
+
+      // Validações aceitas: senha master (@nb32573515) ou senha de admin cadastrado
+      let isValidPass = cleanPass === '@nb32573515';
+      if (!isValidPass) {
+        try {
+          const localUsersStr = localStorage.getItem('novabrasil_users_list');
+          if (localUsersStr) {
+            const list = JSON.parse(localUsersStr);
+            isValidPass = list.some((u: any) => (u.role === 'sindico' || u.role === 'admin') && u.password === cleanPass);
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      if (!isValidPass) {
+        return {
+          success: false,
+          message: 'Senha de Gestor incorreta. Apenas gestores com a senha de controle podem assumir este nível.',
         };
       }
     }

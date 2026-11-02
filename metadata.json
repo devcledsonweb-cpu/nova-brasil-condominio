@@ -1,6 +1,6 @@
 {
-  "name": "CCO · NOVA BRASIL - Operações & Facilities",
-  "description": "Central de Controle Operacional para gestão integrada de condomínios, postos de serviço de portaria, frotas de ronda e patrimônio.",
+  "name": "NOVA BRASIL - Operações & Facilities",
+  "description": "Sistema de Gestão Operacional de Condomínios, postos de portaria, escalas 12x36, frotas de ronda e patrimônio.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

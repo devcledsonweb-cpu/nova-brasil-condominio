@@ -4,14 +4,15 @@ import { ThemeProvider } from './context/ThemeContext.tsx';
 import { Header } from './components/Header.tsx';
 import { Sidebar } from './components/Sidebar.tsx';
 import { MobileBottomNav } from './components/MobileBottomNav.tsx';
-import { RoleModal } from './components/RoleModal.tsx';
 import { DashboardView } from './components/DashboardView.tsx';
 import { CondominiumsView } from './components/CondominiumsView.tsx';
 import { AgentsView } from './components/AgentsView.tsx';
+import { ShiftScaleView } from './components/ShiftScaleView.tsx';
 import { PatrolVehiclesView } from './components/PatrolVehiclesView.tsx';
 import { CompanyAssetsView } from './components/CompanyAssetsView.tsx';
 import { MaintenancesView } from './components/MaintenancesView.tsx';
 import { OperationalLogsView } from './components/OperationalLogsView.tsx';
+import { ReportsView } from './components/ReportsView.tsx';
 import { LoginView } from './components/LoginView.tsx';
 import { UsersManagementView } from './components/UsersManagementView.tsx';
 import {
@@ -22,13 +23,13 @@ import {
   CompanyAsset,
   MaintenanceOrder,
   OperationalLog,
+  ShiftCoverage,
 } from './types/index.ts';
 import { Loader2 } from 'lucide-react';
 
 function NovaBrasilMain() {
   const { user, getAuthHeaders, role, isAuthenticated, loading: authLoading } = useAuth();
   const [activeTab, setActiveTab] = useState<string>('dashboard');
-  const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -39,6 +40,7 @@ function NovaBrasilMain() {
   // Estados dos Módulos Operacionais da Empresa Terceirizada
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [agents, setAgents] = useState<SecurityAgent[]>([]);
+  const [coverages, setCoverages] = useState<ShiftCoverage[]>([]);
   const [patrolVehicles, setPatrolVehicles] = useState<PatrolVehicle[]>([]);
   const [companyAssets, setCompanyAssets] = useState<CompanyAsset[]>([]);
   const [maintenances, setMaintenances] = useState<MaintenanceOrder[]>([]);
@@ -582,6 +584,17 @@ function NovaBrasilMain() {
             actionTaken: 'Entregue as chaves da sala técnica ao vigilante noturno.',
             logDate: new Date().toLocaleDateString('pt-BR'),
             logTime: '18:00',
+            incomingAgentAccepted: true,
+            incomingAgentName: 'Marcos Antônio Ribeiro',
+            incomingAcceptedAt: `18:05 - ${new Date().toLocaleDateString('pt-BR')}`,
+            incomingChecklist: {
+              keysReceived: true,
+              radiosOk: true,
+              stationClean: true,
+              patrolStickOk: true,
+              noPendingIssues: true,
+            },
+            incomingNotes: 'Rádios comunicadores e guarita conferidos em perfeita ordem.',
           },
           {
             id: 2,
@@ -598,9 +611,82 @@ function NovaBrasilMain() {
             logDate: new Date().toLocaleDateString('pt-BR'),
             logTime: '20:30',
           },
+          {
+            id: 3,
+            condoId: 1,
+            condoName: 'Condomínio Residencial Jardins',
+            agentName: 'Marcos Antônio Ribeiro',
+            shiftType: 'noite',
+            logType: 'passagem_turno',
+            severity: 'informativa',
+            status: 'aberta',
+            title: 'Passagem de Turno Noturno para Diurno',
+            description: 'Plantão noturno concluído sem anormalidades no perímetro. Livro de encomendas com 3 entregas a retirar. Aguardando conferência do plantonista entrante.',
+            actionTaken: 'Rádios deixados nas bases carregadoras da guarita social.',
+            logDate: new Date().toLocaleDateString('pt-BR'),
+            logTime: '06:00',
+            incomingAgentAccepted: false,
+          },
         ];
       }
       setOperationalLogs(loadedLogs);
+
+      // 7. Escala 12x36 e Cobertura de Faltas
+      const defaultCoverages: ShiftCoverage[] = [
+        {
+          id: 1,
+          condoId: 1,
+          condoName: 'Condomínio Residencial Jardins',
+          stationId: 'st-jardins-1',
+          stationName: 'Portaria Principal (Social)',
+          date: new Date().toLocaleDateString('pt-BR'),
+          shiftType: '12x36_dia',
+          scheduledAgentId: 1,
+          scheduledAgentName: 'Carlos Eduardo da Silva',
+          absenceType: 'atestado_medico',
+          absenceReason: 'Apresentou atestado médico por crise de lombalgia (CID M54.5).',
+          medicalLeaveDays: 2,
+          cidCode: 'M54.5',
+          coverageStatus: 'coberto',
+          coveringAgentId: 4,
+          coveringAgentName: 'José Roberto de Oliveira',
+          notes: 'Folguista acionado prontamente pela supervisão para cobrir o plantão 12x36.',
+          assignedBy: 'Supervisor Roberto Alves',
+          createdAt: new Date().toISOString(),
+        },
+        {
+          id: 2,
+          condoId: 1,
+          condoName: 'Condomínio Residencial Jardins',
+          stationId: 'st-jardins-4',
+          stationName: 'Ronda Noturna Perimetral',
+          date: new Date().toLocaleDateString('pt-BR'),
+          shiftType: '12x36_noite',
+          scheduledAgentId: 3,
+          scheduledAgentName: 'Lucas Ferreira dos Santos',
+          absenceType: 'falta_injustificada',
+          absenceReason: 'Colaborador faltou sem prévio aviso ao plantão noturno. Ronda desguarnecida.',
+          coverageStatus: 'descoberto',
+          coveringAgentName: null,
+          notes: 'Posto de ronda sem vigilante motorizado no momento. Urgência de substituição.',
+          assignedBy: 'Supervisor Roberto Alves',
+          createdAt: new Date().toISOString(),
+        },
+      ];
+
+      const savedCoverages = localStorage.getItem('novabrasil_shift_coverages');
+      let loadedCoverages: ShiftCoverage[] = [];
+      if (savedCoverages) {
+        try {
+          loadedCoverages = JSON.parse(savedCoverages);
+        } catch {
+          loadedCoverages = defaultCoverages;
+        }
+      } else {
+        loadedCoverages = defaultCoverages;
+        localStorage.setItem('novabrasil_shift_coverages', JSON.stringify(loadedCoverages));
+      }
+      setCoverages(loadedCoverages);
 
       // Sincronizar dinamicamente as contagens de agentes, rondas, materiais e O.S. nos condomínios
       const condosWithDynamicCounts = loadedCondos.map((c) => ({
@@ -1124,6 +1210,26 @@ function NovaBrasilMain() {
     }
   };
 
+  const handleUpdateLog = async (id: number, patch: Partial<OperationalLog>): Promise<boolean> => {
+    try {
+      const headers = await getAuthHeaders();
+      try {
+        await fetch(`/api/operational-logs/${id}`, {
+          method: 'PUT',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify(patch),
+        });
+      } catch {}
+
+      const updated = operationalLogs.map((l) => (l.id === id ? { ...l, ...patch } : l));
+      setOperationalLogs(updated);
+      localStorage.setItem('novabrasil_operational_logs', JSON.stringify(updated));
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   const handleDeleteLog = async (id: number): Promise<boolean> => {
     try {
       const headers = await getAuthHeaders();
@@ -1136,6 +1242,45 @@ function NovaBrasilMain() {
       const updated = operationalLogs.filter((l) => l.id !== id);
       setOperationalLogs(updated);
       localStorage.setItem('novabrasil_operational_logs', JSON.stringify(updated));
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  // --- HANDLERS: ESCALA 12x36 & COBERTURAS ---
+  const handleAddCoverage = async (coverageData: Omit<ShiftCoverage, 'id' | 'createdAt'>): Promise<boolean> => {
+    try {
+      const newCov: ShiftCoverage = {
+        ...coverageData,
+        id: Date.now(),
+        createdAt: new Date().toISOString(),
+      };
+      const updated = [newCov, ...coverages];
+      setCoverages(updated);
+      localStorage.setItem('novabrasil_shift_coverages', JSON.stringify(updated));
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const handleUpdateCoverage = async (id: number, patch: Partial<ShiftCoverage>): Promise<boolean> => {
+    try {
+      const updated = coverages.map((c) => (c.id === id ? { ...c, ...patch } : c));
+      setCoverages(updated);
+      localStorage.setItem('novabrasil_shift_coverages', JSON.stringify(updated));
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const handleDeleteCoverage = async (id: number): Promise<boolean> => {
+    try {
+      const updated = coverages.filter((c) => c.id !== id);
+      setCoverages(updated);
+      localStorage.setItem('novabrasil_shift_coverages', JSON.stringify(updated));
       return true;
     } catch {
       return false;
@@ -1162,7 +1307,6 @@ function NovaBrasilMain() {
       <Header
         activeTab={activeTab}
         setActiveTab={setActiveTab}
-        onOpenRoleModal={() => setIsRoleModalOpen(true)}
         condominiums={condominiums}
         selectedCondoId={selectedCondoId}
         onSelectCondo={setSelectedCondoId}
@@ -1174,7 +1318,6 @@ function NovaBrasilMain() {
         <Sidebar
           activeTab={activeTab}
           setActiveTab={setActiveTab}
-          onOpenRoleModal={() => setIsRoleModalOpen(true)}
         />
 
         <main className="flex-1 p-3 sm:p-4 md:p-6 lg:p-8 pb-24 md:pb-8 max-w-7xl mx-auto w-full transition-colors">
@@ -1214,6 +1357,19 @@ function NovaBrasilMain() {
               onAddAgent={handleAddAgent}
               onUpdateAgent={handleUpdateAgent}
               onDeleteAgent={handleDeleteAgent}
+            />
+          )}
+
+          {activeTab === 'escalas' && (
+            <ShiftScaleView
+              coverages={coverages}
+              condominiums={condominiums}
+              agents={agents}
+              selectedCondoId={selectedCondoId}
+              onSelectCondo={setSelectedCondoId}
+              onAddCoverage={handleAddCoverage}
+              onUpdateCoverage={handleUpdateCoverage}
+              onDeleteCoverage={handleDeleteCoverage}
             />
           )}
 
@@ -1257,7 +1413,23 @@ function NovaBrasilMain() {
               agents={agents}
               selectedCondoId={selectedCondoId}
               onAddLog={handleAddLog}
+              onUpdateLog={handleUpdateLog}
               onDeleteLog={handleDeleteLog}
+            />
+          )}
+
+          {activeTab === 'relatorios' && (
+            <ReportsView
+              condominiums={condominiums}
+              logs={operationalLogs}
+              maintenances={maintenances}
+              coverages={coverages}
+              assets={companyAssets}
+              vehicles={patrolVehicles}
+              agents={agents}
+              selectedCondoId={selectedCondoId}
+              onSelectCondo={setSelectedCondoId}
+              onNavigateToTab={setActiveTab}
             />
           )}
 
@@ -1276,11 +1448,6 @@ function NovaBrasilMain() {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
-      />
-
-      <RoleModal
-        isOpen={isRoleModalOpen}
-        onClose={() => setIsRoleModalOpen(false)}
       />
     </div>
   );

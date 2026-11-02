@@ -19,7 +19,12 @@ import {
   ArrowRight,
   MapPin,
   Shield,
+  Download,
+  UserCheck,
+  CalendarDays,
+  FileDown,
 } from 'lucide-react';
+import { exportOperationalLogsPDF, exportMaintenancesPDF } from '../utils/pdfExport.ts';
 
 interface DashboardViewProps {
   stats: DashboardStats | null;
@@ -113,16 +118,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-white/20 text-white">
                   Sua Escala de Serviço Ativa
                 </span>
-                <span className="text-xs font-semibold text-blue-100">
-                  {myAgentRecord?.badgeNumber ? `Matrícula: ${myAgentRecord.badgeNumber}` : 'Colaborador Operacional'}
+                <span className="text-xs font-semibold text-blue-100 flex items-center gap-1">
+                  <UserCheck className="w-3.5 h-3.5" />
+                  <strong>{user?.name || myAgentRecord?.name}</strong>
                 </span>
+                {myAgentRecord?.badgeNumber && (
+                  <span className="text-[11px] text-blue-200 font-mono">
+                    ({myAgentRecord.badgeNumber})
+                  </span>
+                )}
               </div>
-              <p className="text-sm sm:text-base font-bold text-white mt-0.5">
-                Posto: {myAgentRecord?.assignedStation || 'Portaria Principal (Social)'}
+              <p className="text-sm sm:text-base font-bold text-white mt-1">
+                Posto Escalado: {myAgentRecord?.assignedStation || 'Portaria Principal (Social)'}
                 {myAgentRecord?.condoName ? ` · ${myAgentRecord.condoName}` : currentCondo ? ` · ${currentCondo.name}` : ''}
               </p>
               <p className="text-xs text-blue-100">
-                Escala: {myAgentRecord?.shift === '12x36_noite' ? '12x36 Noturno (18h às 06h)' : '12x36 Diurno (06h às 18h)'} · Status: <span className="underline font-semibold">Em Serviço no Posto</span>
+                Escala: {myAgentRecord?.shift === '12x36_noite' ? '12x36 Noturno (18h às 06h)' : '12x36 Diurno (06h às 18h)'} · Status: <span className="underline font-semibold">Em Serviço Ativo</span>
               </p>
             </div>
           </div>
@@ -159,11 +170,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <h1 className="text-xl sm:text-2xl md:text-3xl font-black tracking-tight text-white">
             {currentCondo
               ? `Operação: ${currentCondo.name}`
-              : 'CCO Nova Brasil · Gestão Operacional'}
+              : 'NOVA BRASIL · Gestão Operacional de Condomínios'}
           </h1>
 
           <p className="text-xs sm:text-sm text-slate-300 leading-relaxed max-w-2xl">
-            Gestão integrada da empresa: controle dos agentes de portaria nos postos, veículos de ronda motorizada,
+            Gestão integrada da empresa: controle dos agentes de portaria nos postos, escalas 12x36, veículos de ronda motorizada,
             materiais e equipamentos da empresa alocados, e ordens de manutenção predial executadas.
           </p>
 
@@ -175,6 +186,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             >
               <ShieldCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               <span>Agentes</span>
+            </button>
+
+            <button
+              onClick={() => onNavigate('escalas')}
+              className="inline-flex items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-colors cursor-pointer"
+            >
+              <CalendarDays className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span>Escala 12x36</span>
             </button>
 
             <button
@@ -207,6 +226,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             >
               <Building2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               <span>Postos</span>
+            </button>
+
+            <button
+              onClick={() => onNavigate('relatorios')}
+              className="inline-flex items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:py-2 bg-slate-900/90 hover:bg-slate-900 border border-blue-500/50 text-blue-300 text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs"
+              title="Acessar Central de Relatórios em PDF"
+            >
+              <FileDown className="w-3.5 h-3.5 text-blue-400" />
+              <span>Central de PDFs</span>
             </button>
           </div>
         </div>

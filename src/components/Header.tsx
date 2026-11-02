@@ -17,12 +17,13 @@ import {
   X,
   LayoutDashboard,
   CheckCircle2,
+  CalendarDays,
+  FileDown,
 } from 'lucide-react';
 
 interface HeaderProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
-  onOpenRoleModal: () => void;
   condominiums: Condominium[];
   selectedCondoId: number | 'all';
   onSelectCondo: (id: number | 'all') => void;
@@ -33,7 +34,6 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   activeTab,
   setActiveTab,
-  onOpenRoleModal,
   condominiums,
   selectedCondoId,
   onSelectCondo,
@@ -41,7 +41,7 @@ export const Header: React.FC<HeaderProps> = ({
   setIsMobileMenuOpen: externalSetIsMobileMenuOpen,
 }) => {
   const { user, role, signOut } = useAuth();
-  const { theme, toggleTheme, isDark } = useTheme();
+  const { toggleTheme, isDark } = useTheme();
   const [internalMenuOpen, setInternalMenuOpen] = useState(false);
 
   const isMenuOpen = externalIsMobileMenuOpen !== undefined ? externalIsMobileMenuOpen : internalMenuOpen;
@@ -51,10 +51,12 @@ export const Header: React.FC<HeaderProps> = ({
     { id: 'dashboard', label: 'Painel Geral', icon: LayoutDashboard },
     { id: 'condominios', label: `Postos (${condominiums.length})`, icon: Building2 },
     { id: 'agentes', label: 'Agentes de Portaria', icon: ShieldCheck },
+    { id: 'escalas', label: 'Escala 12x36 & Faltas', icon: CalendarDays },
     { id: 'ronda', label: 'Veículos de Ronda', icon: Bike },
     { id: 'patrimonio', label: 'Materiais no Posto', icon: Package },
     { id: 'manutencoes', label: 'Manutenções', icon: Wrench },
     { id: 'ocorrencias', label: 'Livro de Turnos', icon: FileText },
+    { id: 'relatorios', label: 'Central de PDFs', icon: FileDown },
     ...(role === 'sindico' || role === 'admin'
       ? [{ id: 'usuarios', label: 'Gestão de Usuários', icon: KeyRound }]
       : []),
@@ -141,7 +143,7 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Quick Nav Links (Desktop) */}
-        <nav className="hidden xl:flex items-center gap-4 text-xs font-medium text-slate-600 dark:text-slate-300">
+        <nav className="hidden xl:flex items-center gap-3.5 text-xs font-medium text-slate-600 dark:text-slate-300">
           {navItems.slice(0, 6).map((item) => (
             <button
               key={item.id}
@@ -157,7 +159,7 @@ export const Header: React.FC<HeaderProps> = ({
           ))}
         </nav>
 
-        {/* Right Actions: Dark Mode, Role Modal & SignOut */}
+        {/* Right Actions: Dark Mode, Profile Card (View-Only) & Logout */}
         <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
           {/* Dark Mode Toggle Button */}
           <button
@@ -173,30 +175,55 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </button>
 
-          {/* Role switcher (desktop) */}
-          <button
-            onClick={onOpenRoleModal}
-            title="Alternar perfil de acesso"
-            className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border border-slate-200 dark:border-slate-700 rounded-lg text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors whitespace-nowrap shrink-0 cursor-pointer min-h-[36px]"
+          {/* Perfil específico do usuário conectado - informativo e fixo */}
+          <div
+            className="hidden sm:flex items-center gap-2 px-2.5 py-1 text-xs border border-slate-200 dark:border-slate-700/80 rounded-xl bg-slate-50/80 dark:bg-slate-800/60 select-none shadow-2xs"
           >
-            <ShieldCheck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-            <span>
-              {role === 'sindico' || role === 'admin'
-                ? 'Gestão da Empresa'
-                : role === 'supervisor'
-                ? 'Gestor do Condomínio'
-                : 'Agente de Portaria'}
-            </span>
-          </button>
+            <div
+              className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs text-white shrink-0 ${
+                role === 'sindico' || role === 'admin'
+                  ? 'bg-blue-600'
+                  : role === 'supervisor'
+                  ? 'bg-indigo-600'
+                  : 'bg-emerald-600'
+              }`}
+            >
+              {user?.name ? user.name.slice(0, 2).toUpperCase() : 'NB'}
+            </div>
+            <div className="text-left max-w-[130px] md:max-w-[170px]">
+              <p className="font-bold text-slate-900 dark:text-white truncate leading-tight">
+                {user?.name || 'Usuário Conectado'}
+              </p>
+              <div className="flex items-center gap-1">
+                <span
+                  className={`text-[10px] font-semibold leading-none ${
+                    role === 'sindico' || role === 'admin'
+                      ? 'text-blue-600 dark:text-blue-400'
+                      : role === 'supervisor'
+                      ? 'text-indigo-600 dark:text-indigo-400'
+                      : 'text-emerald-600 dark:text-emerald-400'
+                  }`}
+                >
+                  {role === 'sindico' || role === 'admin'
+                    ? 'Gestor da Empresa'
+                    : role === 'supervisor'
+                    ? 'Supervisor'
+                    : 'Agente de Portaria'}
+                </span>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              </div>
+            </div>
+          </div>
 
-          {/* Sair */}
+          {/* Sair / Logout */}
           <button
             onClick={() => signOut()}
-            title="Encerrar sessão"
-            className="p-2 text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer min-h-[40px] min-w-[40px] flex items-center justify-center"
+            title="Encerrar sessão e sair para a tela de login"
+            className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-slate-200 dark:border-slate-700/80 rounded-lg transition-colors cursor-pointer min-h-[38px]"
             aria-label="Encerrar sessão"
           >
-            <LogOut className="w-4 h-4" />
+            <LogOut className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Sair</span>
           </button>
         </div>
       </header>
@@ -232,30 +259,24 @@ export const Header: React.FC<HeaderProps> = ({
                 </button>
               </div>
 
-              {/* Informações do usuário logado */}
+              {/* Informações do usuário logado (Apenas visualização) */}
               <div className="p-3 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700/80">
                 <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{user?.name}</p>
                 <p className="text-[11px] text-blue-600 dark:text-blue-400 font-semibold mt-0.5">
                   {role === 'sindico' || role === 'admin'
                     ? 'Gestor Geral da Empresa'
                     : role === 'supervisor'
-                    ? 'Gestor do Condomínio'
+                    ? 'Supervisor de Condomínio'
                     : 'Agente de Portaria'}
                 </p>
                 <div className="mt-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between">
                   <span className="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
                     <CheckCircle2 className="w-3 h-3" />
-                    PostgreSQL Ativo
+                    Sessão Conectada
                   </span>
-                  <button
-                    onClick={() => {
-                      setMenuOpen(false);
-                      onOpenRoleModal();
-                    }}
-                    className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline font-semibold"
-                  >
-                    Alterar Perfil
-                  </button>
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    {user?.email}
+                  </span>
                 </div>
               </div>
 
@@ -290,7 +311,7 @@ export const Header: React.FC<HeaderProps> = ({
                         setActiveTab(item.id);
                         setMenuOpen(false);
                       }}
-                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors cursor-pointer min-h-[44px] ${
+                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors cursor-pointer min-h-[42px] ${
                         isActive
                           ? 'bg-blue-600 text-white font-semibold shadow-xs'
                           : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'

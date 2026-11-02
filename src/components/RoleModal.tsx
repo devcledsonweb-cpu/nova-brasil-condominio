@@ -30,7 +30,7 @@ export const RoleModal: React.FC<RoleModalProps> = ({ isOpen, onClose }) => {
 
   if (!isOpen) return null;
 
-  const isOriginalAdmin = user?.originalRole === 'sindico' || user?.originalRole === 'admin';
+  const isCurrentAgent = role === 'portaria' || role === 'operador' || user?.role === 'portaria';
 
   const handleSelectRole = async (targetRole: UserRole) => {
     setErrorMessage('');
@@ -41,15 +41,16 @@ export const RoleModal: React.FC<RoleModalProps> = ({ isOpen, onClose }) => {
       return;
     }
 
-    // Se está tentando mudar para Gestor Geral e NÃO é originariamente admin
-    const isTargetAdmin = targetRole === 'sindico' || targetRole === 'admin';
-    if (isTargetAdmin && !isOriginalAdmin) {
-      setSelectedRoleToSwitch('sindico');
+    const isTargetManager = targetRole === 'sindico' || targetRole === 'admin' || targetRole === 'supervisor';
+
+    // Se é agente e quer mudar para Gestor (Empresa ou Condomínio), exige senha obrigatoriamente
+    if (isCurrentAgent && isTargetManager) {
+      setSelectedRoleToSwitch(targetRole);
       setAdminPassword('');
       return;
     }
 
-    // Se for admin ou mudando para cargo de menor privilégio
+    // Se for admin ou mudando para cargo operacional
     setIsSubmitting(true);
     const result = await verifyAndSwitchRole(targetRole);
     setIsSubmitting(false);
@@ -66,14 +67,15 @@ export const RoleModal: React.FC<RoleModalProps> = ({ isOpen, onClose }) => {
   const handleConfirmAdminElevation = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!adminPassword.trim()) {
-      setErrorMessage('Por favor, informe a senha de administrador.');
+      setErrorMessage('Por favor, informe a senha de Gestor.');
       return;
     }
 
     setIsSubmitting(true);
     setErrorMessage('');
 
-    const result = await verifyAndSwitchRole('sindico', adminPassword.trim());
+    const target = selectedRoleToSwitch || 'sindico';
+    const result = await verifyAndSwitchRole(target, adminPassword.trim());
     setIsSubmitting(false);
 
     if (result.success) {
@@ -146,8 +148,8 @@ export const RoleModal: React.FC<RoleModalProps> = ({ isOpen, onClose }) => {
           </div>
         )}
 
-        {/* Se o usuário precisa digitar a senha de administrador */}
-        {selectedRoleToSwitch === 'sindico' ? (
+        {/* Se o usuário precisa digitar a senha de administrador / gestor */}
+        {selectedRoleToSwitch !== null ? (
           <form onSubmit={handleConfirmAdminElevation} className="p-5 space-y-4">
             <div className="p-3.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 rounded-xl space-y-2">
               <div className="flex items-center gap-2 text-amber-800 dark:text-amber-200 text-xs font-semibold">
@@ -155,19 +157,23 @@ export const RoleModal: React.FC<RoleModalProps> = ({ isOpen, onClose }) => {
                 <span>Autenticação de Segurança Exigida</span>
               </div>
               <p className="text-[11px] text-amber-900 dark:text-amber-300 leading-relaxed">
-                Você está autenticado originalmente como colaborador do posto. Para assumir a função de <strong>Gestor Geral da Empresa</strong> (com controle total de todos os condomínios e usuários), confirme a senha do administrador.
+                Você está em operação como agente. Para assumir a função de{' '}
+                <strong>
+                  {selectedRoleToSwitch === 'sindico' ? 'Gestor Geral da Empresa' : 'Gestor de Condomínio / Supervisor'}
+                </strong>
+                , é obrigatório confirmar a senha de controle administrativo da empresa.
               </p>
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                Senha Master do Administrador Geral *
+                Senha de Gestor / Administrador *
               </label>
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}
                   required
-                  placeholder="Digite a senha master da empresa"
+                  placeholder="Digite a senha de Gestor"
                   value={adminPassword}
                   onChange={(e) => setAdminPassword(e.target.value)}
                   autoFocus
@@ -224,7 +230,7 @@ export const RoleModal: React.FC<RoleModalProps> = ({ isOpen, onClose }) => {
                   <div>
                     <h4 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                       Gestor Geral da Empresa
-                      {!isOriginalAdmin && (
+                      {isCurrentAgent && (
                         <span className="text-[10px] px-1.5 py-0.2 bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 rounded font-medium flex items-center gap-0.5">
                           <Lock className="w-2.5 h-2.5" /> Requer Senha
                         </span>
@@ -259,8 +265,13 @@ export const RoleModal: React.FC<RoleModalProps> = ({ isOpen, onClose }) => {
                     <Briefcase className="w-5 h-5" />
                   </div>
                   <div>
-                    <h4 className="text-xs font-bold text-slate-900 dark:text-white">
+                    <h4 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                       Gestor de Condomínio (Supervisor de Posto)
+                      {isCurrentAgent && (
+                        <span className="text-[10px] px-1.5 py-0.2 bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 rounded font-medium flex items-center gap-0.5">
+                          <Lock className="w-2.5 h-2.5" /> Requer Senha
+                        </span>
+                      )}
                     </h4>
                     <span className="text-[11px] text-indigo-700 dark:text-indigo-400 font-semibold">
                       Gestão Restrita aos Condomínios Cadastrados

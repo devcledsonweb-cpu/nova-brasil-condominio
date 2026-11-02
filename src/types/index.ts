@@ -124,6 +124,14 @@ export interface MaintenanceOrder {
   createdAt?: string;
 }
 
+export interface IncomingShiftChecklist {
+  keysReceived: boolean;
+  radiosOk: boolean;
+  stationClean: boolean;
+  patrolStickOk: boolean;
+  noPendingIssues: boolean;
+}
+
 export interface OperationalLog {
   id: number;
   condoId?: number | null;
@@ -138,6 +146,35 @@ export interface OperationalLog {
   actionTaken?: string | null;
   logDate: string;
   logTime: string;
+  createdAt?: string;
+  // Confirmação / Aceite da Passagem de Turno pelo Agente Entrante
+  incomingAgentAccepted?: boolean;
+  incomingAgentName?: string | null;
+  incomingAcceptedAt?: string | null;
+  incomingChecklist?: IncomingShiftChecklist;
+  incomingNotes?: string | null;
+}
+
+export interface ShiftCoverage {
+  id: number;
+  condoId: number;
+  condoName?: string;
+  stationId?: string;
+  stationName: string;
+  date: string; // DD/MM/AAAA ou YYYY-MM-DD
+  shiftType: '12x36_dia' | '12x36_noite'; // 06h às 18h ou 18h às 06h
+  scheduledAgentId?: number;
+  scheduledAgentName: string;
+  absenceType: 'falta_injustificada' | 'atestado_medico' | 'folga_programada' | 'licenca' | 'troca_plantao';
+  absenceReason?: string;
+  medicalLeaveDays?: number;
+  cidCode?: string;
+  coverageStatus: 'descoberto' | 'em_cobertura' | 'coberto'; // Se está descoberto (alerta!), aguardando substituto, ou já coberto
+  coveringAgentId?: number | null;
+  coveringAgentName?: string | null;
+  coveringAgentPhone?: string | null;
+  notes?: string;
+  assignedBy?: string;
   createdAt?: string;
 }
 

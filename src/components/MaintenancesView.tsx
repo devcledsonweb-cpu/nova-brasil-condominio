@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useAuth } from '../context/AuthContext.tsx';
 import {
   Wrench,
   Plus,
@@ -21,9 +22,11 @@ import {
   Video,
   KeyRound,
   RotateCcw,
+  Download,
 } from 'lucide-react';
 import { MaintenanceOrder, Condominium } from '../types/index.ts';
 import { maskDate, maskCurrency } from '../utils/masks.ts';
+import { exportMaintenancesPDF } from '../utils/pdfExport.ts';
 
 interface MaintenancesViewProps {
   maintenances: MaintenanceOrder[];
@@ -42,6 +45,9 @@ export const MaintenancesView: React.FC<MaintenancesViewProps> = ({
   onUpdateMaintenance,
   onDeleteMaintenance,
 }) => {
+  const { user, role } = useAuth();
+  const isManager = role === 'sindico' || role === 'admin' || role === 'supervisor';
+
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -51,6 +57,15 @@ export const MaintenancesView: React.FC<MaintenancesViewProps> = ({
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+
+  const handleExportPDF = () => {
+    const selectedCondo = condominiums.find((c) => c.id === selectedCondoId);
+    exportMaintenancesPDF(filteredOrders, {
+      condoName: selectedCondo ? selectedCondo.name : 'Todos os Condomínios e Postos',
+      generatedBy: user?.name || 'Gestor Operacional',
+      roleLabel: role === 'sindico' || role === 'admin' ? 'Gestor Geral da Empresa' : 'Supervisor de Posto',
+    });
+  };
 
   // Form State
   const [condoId, setCondoId] = useState<number | ''>(
@@ -295,13 +310,26 @@ export const MaintenancesView: React.FC<MaintenancesViewProps> = ({
           </p>
         </div>
 
-        <button
-          onClick={openAddModal}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors cursor-pointer shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          Abrir Ordem de Manutenção (O.S.)
-        </button>
+        <div className="flex items-center gap-2 flex-wrap shrink-0">
+          {isManager && (
+            <button
+              onClick={handleExportPDF}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] bg-slate-900 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors cursor-pointer"
+              title="Baixar relatório de O.S. e manutenções prediais em PDF"
+            >
+              <Download className="w-4 h-4 text-amber-400" />
+              <span>Exportar O.S. (PDF)</span>
+            </button>
+          )}
+
+          <button
+            onClick={openAddModal}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Abrir Ordem de Manutenção (O.S.)</span>
+          </button>
+        </div>
       </div>
 
       {/* KPI Cards */}
