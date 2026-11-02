@@ -147,6 +147,9 @@ export interface OperationalLog {
   logDate: string;
   logTime: string;
   createdAt?: string;
+  // Agente Designado para Receber o Serviço (selecionado por quem sai)
+  designatedIncomingAgentName?: string | null;
+  designatedIncomingAgentId?: number | null;
   // Confirmação / Aceite da Passagem de Turno pelo Agente Entrante
   incomingAgentAccepted?: boolean;
   incomingAgentName?: string | null;
@@ -202,10 +205,15 @@ export interface SystemUser {
   permissions?: string | null;
   condoId?: number | null;
   condoIds?: number[]; // Lista de condomínios designados
-  condoName?: string;
+  condoName?: string | null;
   condoNames?: string[];
   isActive: boolean;
   createdAt?: string;
+  phone?: string | null;
+  badgeNumber?: string | null;
+  assignedStation?: string | null;
+  photoUrl?: string | null;
+  isAgent?: boolean;
 }
 
 export interface DashboardStats {

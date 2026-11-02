@@ -5,6 +5,7 @@ import { maskCNPJ, maskCEP, maskPhone, cleanDigits } from '../utils/masks.ts';
 import { fetchAddressByCep } from '../services/cep.ts';
 import { safeFetchJson } from '../services/api.ts';
 import { PhotoField } from './PhotoField.tsx';
+import { WhatsAppButton } from './WhatsAppButton.tsx';
 import {
   Building2,
   Plus,
@@ -734,7 +735,9 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
                   {condo.supervisorName && (
                     <div className="flex items-center justify-between text-[11px] text-blue-800 dark:text-blue-300 pt-1 border-t border-blue-100/60 dark:border-blue-900/40">
                       <span>Supervisor: <strong>{condo.supervisorName}</strong></span>
-                      {condo.supervisorPhone && <span className="font-mono">{condo.supervisorPhone}</span>}
+                      {condo.supervisorPhone && (
+                        <WhatsAppButton phone={condo.supervisorPhone} name={condo.supervisorName} />
+                      )}
                     </div>
                   )}
                 </div>
@@ -803,7 +806,7 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
                       <span className="truncate">Contato: {condo.sindicoName}</span>
                     </div>
                     {condo.sindicoPhone && (
-                      <span className="text-slate-500 dark:text-slate-400 font-mono shrink-0 ml-1">{condo.sindicoPhone}</span>
+                      <WhatsAppButton phone={condo.sindicoPhone} name={condo.sindicoName} />
                     )}
                   </div>
                 )}

@@ -28,6 +28,7 @@ import {
   ServiceStation,
 } from '../types/index.ts';
 import { exportShiftScalePDF } from '../utils/pdfExport.ts';
+import { WhatsAppButton } from './WhatsAppButton.tsx';
 
 interface ShiftScaleViewProps {
   coverages: ShiftCoverage[];
@@ -396,11 +397,28 @@ export const ShiftScaleView: React.FC<ShiftScaleViewProps> = ({
                   <div className="mt-2.5 pt-2 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between text-xs">
                     <div className="min-w-0 pr-1">
                       <p className="text-[10px] text-slate-400">Plantonista:</p>
-                      <p className="font-semibold text-slate-800 dark:text-slate-200 truncate text-[11px]">
-                        {isCoberto
+                      {(() => {
+                        const displayName = isCoberto
                           ? `Substituto: ${activeAbsence.coveringAgentName}`
-                          : (station.assignedAgentName || 'Agente da Escala 12x36')}
-                      </p>
+                          : (station.assignedAgentName || 'Agente da Escala 12x36');
+                        const rawName = isCoberto ? activeAbsence.coveringAgentName : station.assignedAgentName;
+                        const matchedAgent = agents.find((a) => a.name === rawName);
+                        return (
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <p className="font-semibold text-slate-800 dark:text-slate-200 truncate text-[11px]">
+                              {displayName}
+                            </p>
+                            {matchedAgent?.phone && (
+                              <WhatsAppButton
+                                phone={matchedAgent.phone}
+                                name={matchedAgent.name}
+                                badgeOnly
+                                className="shrink-0"
+                              />
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     {isDescoberto && isManager && (
@@ -496,7 +514,24 @@ export const ShiftScaleView: React.FC<ShiftScaleViewProps> = ({
                       </td>
 
                       <td className="py-3 px-4 font-medium text-slate-800 dark:text-slate-200">
-                        {item.scheduledAgentName}
+                        {(() => {
+                          const schedAgent = agents.find(
+                            (a) => a.name === item.scheduledAgentName || a.id === item.scheduledAgentId
+                          );
+                          return (
+                            <div className="flex items-center gap-1.5">
+                              <span>{item.scheduledAgentName}</span>
+                              {schedAgent?.phone && (
+                                <WhatsAppButton
+                                  phone={schedAgent.phone}
+                                  name={item.scheduledAgentName}
+                                  badgeOnly
+                                  customMessage={`Olá ${item.scheduledAgentName}, contato da NOVA BRASIL a respeito de sua escala de serviço.`}
+                                />
+                              )}
+                            </div>
+                          );
+                        })()}
                       </td>
 
                       <td className="py-3 px-4">
@@ -526,9 +561,24 @@ export const ShiftScaleView: React.FC<ShiftScaleViewProps> = ({
                               <CheckCircle2 className="w-3 h-3" />
                               Coberto por:
                             </span>
-                            <p className="font-semibold text-slate-800 dark:text-slate-200">
-                              {item.coveringAgentName}
-                            </p>
+                            {(() => {
+                              const covAgent = agents.find((a) => a.name === item.coveringAgentName);
+                              return (
+                                <div className="flex items-center gap-1.5">
+                                  <p className="font-semibold text-slate-800 dark:text-slate-200">
+                                    {item.coveringAgentName}
+                                  </p>
+                                  {covAgent?.phone && (
+                                    <WhatsAppButton
+                                      phone={covAgent.phone}
+                                      name={item.coveringAgentName}
+                                      badgeOnly
+                                      customMessage={`Olá ${item.coveringAgentName}, contato da NOVA BRASIL a respeito da cobertura de posto.`}
+                                    />
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </div>
                         ) : (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500 text-white">

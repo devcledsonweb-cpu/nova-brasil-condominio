@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { SecurityAgent, Condominium } from '../types/index.ts';
 import { maskCPF, maskPhone, maskDate } from '../utils/masks.ts';
+import { WhatsAppButton } from './WhatsAppButton.tsx';
 
 interface AgentsViewProps {
   agents: SecurityAgent[];
@@ -647,7 +648,7 @@ export const AgentsView: React.FC<AgentsViewProps> = ({
 
                   <div className="flex items-center gap-2">
                     <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <span>{agent.phone}</span>
+                    <WhatsAppButton phone={agent.phone} name={agent.name} />
                   </div>
 
                   {agent.cpf && (

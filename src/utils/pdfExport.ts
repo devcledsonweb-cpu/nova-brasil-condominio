@@ -72,13 +72,14 @@ export const exportOperationalLogsPDF = (logs: OperationalLog[], meta: ReportMet
   const tableData = logs.map((log, index) => {
     let acceptanceInfo = '';
     if (log.logType === 'passagem_turno') {
+      const designatedStr = log.designatedIncomingAgentName ? `\nDesignado para assumir: ${log.designatedIncomingAgentName}` : '';
       if (log.incomingAgentAccepted) {
         acceptanceInfo = `\n\n[ACEITE ENTRANTE]: Confirmado por ${log.incomingAgentName || 'Agente'} às ${log.incomingAcceptedAt || '-'}\nChecklist: Chaves, rádios, bastão e guarita conferidos.`;
         if (log.incomingNotes) {
           acceptanceInfo += `\nRessalva: ${log.incomingNotes}`;
         }
       } else {
-        acceptanceInfo = `\n\n[ACEITE ENTRANTE]: PENDENTE de conferência pelo próximo plantonista.`;
+        acceptanceInfo = `\n\n[ACEITE ENTRANTE]: PENDENTE de conferência no posto.${designatedStr ? ` Aguardando aceite de: ${log.designatedIncomingAgentName}` : ''}`;
       }
     }
 

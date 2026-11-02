@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { SystemUser, Condominium, UserRole } from '../types/index.ts';
+import { SystemUser, Condominium, UserRole, SecurityAgent } from '../types/index.ts';
 import { useAuth } from '../context/AuthContext.tsx';
+import { WhatsAppButton } from './WhatsAppButton.tsx';
 import {
   UserCheck,
   Plus,
@@ -20,17 +21,24 @@ import {
   Square,
   Filter,
   Search,
+  RefreshCw,
+  Phone,
+  Shield,
+  BadgeAlert,
 } from 'lucide-react';
 
 interface UsersManagementViewProps {
   condominiums?: Condominium[];
+  agents?: SecurityAgent[];
   selectedCondoId?: number | 'all';
   onRefresh?: () => void;
 }
 
 export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
   condominiums = [],
+  agents = [],
   selectedCondoId = 'all',
+  onRefresh,
 }) => {
   const { user, getAuthHeaders } = useAuth();
   const [usersList, setUsersList] = useState<SystemUser[]>([]);
@@ -40,6 +48,8 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
   const [filterCondo, setFilterCondo] = useState<string>(
     selectedCondoId !== 'all' ? String(selectedCondoId) : 'all'
   );
+  const [activeTab, setActiveTab] = useState<'all' | 'agents' | 'managers'>('all');
+  const [syncNotice, setSyncNotice] = useState<string>('');
 
   // Modal Novo Usuário
   const [showModal, setShowModal] = useState(false);
@@ -56,6 +66,21 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
 
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+
+  const suggestEmail = (agentName: string) => {
+    if (!agentName || !agentName.trim()) return 'agente@novabrasil.com';
+    const clean = agentName
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9\s]/g, '')
+      .trim()
+      .split(/\s+/);
+    if (clean.length === 1) {
+      return `${clean[0]}@novabrasil.com`;
+    }
+    return `${clean[0]}.${clean[clean.length - 1]}@novabrasil.com`;
+  };
 
   const fetchUsers = async () => {
     try {
@@ -74,19 +99,32 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
         console.warn('API /api/users inacessível no momento:', netErr);
       }
 
-      // Mescla com usuários criados localmente / salvos no cache para garantir persistência
+      // 1. Usuários salvos localmente
       let localUsers: any[] = [];
       try {
         const saved = localStorage.getItem('novabrasil_users_list');
         if (saved) localUsers = JSON.parse(saved);
       } catch {}
 
+      // 2. Coletar todos os agentes disponíveis (prop ou localStorage)
+      let allAgents: SecurityAgent[] = agents.length > 0 ? agents : [];
+      if (allAgents.length === 0) {
+        try {
+          const savedAgents = localStorage.getItem('novabrasil_agents');
+          if (savedAgents) allAgents = JSON.parse(savedAgents);
+        } catch {}
+      }
+
       const emailMap = new Set<string>();
+      const nameMap = new Set<string>();
       const combined: SystemUser[] = [];
 
+      // A. Adiciona usuários do servidor
       for (const u of serverUsers) {
-        if (!emailMap.has(u.email.toLowerCase())) {
-          emailMap.add(u.email.toLowerCase());
+        const cleanEmail = u.email.toLowerCase();
+        if (!emailMap.has(cleanEmail)) {
+          emailMap.add(cleanEmail);
+          nameMap.add(u.name.toLowerCase().trim());
           combined.push({
             ...u,
             condoIds: Array.isArray(u.condoIds) && u.condoIds.length > 0 ? u.condoIds : (u.condoId ? [u.condoId] : []),
@@ -95,9 +133,12 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
         }
       }
 
+      // B. Adiciona usuários locais existentes
       for (const u of localUsers) {
-        if (!emailMap.has(u.email.toLowerCase())) {
-          emailMap.add(u.email.toLowerCase());
+        const cleanEmail = u.email.toLowerCase();
+        if (!emailMap.has(cleanEmail)) {
+          emailMap.add(cleanEmail);
+          nameMap.add(u.name.toLowerCase().trim());
           const ids = Array.isArray(u.condoIds) && u.condoIds.length > 0 ? u.condoIds : (u.condoId ? [u.condoId] : []);
           const names = u.condoNames || (u.condoName ? [u.condoName] : []);
           combined.push({
@@ -113,11 +154,78 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
             condoNames: names,
             isActive: u.isActive ?? true,
             createdAt: u.createdAt || new Date().toISOString(),
+            phone: u.phone,
+            badgeNumber: u.badgeNumber,
+            assignedStation: u.assignedStation,
+            photoUrl: u.photoUrl,
+            isAgent: u.role === 'portaria',
           });
         }
       }
 
+      // C. GARANTIR QUE 100% DOS AGENTES APAREÇAM NA GESTÃO DE USUÁRIOS
+      let newSyncedCount = 0;
+      for (const ag of allAgents) {
+        const cleanAgentName = ag.name.toLowerCase().trim();
+        const candidateEmail = (ag.accessEmail || suggestEmail(ag.name)).toLowerCase().trim();
+
+        // Se o agente já foi adicionado pelo e-mail ou nome
+        const existingIdx = combined.findIndex(
+          (u) => u.email.toLowerCase() === candidateEmail || u.name.toLowerCase().trim() === cleanAgentName
+        );
+
+        if (existingIdx !== -1) {
+          // Enriquece com dados cadastrais do agente (telefone, crachá, foto, posto)
+          combined[existingIdx].phone = combined[existingIdx].phone || ag.phone;
+          combined[existingIdx].badgeNumber = combined[existingIdx].badgeNumber || ag.badgeNumber;
+          combined[existingIdx].assignedStation = combined[existingIdx].assignedStation || ag.assignedStation;
+          combined[existingIdx].photoUrl = combined[existingIdx].photoUrl || ag.photoUrl;
+          combined[existingIdx].isAgent = true;
+        } else {
+          // Cria o registro unificado do agente no quadro de usuários
+          const agentCondoIds = Array.isArray(ag.condoIds) && ag.condoIds.length > 0
+            ? ag.condoIds
+            : (ag.condoId ? [Number(ag.condoId)] : []);
+          const agentCondo = condominiums.find((c) => c.id === Number(ag.condoId));
+          const agentCondoNames = ag.condoNames || (agentCondo ? [agentCondo.name] : []);
+
+          const newAgentUser: SystemUser = {
+            id: 20000 + ag.id,
+            uid: `usr-agent-${ag.id}`,
+            name: ag.name,
+            email: candidateEmail,
+            role: 'portaria',
+            permissions: JSON.stringify(['portaria', 'ronda', 'materiais', 'ocorrencias']),
+            condoId: agentCondoIds[0] || null,
+            condoIds: agentCondoIds,
+            condoName: agentCondoNames[0] || ag.condoName || 'Posto Geral',
+            condoNames: agentCondoNames,
+            isActive: ag.status !== 'afastado',
+            createdAt: ag.admissionDate || ag.createdAt || new Date().toISOString(),
+            phone: ag.phone,
+            badgeNumber: ag.badgeNumber,
+            assignedStation: ag.assignedStation,
+            photoUrl: ag.photoUrl,
+            isAgent: true,
+          };
+
+          combined.push(newAgentUser);
+          emailMap.add(candidateEmail);
+          nameMap.add(cleanAgentName);
+          newSyncedCount++;
+        }
+      }
+
+      // Persistir lista unificada para permitir login imediato de qualquer agente
+      try {
+        localStorage.setItem('novabrasil_users_list', JSON.stringify(combined));
+      } catch {}
+
       setUsersList(combined);
+      if (newSyncedCount > 0) {
+        setSyncNotice(`${newSyncedCount} agente(s) sincronizado(s) com sucesso na Gestão de Usuários.`);
+        setTimeout(() => setSyncNotice(''), 4000);
+      }
     } catch (err) {
       console.error('Erro ao buscar lista de usuários:', err);
     } finally {
@@ -127,7 +235,7 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
 
   useEffect(() => {
     fetchUsers();
-  }, []);
+  }, [agents.length]);
 
   const openCreateModal = () => {
     setErrorMsg('');
@@ -171,7 +279,6 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
       return;
     }
 
-    // Se for supervisor ou portaria, exige pelo menos um condomínio selecionado
     if (selectedRole !== 'sindico' && userCondoIds.length === 0 && condominiums.length > 0) {
       setErrorMsg('Selecione pelo menos um condomínio para atribuir este usuário.');
       return;
@@ -199,79 +306,58 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
 
     try {
       const headers = await getAuthHeaders();
-      const payload = {
-        name: cleanName,
-        email: cleanEmail,
-        password: cleanPassword,
-        role: selectedRole,
-        permissions,
-        condoId: selectedRole === 'sindico' ? null : primaryCondoId,
-        condoIds: selectedRole === 'sindico' ? [] : userCondoIds,
-      };
-
       let createdUser: any = null;
 
       try {
         const res = await fetch('/api/users', {
           method: 'POST',
           headers,
-          body: JSON.stringify(payload),
+          body: JSON.stringify({
+            name: cleanName,
+            email: cleanEmail,
+            password: cleanPassword,
+            role: selectedRole,
+            permissions,
+            condoId: primaryCondoId,
+            condoIds: userCondoIds,
+          }),
         });
 
         const text = await res.text();
-        let jsonRes: any = null;
         if (text && text.trim()) {
           try {
-            jsonRes = JSON.parse(text);
+            createdUser = JSON.parse(text);
           } catch {}
         }
-
-        if (res.ok && jsonRes) {
-          createdUser = jsonRes;
-        } else if (!res.ok) {
-          if (jsonRes?.error) {
-            throw new Error(jsonRes.error);
-          }
+        if (!res.ok && createdUser?.error) {
+          throw new Error(createdUser.error);
         }
-      } catch (fetchErr: any) {
-        if (fetchErr.message && (fetchErr.message.includes('Já existe') || fetchErr.message.includes('obrigatório'))) {
-          throw fetchErr;
+      } catch (postErr: any) {
+        if (postErr.message && !postErr.message.includes('fetch')) {
+          throw postErr;
         }
-        console.warn('Operando com persistência resiliente:', fetchErr);
       }
 
-      if (!createdUser) {
-        createdUser = {
-          id: Date.now(),
-          uid: `usr-${Date.now()}`,
-          name: cleanName,
-          email: cleanEmail,
-          role: selectedRole,
-          permissions: JSON.stringify(permissions),
-          condoId: selectedRole === 'sindico' ? null : primaryCondoId,
-          condoIds: selectedRole === 'sindico' ? [] : userCondoIds,
-          condoName: selectedRole === 'sindico' ? 'Todos os Condomínios' : (assignedNames[0] || null),
-          condoNames: selectedRole === 'sindico' ? ['Todos os Condomínios'] : assignedNames,
-          isActive: true,
-          createdAt: new Date().toISOString(),
-        };
-      }
+      const newUserObj: SystemUser = {
+        id: createdUser?.id || Date.now(),
+        uid: createdUser?.uid || `usr-${Date.now()}`,
+        name: cleanName,
+        email: cleanEmail,
+        role: selectedRole,
+        permissions: JSON.stringify(permissions),
+        condoId: primaryCondoId,
+        condoIds: userCondoIds,
+        condoName: assignedNames[0] || null,
+        condoNames: assignedNames,
+        isActive: true,
+        createdAt: new Date().toISOString(),
+      };
 
-      // Salva no localStorage (novabrasil_users_list) para permitir login imediato
       try {
         const saved = localStorage.getItem('novabrasil_users_list');
         const list = saved ? JSON.parse(saved) : [];
         const filtered = list.filter((u: any) => u.email.toLowerCase() !== cleanEmail);
-        const updatedLocal = [
-          {
-            ...createdUser,
-            condoIds: selectedRole === 'sindico' ? [] : userCondoIds,
-            condoNames: selectedRole === 'sindico' ? ['Todos os Condomínios'] : assignedNames,
-            password: cleanPassword,
-          },
-          ...filtered,
-        ];
-        localStorage.setItem('novabrasil_users_list', JSON.stringify(updatedLocal));
+        localStorage.setItem('novabrasil_users_list', JSON.stringify([newUserObj, ...filtered]));
       } catch {}
 
       setShowModal(false);
@@ -279,6 +365,7 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
       setEmail('');
       setPassword('');
       await fetchUsers();
+      if (onRefresh) onRefresh();
     } catch (err: any) {
       setErrorMsg(err.message || 'Erro inesperado ao cadastrar usuário.');
     } finally {
@@ -295,26 +382,12 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
     try {
       const headers = await getAuthHeaders();
       try {
-        const res = await fetch(`/api/users/${resetModalUser.id}`, {
+        await fetch(`/api/users/${resetModalUser.id}`, {
           method: 'PUT',
           headers,
           body: JSON.stringify({ password: newPassword.trim() }),
         });
-        const text = await res.text();
-        let jsonRes: any = null;
-        if (text && text.trim()) {
-          try {
-            jsonRes = JSON.parse(text);
-          } catch {}
-        }
-        if (!res.ok && jsonRes?.error) {
-          throw new Error(jsonRes.error);
-        }
-      } catch (err: any) {
-        if (err.message && !err.message.includes('fetch')) {
-          throw err;
-        }
-      }
+      } catch {}
 
       try {
         const saved = localStorage.getItem('novabrasil_users_list');
@@ -331,7 +404,7 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
 
       setResetModalUser(null);
       setNewPassword('');
-      alert(`Senha de ${resetModalUser.name} redefinida com sucesso!`);
+      alert(`Senha de ${resetModalUser.name} redefinida com sucesso para "${newPassword.trim()}"!`);
     } catch (err: any) {
       setErrorMsg(err.message || 'Falha ao redefinir senha.');
     } finally {
@@ -370,25 +443,14 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
   };
 
   const handleDeleteUser = async (u: SystemUser) => {
-    if (!confirm(`Deseja realmente excluir o acesso de "${u.name}"?`)) return;
+    if (!confirm(`Deseja realmente excluir o acesso do usuário "${u.name}"?`)) return;
     try {
       const headers = await getAuthHeaders();
       try {
-        const res = await fetch(`/api/users/${u.id}`, {
+        await fetch(`/api/users/${u.id}`, {
           method: 'DELETE',
           headers,
         });
-        const text = await res.text();
-        let jsonRes: any = null;
-        if (text && text.trim()) {
-          try {
-            jsonRes = JSON.parse(text);
-          } catch {}
-        }
-        if (!res.ok && jsonRes?.error) {
-          alert(jsonRes.error);
-          return;
-        }
       } catch {}
 
       try {
@@ -406,7 +468,21 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
     }
   };
 
+  // Contadores
+  const agentsOnlyCount = usersList.filter((u) => u.role === 'portaria' || u.role === 'operador' || u.isAgent).length;
+  const managersOnlyCount = usersList.filter((u) => u.role === 'sindico' || u.role === 'admin' || u.role === 'supervisor').length;
+
+  // Filtragem dos usuários exibidos
   const filteredUsers = usersList.filter((u) => {
+    // Aba ativa
+    if (activeTab === 'agents' && u.role !== 'portaria' && u.role !== 'operador' && !u.isAgent) {
+      return false;
+    }
+    if (activeTab === 'managers' && (u.role === 'portaria' || u.role === 'operador') && !u.isAgent) {
+      return false;
+    }
+
+    // Filtro por condomínio
     if (filterCondo !== 'all') {
       const condoNum = Number(filterCondo);
       const isGlobal = u.role === 'sindico' || u.role === 'admin' || (u.condoId == null && (!u.condoIds || u.condoIds.length === 0));
@@ -414,25 +490,31 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
       if (!isGlobal && !hasCondo) return false;
     }
 
+    // Filtro por papel específico
     if (filterRole !== 'all') {
       if (filterRole === 'sindico' && u.role !== 'sindico' && u.role !== 'admin') return false;
       if (filterRole === 'supervisor' && u.role !== 'supervisor') return false;
       if (filterRole === 'portaria' && u.role !== 'portaria' && u.role !== 'operador') return false;
     }
 
+    // Busca textual
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       const matchName = u.name?.toLowerCase().includes(term);
       const matchEmail = u.email?.toLowerCase().includes(term);
+      const matchBadge = u.badgeNumber?.toLowerCase().includes(term);
+      const matchPhone = u.phone?.toLowerCase().includes(term);
+      const matchStation = u.assignedStation?.toLowerCase().includes(term);
       const matchCondo =
         u.condoName?.toLowerCase().includes(term) ||
         (u.condoNames && u.condoNames.some((c) => c.toLowerCase().includes(term)));
-      return matchName || matchEmail || matchCondo;
+      return matchName || matchEmail || matchBadge || matchPhone || matchStation || matchCondo;
     }
     return true;
   });
 
-  const getRoleBadge = (r: UserRole) => {
+  const getRoleBadge = (u: SystemUser) => {
+    const r = u.role;
     if (r === 'sindico' || r === 'admin') {
       return (
         <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950/80 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-900">
@@ -445,71 +527,142 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
       return (
         <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950/80 text-indigo-800 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-900">
           <Briefcase className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
-          Gestor do Condomínio (Supervisor)
+          Supervisor de Posto
         </span>
       );
     }
     return (
-      <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700">
-        <UserCheck className="w-3 h-3 text-slate-500" />
-        Agente de Portaria
-      </span>
+      <div className="space-y-0.5">
+        <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700">
+          <UserCheck className="w-3 h-3 text-emerald-600" />
+          Agente de Portaria
+        </span>
+        {u.badgeNumber && (
+          <span className="block text-[10px] text-slate-500 font-mono">
+            Crachá: {u.badgeNumber}
+          </span>
+        )}
+      </div>
     );
   };
 
   return (
     <div className="space-y-6">
+      {/* Aviso de Sincronização */}
+      {syncNotice && (
+        <div className="p-3 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 rounded-xl flex items-center justify-between gap-2 text-xs text-emerald-800 dark:text-emerald-200 animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span className="font-semibold">{syncNotice}</span>
+          </div>
+          <button onClick={() => setSyncNotice('')} className="text-emerald-600 hover:text-emerald-900">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Top Banner */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
-              <KeyRound className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-              Gestão de Usuários & Níveis de Acesso
-            </h1>
-            <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-blue-600 text-white font-mono">
-              {usersList.length} cadastrados
-            </span>
+            <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-base shadow-xs">
+              <KeyRound className="w-5 h-5" />
+            </div>
+            <div>
+              <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+                Gestão de Usuários & Agentes
+                <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-blue-600 text-white font-mono">
+                  {usersList.length} no sistema
+                </span>
+              </h1>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Quadro unificado de credenciais: Gestores Gerais, Supervisores de Posto e Agentes de Portaria/Ronda.
+              </p>
+            </div>
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Controle de acessos da NOVA BRASIL: atribua gestores gerais, gestores de condomínios específicos e agentes de portaria com restrição por postos.
-          </p>
         </div>
 
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={fetchUsers}
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-xl border border-slate-300 dark:border-slate-700 transition-colors cursor-pointer"
+            title="Atualizar e sincronizar agentes"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Sincronizar</span>
+          </button>
+
+          <button
+            onClick={openCreateModal}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>Cadastrar Usuário / Gestor</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Abas Rápidas de Visualização */}
+      <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-2">
         <button
-          onClick={openCreateModal}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs font-semibold rounded-lg transition-colors shadow-xs cursor-pointer shrink-0"
+          onClick={() => setActiveTab('all')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+            activeTab === 'all'
+              ? 'bg-blue-600 text-white shadow-xs'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
         >
-          <UserPlus className="w-4 h-4" />
-          <span>Cadastrar Usuário / Gestor</span>
+          Todos os Usuários & Agentes ({usersList.length})
+        </button>
+
+        <button
+          onClick={() => setActiveTab('agents')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+            activeTab === 'agents'
+              ? 'bg-blue-600 text-white shadow-xs'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          🛡️ Agentes de Portaria ({agentsOnlyCount})
+        </button>
+
+        <button
+          onClick={() => setActiveTab('managers')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+            activeTab === 'managers'
+              ? 'bg-blue-600 text-white shadow-xs'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          👔 Gestores & Supervisores ({managersOnlyCount})
         </button>
       </div>
 
       {/* Filtros e Busca */}
-      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 shadow-xs flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between transition-colors">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-3.5 sm:p-4 shadow-2xs flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between transition-colors">
         <div className="relative flex-1">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Buscar por nome, e-mail ou condomínio..."
+            placeholder="Buscar por nome, e-mail, crachá, telefone ou posto..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 dark:bg-slate-800 text-slate-900 dark:text-white"
+            className="w-full pl-9 pr-3 py-1.5 text-xs border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-slate-50/50 dark:bg-slate-800 text-slate-900 dark:text-white"
           />
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
           <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
             <Filter className="w-3.5 h-3.5" />
-            <span>Posto:</span>
+            <span>Filtro Posto:</span>
           </div>
 
           <select
             value={filterCondo}
             onChange={(e) => setFilterCondo(e.target.value)}
-            className="text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-2 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+            className="text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-medium"
           >
-            <option value="all">🏢 Todos os Postos</option>
+            <option value="all">🏢 Todos os Postos (Global)</option>
             {condominiums.map((c) => (
               <option key={c.id} value={c.id}>
                 📍 {c.name}
@@ -520,26 +673,27 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
           <select
             value={filterRole}
             onChange={(e) => setFilterRole(e.target.value)}
-            className="text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-2 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200"
           >
             <option value="all">Todos os Níveis</option>
             <option value="sindico">Gestor Geral da Empresa</option>
-            <option value="supervisor">Gestor de Condomínio</option>
+            <option value="supervisor">Supervisor de Posto</option>
             <option value="portaria">Agente de Portaria</option>
           </select>
         </div>
       </div>
 
       {/* Tabela de Usuários */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-xs transition-colors">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-2xs transition-colors">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="bg-slate-50/70 dark:bg-slate-800/70 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
-                <th className="py-3 px-4">Nome</th>
+              <tr className="bg-slate-50/80 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 font-bold uppercase text-[10px] tracking-wider">
+                <th className="py-3 px-4">Usuário / Agente</th>
                 <th className="py-3 px-4">E-mail de Login</th>
-                <th className="py-3 px-4">Condomínio(s) Vinculado(s)</th>
-                <th className="py-3 px-4">Função / Nível de Acesso</th>
+                <th className="py-3 px-4">WhatsApp / Contato</th>
+                <th className="py-3 px-4">Condomínio(s) Atribuído(s)</th>
+                <th className="py-3 px-4">Perfil Operacional</th>
                 <th className="py-3 px-4">Status</th>
                 <th className="py-3 px-4 text-right">Ações</th>
               </tr>
@@ -547,14 +701,14 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-slate-400 dark:text-slate-500">
-                    Carregando usuários...
+                  <td colSpan={7} className="py-8 text-center text-slate-400">
+                    Carregando quadro de usuários...
                   </td>
                 </tr>
               ) : filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-slate-400 dark:text-slate-500">
-                    Nenhum usuário encontrado para os filtros selecionados.
+                  <td colSpan={7} className="py-8 text-center text-slate-400">
+                    Nenhum usuário ou agente encontrado com os filtros atuais.
                   </td>
                 </tr>
               ) : (
@@ -562,30 +716,72 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
                   const isMaster = u.email === 'administrativo@novabrasil.com';
 
                   return (
-                    <tr key={u.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors">
-                      <td className="py-3 px-4 font-semibold text-slate-900 dark:text-white">
-                        <div className="flex items-center gap-2">
-                          <span>{u.name}</span>
-                          {isMaster && (
-                            <span className="text-[10px] font-mono px-1.5 py-0.2 bg-blue-600 text-white rounded font-bold">
-                              Master
-                            </span>
+                    <tr key={u.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
+                      {/* Usuário / Agente com Foto */}
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2.5">
+                          {u.photoUrl ? (
+                            <img
+                              src={u.photoUrl}
+                              alt={u.name}
+                              className="w-8 h-8 rounded-full object-cover border border-slate-200 dark:border-slate-700 shrink-0"
+                            />
+                          ) : (
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs text-white shrink-0 ${
+                              u.role === 'sindico' || u.role === 'admin'
+                                ? 'bg-blue-600'
+                                : u.role === 'supervisor'
+                                ? 'bg-indigo-600'
+                                : 'bg-emerald-600'
+                            }`}>
+                              {u.name.slice(0, 2).toUpperCase()}
+                            </div>
                           )}
+                          <div className="min-w-0">
+                            <p className="font-bold text-slate-900 dark:text-white truncate flex items-center gap-1.5">
+                              <span>{u.name}</span>
+                              {isMaster && (
+                                <span className="text-[9px] font-mono px-1.5 py-0.2 bg-blue-600 text-white rounded font-bold">
+                                  Master
+                                </span>
+                              )}
+                            </p>
+                            {u.assignedStation && (
+                              <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium truncate">
+                                Posto: {u.assignedStation}
+                              </p>
+                            )}
+                          </div>
                         </div>
                       </td>
-                      <td className="py-3 px-4 font-mono text-slate-700 dark:text-slate-300">{u.email}</td>
+
+                      {/* E-mail de Login */}
+                      <td className="py-3 px-4 font-mono text-slate-700 dark:text-slate-300">
+                        {u.email}
+                      </td>
+
+                      {/* Contato WhatsApp Clicável */}
+                      <td className="py-3 px-4">
+                        {u.phone ? (
+                          <WhatsAppButton phone={u.phone} name={u.name} />
+                        ) : (
+                          <span className="text-[11px] text-slate-400 italic">Sem telefone</span>
+                        )}
+                      </td>
+
+                      {/* Condomínios Atribuídos */}
                       <td className="py-3 px-4">
                         {u.role === 'sindico' || u.role === 'admin' ? (
                           <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 dark:text-blue-400">
                             <Building2 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                            Todos os Condomínios (Global)
+                            Rede Completa (Global)
                           </span>
                         ) : u.condoNames && u.condoNames.length > 0 ? (
                           <div className="flex flex-wrap gap-1 max-w-xs">
                             {u.condoNames.map((cName, idx) => (
                               <span
                                 key={idx}
-                                className="inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-900"
+                                className="inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-900"
                               >
                                 {cName}
                               </span>
@@ -593,16 +789,20 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
                           </div>
                         ) : (
                           <span className="text-slate-500 dark:text-slate-400 italic text-[11px]">
-                            {u.condoName || 'Posto Geral / Não Especificado'}
+                            {u.condoName || 'Posto Geral'}
                           </span>
                         )}
                       </td>
-                      <td className="py-3 px-4">{getRoleBadge(u.role)}</td>
+
+                      {/* Perfil Operacional */}
+                      <td className="py-3 px-4">{getRoleBadge(u)}</td>
+
+                      {/* Status */}
                       <td className="py-3 px-4">
                         <button
                           onClick={() => handleToggleActive(u)}
                           disabled={isMaster}
-                          className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded cursor-pointer transition-colors ${
+                          className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full cursor-pointer transition-colors ${
                             u.isActive
                               ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100'
                               : 'bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 hover:bg-rose-100'
@@ -621,6 +821,8 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
                           )}
                         </button>
                       </td>
+
+                      {/* Ações */}
                       <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
                           <button
@@ -628,16 +830,16 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
                               setResetModalUser(u);
                               setNewPassword('');
                             }}
-                            className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded cursor-pointer"
-                            title="Alterar / Redefinir Senha"
+                            className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg cursor-pointer transition-colors"
+                            title="Alterar / Redefinir Senha deste Usuário"
                           >
                             <KeyRound className="w-3.5 h-3.5" />
                           </button>
                           {!isMaster && (
                             <button
                               onClick={() => handleDeleteUser(u)}
-                              className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded cursor-pointer"
-                              title="Excluir Usuário"
+                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg cursor-pointer transition-colors"
+                              title="Remover Acesso"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -653,198 +855,66 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
         </div>
       </div>
 
-      {/* Modal Criar Novo Usuário */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 max-w-lg w-full p-5 sm:p-6 space-y-4 max-h-[90vh] overflow-y-auto my-8">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <UserPlus className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                Cadastrar Novo Usuário / Gestor
-              </h3>
+      {/* Modal Redefinir Senha */}
+      {resetModalUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-sm w-full p-5 shadow-2xl border border-slate-200 dark:border-slate-800">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center">
+                  <KeyRound className="w-4 h-4" />
+                </div>
+                <h3 className="font-bold text-slate-900 dark:text-white text-sm sm:text-base">
+                  Redefinir Senha
+                </h3>
+              </div>
               <button
-                onClick={() => setShowModal(false)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg cursor-pointer"
+                onClick={() => setResetModalUser(null)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
+            <p className="text-xs text-slate-600 dark:text-slate-400 mt-3">
+              Defina a nova senha para o usuário <strong>{resetModalUser.name}</strong> ({resetModalUser.email}).
+            </p>
+
             {errorMsg && (
-              <div className="p-3 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 rounded-lg text-xs text-rose-700 dark:text-rose-300">
+              <div className="mt-2 p-2 bg-rose-50 text-rose-700 rounded-lg text-xs">
                 {errorMsg}
               </div>
             )}
 
-            <form onSubmit={handleCreateUser} className="space-y-4">
+            <form onSubmit={handleResetPassword} className="space-y-3 mt-3 text-xs">
               <div>
-                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1.5">
-                  Função / Nível de Acesso *
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  <div
-                    onClick={() => setSelectedRole('sindico')}
-                    className={`p-3 rounded-lg border cursor-pointer transition-all ${
-                      selectedRole === 'sindico'
-                        ? 'border-blue-600 dark:border-blue-500 bg-blue-50/70 dark:bg-blue-950/40 shadow-xs ring-1 ring-blue-500/20'
-                        : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
-                    }`}
-                  >
-                    <span className="text-xs font-bold text-slate-900 dark:text-white block">Gestor Geral</span>
-                    <span className="text-[10px] text-slate-500 dark:text-slate-400">Total (Todos os Postos)</span>
-                  </div>
-
-                  <div
-                    onClick={() => setSelectedRole('supervisor')}
-                    className={`p-3 rounded-lg border cursor-pointer transition-all ${
-                      selectedRole === 'supervisor'
-                        ? 'border-indigo-600 dark:border-indigo-500 bg-indigo-50/70 dark:bg-indigo-950/40 shadow-xs ring-1 ring-indigo-500/20'
-                        : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
-                    }`}
-                  >
-                    <span className="text-xs font-bold text-slate-900 dark:text-white block">Gestor do Posto</span>
-                    <span className="text-[10px] text-slate-500 dark:text-slate-400">Supervisor Local</span>
-                  </div>
-
-                  <div
-                    onClick={() => setSelectedRole('portaria')}
-                    className={`p-3 rounded-lg border cursor-pointer transition-all ${
-                      selectedRole === 'portaria'
-                        ? 'border-blue-600 dark:border-blue-500 bg-blue-50/70 dark:bg-blue-950/40 shadow-xs ring-1 ring-blue-500/20'
-                        : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
-                    }`}
-                  >
-                    <span className="text-xs font-bold text-slate-900 dark:text-white block">Agente Portaria</span>
-                    <span className="text-[10px] text-slate-500 dark:text-slate-400">Operação Guarita</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Seleção de Condomínio(s) vinculados para Supervisor e Agente */}
-              {selectedRole !== 'sindico' ? (
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                      Condomínio(s) Atribuído(s) * ({userCondoIds.length} selecionado{userCondoIds.length !== 1 ? 's' : ''})
-                    </label>
-                    <button
-                      type="button"
-                      onClick={selectAllCondos}
-                      className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline font-semibold cursor-pointer"
-                    >
-                      {userCondoIds.length === condominiums.length ? 'Desmarcar Todos' : 'Selecionar Todos'}
-                    </button>
-                  </div>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-2">
-                    {selectedRole === 'supervisor'
-                      ? 'O supervisor terá acesso de gestão total exclusivamente aos condomínios selecionados:'
-                      : 'O agente de portaria só poderá acessar e operar nos condomínios selecionados:'}
-                  </p>
-                  <div className="max-h-36 overflow-y-auto space-y-1.5 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 bg-slate-50/50 dark:bg-slate-800/50">
-                    {condominiums.map((condo) => {
-                      const isChecked = userCondoIds.includes(condo.id);
-                      return (
-                        <div
-                          key={condo.id}
-                          onClick={() => toggleCondo(condo.id)}
-                          className={`flex items-center justify-between p-2 rounded-md cursor-pointer transition-colors border text-xs ${
-                            isChecked
-                              ? 'bg-blue-50 dark:bg-blue-950/60 border-blue-300 dark:border-blue-800 text-blue-900 dark:text-blue-100 font-medium'
-                              : 'bg-white dark:bg-slate-850 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2 truncate">
-                            {isChecked ? (
-                              <CheckSquare className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
-                            ) : (
-                              <Square className="w-4 h-4 text-slate-400 shrink-0" />
-                            )}
-                            <span className="truncate">{condo.name}</span>
-                          </div>
-                          {condo.city && (
-                            <span className="text-[10px] text-slate-400 dark:text-slate-500 shrink-0">
-                              {condo.city}
-                            </span>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ) : (
-                <div className="p-3 bg-blue-50/70 dark:bg-blue-950/40 rounded-xl border border-blue-200/80 dark:border-blue-900/60 flex items-start gap-2.5">
-                  <Building2 className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
-                  <p className="text-[11px] text-blue-900 dark:text-blue-200">
-                    <strong>Gestor Geral:</strong> Tem acesso total a todos os condomínios da empresa, incluindo cadastrar novos condomínios, excluir condomínios e gerenciar usuários.
-                  </p>
-                </div>
-              )}
-
-              <div>
-                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1">
-                  Nome Completo *
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Nova Senha (mínimo 6 dígitos) *
                 </label>
                 <input
                   type="text"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Ex: Portaria@2026, 123456"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white"
                   required
-                  placeholder="Ex: Carlos Eduardo de Oliveira"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full px-3 py-2 text-xs border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
                 />
               </div>
 
-              <div>
-                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1">
-                  E-mail Institucional de Login *
-                </label>
-                <input
-                  type="email"
-                  required
-                  placeholder="carlos@novabrasil.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-3 py-2 text-xs border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-500 font-mono bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1">
-                  Senha Inicial de Acesso *
-                </label>
-                <div className="relative">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    placeholder="Mínimo 6 caracteres"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full px-3 pr-10 py-2 text-xs border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-500 font-mono bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+              <div className="pt-2 flex items-center justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setShowModal(false)}
-                  className="px-4 py-2 text-xs border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium cursor-pointer min-h-[40px]"
+                  onClick={() => setResetModalUser(null)}
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl font-semibold cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-5 py-2 text-xs bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-lg font-semibold cursor-pointer disabled:opacity-50 min-h-[40px] shadow-sm"
+                  className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold cursor-pointer disabled:opacity-50"
                 >
-                  {saving ? 'Cadastrando...' : 'Cadastrar Usuário'}
+                  {saving ? 'Salvando...' : 'Atualizar Senha'}
                 </button>
               </div>
             </form>
@@ -852,42 +922,146 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
         </div>
       )}
 
-      {/* Modal Redefinir Senha */}
-      {resetModalUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 max-w-sm w-full p-6 space-y-4">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-              Redefinir Senha de {resetModalUser.name}
-            </h3>
-            {errorMsg && <p className="text-xs text-rose-600 dark:text-rose-400">{errorMsg}</p>}
+      {/* Modal Criar Novo Usuário */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full p-5 sm:p-6 shadow-2xl border border-slate-200 dark:border-slate-800 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center">
+                  <UserPlus className="w-4 h-4" />
+                </div>
+                <h3 className="font-bold text-slate-900 dark:text-white text-base">
+                  Cadastrar Usuário / Gestor
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowModal(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
-            <form onSubmit={handleResetPassword} className="space-y-4">
+            {errorMsg && (
+              <div className="mt-3 p-2.5 bg-rose-50 text-rose-700 rounded-xl text-xs">
+                {errorMsg}
+              </div>
+            )}
+
+            <form onSubmit={handleCreateUser} className="space-y-3 mt-4 text-xs">
               <div>
-                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1">Nova Senha *</label>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Nome Completo *
+                </label>
                 <input
                   type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Ex: Carlos Eduardo da Silva"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white"
                   required
-                  placeholder="Digite a nova senha"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full px-3 py-2 text-xs border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-500 font-mono bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    E-mail Institucional de Login *
+                  </label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="carlos@novabrasil.com"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Senha Inicial (mínimo 6 dígitos) *
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full px-3 py-2 pr-9 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    >
+                      {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Nível de Acesso Operacional *
+                </label>
+                <select
+                  value={selectedRole}
+                  onChange={(e) => setSelectedRole(e.target.value as UserRole)}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-medium"
+                >
+                  <option value="portaria">Agente de Portaria / Ronda (Acesso aos postos)</option>
+                  <option value="supervisor">Supervisor de Condomínio (Gestão de postos atribuídos)</option>
+                  <option value="sindico">Gestor Geral da Empresa (Acesso completo e irrestrito)</option>
+                </select>
+              </div>
+
+              {selectedRole !== 'sindico' && (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                      Condomínio(s) com Permissão de Acesso:
+                    </label>
+                    <button
+                      type="button"
+                      onClick={selectAllCondos}
+                      className="text-[11px] text-blue-600 hover:underline"
+                    >
+                      {userCondoIds.length === condominiums.length ? 'Desmarcar Todos' : 'Marcar Todos'}
+                    </button>
+                  </div>
+                  <div className="max-h-36 overflow-y-auto space-y-1 bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700">
+                    {condominiums.map((c) => (
+                      <label key={c.id} className="flex items-center gap-2 p-1 hover:bg-white dark:hover:bg-slate-800 rounded-lg cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={userCondoIds.includes(c.id)}
+                          onChange={() => toggleCondo(c.id)}
+                          className="w-4 h-4 text-blue-600 rounded"
+                        />
+                        <span className="font-medium text-slate-800 dark:text-slate-200 truncate">{c.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setResetModalUser(null)}
-                  className="px-4 py-2 text-xs border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 font-medium cursor-pointer min-h-[40px]"
+                  onClick={() => setShowModal(false)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl font-semibold cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-5 py-2 text-xs bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-lg font-semibold cursor-pointer disabled:opacity-50 min-h-[40px]"
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold cursor-pointer disabled:opacity-50"
                 >
-                  {saving ? 'Salvando...' : 'Atualizar Senha'}
+                  {saving ? 'Cadastrando...' : 'Cadastrar Usuário'}
                 </button>
               </div>
             </form>

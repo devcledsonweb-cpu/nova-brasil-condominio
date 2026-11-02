@@ -584,6 +584,8 @@ function NovaBrasilMain() {
             actionTaken: 'Entregue as chaves da sala técnica ao vigilante noturno.',
             logDate: new Date().toLocaleDateString('pt-BR'),
             logTime: '18:00',
+            designatedIncomingAgentName: 'Marcos Antônio Ribeiro',
+            designatedIncomingAgentId: 2,
             incomingAgentAccepted: true,
             incomingAgentName: 'Marcos Antônio Ribeiro',
             incomingAcceptedAt: `18:05 - ${new Date().toLocaleDateString('pt-BR')}`,
@@ -625,6 +627,8 @@ function NovaBrasilMain() {
             actionTaken: 'Rádios deixados nas bases carregadoras da guarita social.',
             logDate: new Date().toLocaleDateString('pt-BR'),
             logTime: '06:00',
+            designatedIncomingAgentName: 'Carlos Eduardo da Silva',
+            designatedIncomingAgentId: 1,
             incomingAgentAccepted: false,
           },
         ];
@@ -1436,6 +1440,7 @@ function NovaBrasilMain() {
           {activeTab === 'usuarios' && (
             <UsersManagementView
               condominiums={condominiums}
+              agents={agents}
               selectedCondoId={selectedCondoId}
               onRefresh={fetchAllData}
             />

@@ -21,10 +21,13 @@ import {
   CheckSquare,
   Square,
   Check,
+  Bell,
+  BellRing,
 } from 'lucide-react';
 import { OperationalLog, Condominium, SecurityAgent, IncomingShiftChecklist } from '../types/index.ts';
 import { maskDate } from '../utils/masks.ts';
 import { exportOperationalLogsPDF } from '../utils/pdfExport.ts';
+import { WhatsAppButton } from './WhatsAppButton.tsx';
 
 interface OperationalLogsViewProps {
   logs: OperationalLog[];
@@ -73,6 +76,8 @@ export const OperationalLogsView: React.FC<OperationalLogsViewProps> = ({
     selectedCondoId !== 'all' ? selectedCondoId : (condominiums[0]?.id || '')
   );
   const [agentName, setAgentName] = useState('');
+  const [designatedIncomingAgentName, setDesignatedIncomingAgentName] = useState('');
+  const [designatedIncomingAgentId, setDesignatedIncomingAgentId] = useState<number | undefined>(undefined);
   const [shiftType, setShiftType] = useState<OperationalLog['shiftType']>('dia');
   const [logType, setLogType] = useState<OperationalLog['logType']>('passagem_turno');
   const [severity, setSeverity] = useState<OperationalLog['severity']>('informativa');
@@ -95,8 +100,26 @@ export const OperationalLogsView: React.FC<OperationalLogsViewProps> = ({
   };
 
   const openAddModal = () => {
-    setCondoId(selectedCondoId !== 'all' ? selectedCondoId : (condominiums[0]?.id || ''));
-    setAgentName(user?.name || agents[0]?.name || 'Agente de Portaria');
+    const targetCondoId = selectedCondoId !== 'all' ? selectedCondoId : (condominiums[0]?.id || '');
+    setCondoId(targetCondoId);
+    const myName = user?.name || agents[0]?.name || 'Agente de Portaria';
+    setAgentName(myName);
+
+    // Sugere o agente que irá receber o serviço (entrante)
+    const otherAgent = agents.find(
+      (a) => a.name.trim().toLowerCase() !== myName.trim().toLowerCase()
+    );
+    if (otherAgent) {
+      setDesignatedIncomingAgentName(otherAgent.name);
+      setDesignatedIncomingAgentId(otherAgent.id);
+    } else if (agents[0]) {
+      setDesignatedIncomingAgentName(agents[0].name);
+      setDesignatedIncomingAgentId(agents[0].id);
+    } else {
+      setDesignatedIncomingAgentName('');
+      setDesignatedIncomingAgentId(undefined);
+    }
+
     setShiftType('dia');
     setLogType('passagem_turno');
     setSeverity('informativa');
@@ -135,7 +158,7 @@ export const OperationalLogsView: React.FC<OperationalLogsViewProps> = ({
     try {
       await onUpdateLog(acceptingLog.id, {
         incomingAgentAccepted: true,
-        incomingAgentName: user?.name || 'Agente Entrante',
+        incomingAgentName: user?.name || acceptingLog.designatedIncomingAgentName || 'Agente Entrante',
         incomingAcceptedAt: nowStr,
         incomingChecklist: checklist,
         incomingNotes: incomingNotes.trim() || undefined,
@@ -153,6 +176,10 @@ export const OperationalLogsView: React.FC<OperationalLogsViewProps> = ({
     e.preventDefault();
     if (!agentName.trim()) {
       setErrorMessage('Informe o nome do agente responsável pelo registro.');
+      return;
+    }
+    if (logType === 'passagem_turno' && !designatedIncomingAgentName.trim()) {
+      setErrorMessage('Selecione quem irá receber o serviço (agente entrante).');
       return;
     }
     if (!title.trim()) {
@@ -182,6 +209,8 @@ export const OperationalLogsView: React.FC<OperationalLogsViewProps> = ({
         actionTaken: actionTaken.trim() || null,
         logDate: logDate.trim(),
         logTime: logTime.trim(),
+        designatedIncomingAgentName: logType === 'passagem_turno' ? designatedIncomingAgentName.trim() : null,
+        designatedIncomingAgentId: logType === 'passagem_turno' ? (designatedIncomingAgentId || null) : null,
         incomingAgentAccepted: false,
       };
 
@@ -215,6 +244,10 @@ export const OperationalLogsView: React.FC<OperationalLogsViewProps> = ({
       const matchCondo = log.condoName?.toLowerCase().includes(term);
       const matchDesc = log.description.toLowerCase().includes(term);
       const matchIncoming = log.incomingAgentName?.toLowerCase().includes(term);
+      const matchDesignated = log.designatedIncomingAgentName?.toLowerCase().includes(term);
+      return matchTitle || matchAgent || matchCondo || matchDesc || matchIncoming || matchDesignated;
+    }
+    return true;
       return matchTitle || matchAgent || matchCondo || matchDesc || matchIncoming;
     }
     return true;
@@ -310,6 +343,63 @@ export const OperationalLogsView: React.FC<OperationalLogsViewProps> = ({
           </button>
         </div>
       </div>
+
+      {/* AVISO AO AGENTE ENTRANTE: Passagem de Serviço Designada para Ele */}
+      {(() => {
+        const myPending = logs.filter((l) => {
+          if (l.logType !== 'passagem_turno' || l.incomingAgentAccepted) return false;
+          if (!user?.name) return false;
+          const uName = user.name.trim().toLowerCase();
+          const designated = l.designatedIncomingAgentName?.trim().toLowerCase();
+          return Boolean(designated && (designated === uName || uName.includes(designated) || designated.includes(uName)));
+        });
+
+        if (myPending.length === 0) return null;
+
+        const firstLog = myPending[0];
+        return (
+          <div className="bg-linear-to-r from-amber-500 via-amber-600 to-orange-600 rounded-2xl p-4 sm:p-5 text-white shadow-lg border border-amber-400 space-y-3 animate-in fade-in">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center shrink-0">
+                  <BellRing className="w-5 h-5 text-white animate-bounce" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] font-black uppercase tracking-wider bg-white/25 px-2.5 py-0.5 rounded-full">
+                      🚨 AVISO OPERACIONAL DE PASSAGEM DE SERVIÇO
+                    </span>
+                    <span className="text-xs text-amber-100 font-semibold">
+                      {myPending.length} plantão pendente de recebimento
+                    </span>
+                  </div>
+                  <h2 className="text-base sm:text-lg font-black mt-1">
+                    {firstLog.agentName} está passando o serviço para você!
+                  </h2>
+                  <p className="text-xs text-amber-100 mt-0.5">
+                    Posto: <strong>{firstLog.condoName || 'Posto Geral'}</strong> · Transmissão: <strong>{firstLog.logDate} às {firstLog.logTime}</strong>
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => openAcceptModal(firstLog)}
+                className="px-5 py-2.5 bg-white text-amber-950 hover:bg-amber-50 font-black text-xs rounded-xl shadow-md transition-all hover:scale-105 shrink-0 flex items-center gap-2 cursor-pointer self-stretch sm:self-auto justify-center"
+              >
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                <span>Conferir Checklist & Receber Serviço</span>
+              </button>
+            </div>
+
+            {firstLog.description && (
+              <div className="bg-black/15 p-2.5 rounded-xl text-xs text-amber-50 border border-white/10">
+                <strong className="block text-[11px] font-bold text-amber-200">Relato do Agente Sainte ({firstLog.agentName}):</strong>
+                <p className="mt-0.5 italic">"{firstLog.description}"</p>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Filter and Search Bar */}
       <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-3 sm:p-4 shadow-2xs flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between transition-colors">
@@ -409,55 +499,114 @@ export const OperationalLogsView: React.FC<OperationalLogsViewProps> = ({
               )}
 
               {/* DISCIPLINA DO POSTO: Confirmação / Aceite da Passagem de Turno pelo Agente Entrante */}
-              {log.logType === 'passagem_turno' && (
-                <div className="mt-3 pt-2">
-                  {log.incomingAgentAccepted ? (
-                    <div className="p-3 bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 rounded-xl text-xs space-y-1.5">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                        <span className="font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                          <span>Turno Aceito & Posto Conferido pelo Agente Entrante</span>
-                        </span>
-                        <span className="text-[10px] font-mono font-semibold text-emerald-700 dark:text-emerald-400">
-                          {log.incomingAcceptedAt}
-                        </span>
-                      </div>
-                      <p className="text-slate-700 dark:text-slate-300 text-[11px]">
-                        Recebido por: <strong className="text-emerald-900 dark:text-emerald-200">{log.incomingAgentName}</strong> · Chaves, rádios HT, bastão e guarita conferidos em ordem.
-                      </p>
-                      {log.incomingNotes && (
-                        <p className="text-[11px] text-slate-600 dark:text-slate-400 italic bg-white/70 dark:bg-slate-900/50 p-2 rounded-lg border border-emerald-200/50 dark:border-emerald-800/40">
-                          Ressalva do entrante: "{log.incomingNotes}"
+              {log.logType === 'passagem_turno' && (() => {
+                const isDesignatedForMe = Boolean(
+                  user?.name &&
+                  log.designatedIncomingAgentName &&
+                  (log.designatedIncomingAgentName.trim().toLowerCase() === user.name.trim().toLowerCase() ||
+                   user.name.trim().toLowerCase().includes(log.designatedIncomingAgentName.trim().toLowerCase()))
+                );
+                const designatedAgentObj = agents.find((a) => a.name === log.designatedIncomingAgentName);
+
+                if (log.incomingAgentAccepted) {
+                  return (
+                    <div className="mt-3 pt-2">
+                      <div className="p-3 bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 rounded-xl text-xs space-y-1.5">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                          <span className="font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                            <span>Turno Recebido & Posto Conferido pelo Agente Entrante</span>
+                          </span>
+                          <span className="text-[10px] font-mono font-semibold text-emerald-700 dark:text-emerald-400">
+                            {log.incomingAcceptedAt}
+                          </span>
+                        </div>
+                        <p className="text-slate-700 dark:text-slate-300 text-[11px]">
+                          Recebido por: <strong className="text-emerald-900 dark:text-emerald-200">{log.incomingAgentName}</strong>
+                          {log.designatedIncomingAgentName && log.designatedIncomingAgentName !== log.incomingAgentName && (
+                            <span className="text-slate-500 text-[10px]"> (designado originalmente: {log.designatedIncomingAgentName})</span>
+                          )} · Chaves, rádios HT, bastão e guarita conferidos em ordem.
                         </p>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 rounded-xl text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="flex items-start gap-2.5">
-                        <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                        <div>
-                          <p className="font-bold text-amber-900 dark:text-amber-200">
-                            Aguardando Aceite / Conferência do Agente Entrante
+                        {log.incomingNotes && (
+                          <p className="text-[11px] text-slate-600 dark:text-slate-400 italic bg-white/70 dark:bg-slate-900/50 p-2 rounded-lg border border-emerald-200/50 dark:border-emerald-800/40">
+                            Ressalva do entrante: "{log.incomingNotes}"
                           </p>
-                          <p className="text-[11px] text-amber-800 dark:text-amber-300">
-                            O próximo plantonista deve conferir chaves, rádios HT e assinar o termo de recebimento do posto.
+                        )}
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="mt-3 pt-2">
+                    <div className={`p-3.5 rounded-xl border text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                      isDesignatedForMe
+                        ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-400 dark:border-amber-600 ring-2 ring-amber-400/50 shadow-md'
+                        : 'bg-amber-50/70 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800/50'
+                    }`}>
+                      <div className="flex items-start gap-2.5">
+                        <AlertTriangle className={`w-4 h-4 shrink-0 mt-0.5 ${isDesignatedForMe ? 'text-amber-600 animate-bounce' : 'text-amber-500'}`} />
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-amber-900 dark:text-amber-200">
+                              Aguardando Recebimento de Serviço
+                            </span>
+                            {isDesignatedForMe && (
+                              <span className="text-[10px] bg-amber-500 text-white font-extrabold px-2 py-0.5 rounded-full animate-pulse">
+                                VOCÊ FOI SELECIONADO
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2 flex-wrap text-[11px] text-amber-900 dark:text-amber-300">
+                            <span>Designado para receber:</span>
+                            <span className="font-bold text-slate-900 dark:text-white bg-white/80 dark:bg-slate-800 px-2 py-0.5 rounded-md border border-amber-200 dark:border-amber-900">
+                              {log.designatedIncomingAgentName || 'Próximo Plantonista'}
+                            </span>
+                            {designatedAgentObj?.badgeNumber && (
+                              <span className="text-[10px] text-slate-500 font-mono">
+                                ({designatedAgentObj.badgeNumber})
+                              </span>
+                            )}
+                            {designatedAgentObj?.phone && (
+                              <WhatsAppButton
+                                phone={designatedAgentObj.phone}
+                                name={designatedAgentObj.name}
+                                badgeOnly
+                                customMessage={`Olá ${designatedAgentObj.name}, você foi selecionado para receber o serviço da guarita no sistema NOVA BRASIL.`}
+                              />
+                            )}
+                          </div>
+
+                          <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                            O agente entrante deve conferir chaves, rádios HT e assinar o recebimento no sistema.
                           </p>
                         </div>
                       </div>
 
-                      {onUpdateLog && (
-                        <button
-                          onClick={() => openAcceptModal(log)}
-                          className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold text-xs shadow-xs transition-colors shrink-0 flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
-                        >
-                          <Check className="w-3.5 h-3.5" />
-                          <span>Conferir & Aceitar Turno</span>
-                        </button>
-                      )}
+                      <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+                        {onUpdateLog && (isDesignatedForMe || isManager) ? (
+                          <button
+                            onClick={() => openAcceptModal(log)}
+                            className={`px-3.5 py-2 rounded-xl font-extrabold text-xs shadow-xs transition-transform hover:scale-105 flex items-center gap-1.5 cursor-pointer ${
+                              isDesignatedForMe
+                                ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-amber-500/20'
+                                : 'bg-slate-800 hover:bg-slate-900 text-white dark:bg-slate-700 dark:hover:bg-slate-600'
+                            }`}
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            <span>{isDesignatedForMe ? 'Receber Serviço & Assinar' : 'Conferir & Aceitar Turno'}</span>
+                          </button>
+                        ) : (
+                          <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-400 italic">
+                            Aguardando {log.designatedIncomingAgentName || 'plantonista'}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  )}
-                </div>
-              )}
+                  </div>
+                );
+              })()}
 
               {/* Rodapé do Card */}
               <div className="mt-3.5 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
