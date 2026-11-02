@@ -391,5 +391,617 @@
     "asset": 6,
     "maintenance": 5,
     "log": 5
-  }
+  },
+  "condoMetas": [
+    {
+      "condoId": 5,
+      "servicePosts": [
+        "Portaria Principal (Social)",
+        "Portaria de Serviço / Entregas",
+        "Garagem / Portões",
+        "Área de Lazer / Piscina",
+        "Ronda Perimetral"
+      ],
+      "photoUrl": "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&auto=format&fit=crop&q=80",
+      "serviceStations": [
+        {
+          "id": "st-5-1",
+          "condoId": 5,
+          "name": "Portaria Principal (Social)",
+          "type": "portaria_principal",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-5-2",
+          "condoId": 5,
+          "name": "Portaria de Serviço / Entregas",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-5-3",
+          "condoId": 5,
+          "name": "Garagem / Portões",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-5-4",
+          "condoId": 5,
+          "name": "Área de Lazer / Piscina",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-5-5",
+          "condoId": 5,
+          "name": "Ronda Perimetral",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        }
+      ]
+    },
+    {
+      "condoId": 9,
+      "servicePosts": [
+        "Portaria Principal (Social)",
+        "Portaria de Serviço / Entregas",
+        "Garagem / Portões",
+        "Área de Lazer / Piscina",
+        "Ronda Perimetral"
+      ],
+      "photoUrl": "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&auto=format&fit=crop&q=80",
+      "serviceStations": [
+        {
+          "id": "st-9-1",
+          "condoId": 9,
+          "name": "Portaria Principal (Social)",
+          "type": "portaria_principal",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-9-2",
+          "condoId": 9,
+          "name": "Portaria de Serviço / Entregas",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-9-3",
+          "condoId": 9,
+          "name": "Garagem / Portões",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-9-4",
+          "condoId": 9,
+          "name": "Área de Lazer / Piscina",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-9-5",
+          "condoId": 9,
+          "name": "Ronda Perimetral",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        }
+      ]
+    },
+    {
+      "condoId": 2,
+      "servicePosts": [
+        "Portaria Principal (Social)",
+        "Portaria de Serviço / Entregas",
+        "Garagem / Portões",
+        "Área de Lazer / Piscina",
+        "Ronda Perimetral"
+      ],
+      "photoUrl": "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&auto=format&fit=crop&q=80",
+      "serviceStations": [
+        {
+          "id": "st-2-1",
+          "condoId": 2,
+          "name": "Portaria Principal (Social)",
+          "type": "portaria_principal",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-2-2",
+          "condoId": 2,
+          "name": "Portaria de Serviço / Entregas",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-2-3",
+          "condoId": 2,
+          "name": "Garagem / Portões",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-2-4",
+          "condoId": 2,
+          "name": "Área de Lazer / Piscina",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-2-5",
+          "condoId": 2,
+          "name": "Ronda Perimetral",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        }
+      ]
+    },
+    {
+      "condoId": 10,
+      "servicePosts": [
+        "Portaria Principal (Social)",
+        "Portaria de Serviço / Entregas",
+        "Garagem / Portões",
+        "Área de Lazer / Piscina",
+        "Ronda Perimetral"
+      ],
+      "photoUrl": "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&auto=format&fit=crop&q=80",
+      "serviceStations": [
+        {
+          "id": "st-10-1",
+          "condoId": 10,
+          "name": "Portaria Principal (Social)",
+          "type": "portaria_principal",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-10-2",
+          "condoId": 10,
+          "name": "Portaria de Serviço / Entregas",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-10-3",
+          "condoId": 10,
+          "name": "Garagem / Portões",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-10-4",
+          "condoId": 10,
+          "name": "Área de Lazer / Piscina",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-10-5",
+          "condoId": 10,
+          "name": "Ronda Perimetral",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        }
+      ]
+    },
+    {
+      "condoId": 1,
+      "servicePosts": [
+        "Portaria Principal (Social)",
+        "Portaria de Serviço / Entregas",
+        "Garagem / Portões",
+        "Área de Lazer / Piscina",
+        "Ronda Perimetral"
+      ],
+      "photoUrl": "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&auto=format&fit=crop&q=80",
+      "serviceStations": [
+        {
+          "id": "st-1-1",
+          "condoId": 1,
+          "name": "Portaria Principal (Social)",
+          "type": "portaria_principal",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-1-2",
+          "condoId": 1,
+          "name": "Portaria de Serviço / Entregas",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-1-3",
+          "condoId": 1,
+          "name": "Garagem / Portões",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-1-4",
+          "condoId": 1,
+          "name": "Área de Lazer / Piscina",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-1-5",
+          "condoId": 1,
+          "name": "Ronda Perimetral",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        }
+      ]
+    },
+    {
+      "condoId": 8,
+      "servicePosts": [
+        "Portaria Principal (Social)",
+        "Portaria de Serviço / Entregas",
+        "Garagem / Portões",
+        "Área de Lazer / Piscina",
+        "Ronda Perimetral"
+      ],
+      "photoUrl": "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&auto=format&fit=crop&q=80",
+      "serviceStations": [
+        {
+          "id": "st-8-1",
+          "condoId": 8,
+          "name": "Portaria Principal (Social)",
+          "type": "portaria_principal",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-8-2",
+          "condoId": 8,
+          "name": "Portaria de Serviço / Entregas",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-8-3",
+          "condoId": 8,
+          "name": "Garagem / Portões",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-8-4",
+          "condoId": 8,
+          "name": "Área de Lazer / Piscina",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-8-5",
+          "condoId": 8,
+          "name": "Ronda Perimetral",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        }
+      ]
+    },
+    {
+      "condoId": 6,
+      "servicePosts": [
+        "Portaria Principal (Social)",
+        "Portaria de Serviço / Entregas",
+        "Garagem / Portões",
+        "Área de Lazer / Piscina",
+        "Ronda Perimetral"
+      ],
+      "photoUrl": "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&auto=format&fit=crop&q=80",
+      "serviceStations": [
+        {
+          "id": "st-6-1",
+          "condoId": 6,
+          "name": "Portaria Principal (Social)",
+          "type": "portaria_principal",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-6-2",
+          "condoId": 6,
+          "name": "Portaria de Serviço / Entregas",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-6-3",
+          "condoId": 6,
+          "name": "Garagem / Portões",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-6-4",
+          "condoId": 6,
+          "name": "Área de Lazer / Piscina",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-6-5",
+          "condoId": 6,
+          "name": "Ronda Perimetral",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        }
+      ]
+    },
+    {
+      "condoId": 7,
+      "servicePosts": [
+        "Portaria Principal (Social)",
+        "Portaria de Serviço / Entregas",
+        "Garagem / Portões",
+        "Área de Lazer / Piscina",
+        "Ronda Perimetral"
+      ],
+      "photoUrl": "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&auto=format&fit=crop&q=80",
+      "serviceStations": [
+        {
+          "id": "st-7-1",
+          "condoId": 7,
+          "name": "Portaria Principal (Social)",
+          "type": "portaria_principal",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-7-2",
+          "condoId": 7,
+          "name": "Portaria de Serviço / Entregas",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-7-3",
+          "condoId": 7,
+          "name": "Garagem / Portões",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-7-4",
+          "condoId": 7,
+          "name": "Área de Lazer / Piscina",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-7-5",
+          "condoId": 7,
+          "name": "Ronda Perimetral",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        }
+      ]
+    },
+    {
+      "condoId": 4,
+      "servicePosts": [
+        "Portaria Principal (Social)",
+        "Portaria de Serviço / Entregas",
+        "Garagem / Portões",
+        "Área de Lazer / Piscina",
+        "Ronda Perimetral"
+      ],
+      "photoUrl": "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&auto=format&fit=crop&q=80",
+      "serviceStations": [
+        {
+          "id": "st-4-1",
+          "condoId": 4,
+          "name": "Portaria Principal (Social)",
+          "type": "portaria_principal",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-4-2",
+          "condoId": 4,
+          "name": "Portaria de Serviço / Entregas",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-4-3",
+          "condoId": 4,
+          "name": "Garagem / Portões",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-4-4",
+          "condoId": 4,
+          "name": "Área de Lazer / Piscina",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-4-5",
+          "condoId": 4,
+          "name": "Ronda Perimetral",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        }
+      ]
+    },
+    {
+      "condoId": 11,
+      "servicePosts": [
+        "Portaria Principal (Social)",
+        "Portaria de Serviço / Entregas",
+        "Garagem / Portões",
+        "Área de Lazer / Piscina",
+        "Ronda Perimetral"
+      ],
+      "photoUrl": "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&auto=format&fit=crop&q=80",
+      "serviceStations": [
+        {
+          "id": "st-11-1",
+          "condoId": 11,
+          "name": "Portaria Principal (Social)",
+          "type": "portaria_principal",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-11-2",
+          "condoId": 11,
+          "name": "Portaria de Serviço / Entregas",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-11-3",
+          "condoId": 11,
+          "name": "Garagem / Portões",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-11-4",
+          "condoId": 11,
+          "name": "Área de Lazer / Piscina",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-11-5",
+          "condoId": 11,
+          "name": "Ronda Perimetral",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        }
+      ]
+    },
+    {
+      "condoId": 12,
+      "servicePosts": [
+        "Portaria Principal (Social)",
+        "Portaria de Serviço / Entregas",
+        "Garagem / Portões",
+        "Área de Lazer / Piscina",
+        "Ronda Perimetral"
+      ],
+      "photoUrl": "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&auto=format&fit=crop&q=80",
+      "serviceStations": [
+        {
+          "id": "st-12-1",
+          "condoId": 12,
+          "name": "Portaria Principal (Social)",
+          "type": "portaria_principal",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-12-2",
+          "condoId": 12,
+          "name": "Portaria de Serviço / Entregas",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-12-3",
+          "condoId": 12,
+          "name": "Garagem / Portões",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-12-4",
+          "condoId": 12,
+          "name": "Área de Lazer / Piscina",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-12-5",
+          "condoId": 12,
+          "name": "Ronda Perimetral",
+          "type": "posto_geral",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        }
+      ]
+    },
+    {
+      "condoId": 13,
+      "servicePosts": [
+        "Portaria Principal (Social)",
+        "Área de Lazer / Piscina"
+      ],
+      "serviceStations": [
+        {
+          "id": "st-13-1",
+          "condoId": 13,
+          "name": "Portaria Principal (Social)",
+          "type": "portaria_principal",
+          "shiftSchedule": "12x36 Diurno (06h às 18h)",
+          "assignedAgentName": null
+        },
+        {
+          "id": "st-13-2",
+          "condoId": 13,
+          "name": "Área de Lazer / Piscina",
+          "type": "area_lazer",
+          "shiftSchedule": "12x36 Diurno",
+          "assignedAgentName": null
+        }
+      ],
+      "photoUrl": "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&auto=format&fit=crop&q=80",
+      "imageUrl": "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&auto=format&fit=crop&q=80"
+    }
+  ]
 }

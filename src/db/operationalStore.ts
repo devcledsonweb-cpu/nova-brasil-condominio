@@ -63,7 +63,9 @@ export interface StoredCompanyAsset {
 export interface StoredCondoMeta {
   condoId: number;
   servicePosts?: string[];
+  serviceStations?: any[];
   photoUrl?: string | null;
+  imageUrl?: string | null;
 }
 
 export interface StoredMaintenanceOrder {
@@ -709,11 +711,42 @@ export function getStoreCondoMeta(condoId: number): StoredCondoMeta {
   const db = ensureDataFile();
   if (!db.condoMetas) db.condoMetas = [];
   const found = db.condoMetas.find((m) => m.condoId === condoId);
-  if (found) return found;
+  if (found) {
+    if (!found.serviceStations && found.servicePosts) {
+      found.serviceStations = found.servicePosts.map((p, idx) => ({
+        id: `st-${condoId}-${idx + 1}`,
+        condoId,
+        name: p,
+        type: idx === 0 ? 'portaria_principal' : 'posto_geral',
+        shiftSchedule: '12x36 Diurno (06h às 18h)',
+        assignedAgentName: null,
+      }));
+    }
+    return found;
+  }
   const defaultMeta: StoredCondoMeta = {
     condoId,
     servicePosts: ['Portaria Principal (Social)', 'Portaria de Serviço / Entregas', 'Garagem / Portões', 'Área de Lazer / Piscina', 'Ronda Perimetral'],
+    serviceStations: [
+      {
+        id: `st-${condoId}-1`,
+        condoId,
+        name: 'Portaria Principal (Social)',
+        type: 'portaria_principal',
+        shiftSchedule: '12x36 Diurno (06h às 18h)',
+        assignedAgentName: null,
+      },
+      {
+        id: `st-${condoId}-2`,
+        condoId,
+        name: 'Área de Lazer / Piscina',
+        type: 'area_lazer',
+        shiftSchedule: '12x36 Diurno',
+        assignedAgentName: null,
+      },
+    ],
     photoUrl: 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&auto=format&fit=crop&q=80',
+    imageUrl: 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&auto=format&fit=crop&q=80',
   };
   db.condoMetas.push(defaultMeta);
   saveDataFile();
@@ -723,16 +756,42 @@ export function getStoreCondoMeta(condoId: number): StoredCondoMeta {
 export function updateStoreCondoMeta(condoId: number, data: Partial<StoredCondoMeta>): StoredCondoMeta {
   const db = ensureDataFile();
   if (!db.condoMetas) db.condoMetas = [];
+  const photo = data.imageUrl !== undefined ? data.imageUrl : data.photoUrl;
   const idx = db.condoMetas.findIndex((m) => m.condoId === condoId);
   if (idx !== -1) {
-    db.condoMetas[idx] = { ...db.condoMetas[idx], ...data };
+    db.condoMetas[idx] = {
+      ...db.condoMetas[idx],
+      ...data,
+      photoUrl: photo !== undefined ? photo : db.condoMetas[idx].photoUrl,
+      imageUrl: photo !== undefined ? photo : db.condoMetas[idx].imageUrl,
+      servicePosts: data.servicePosts || (data.serviceStations ? data.serviceStations.map((s: any) => s.name) : db.condoMetas[idx].servicePosts),
+    };
     saveDataFile();
     return db.condoMetas[idx];
   }
   const newMeta: StoredCondoMeta = {
     condoId,
-    servicePosts: data.servicePosts || ['Portaria Principal (Social)', 'Portaria de Serviço / Entregas', 'Garagem / Portões', 'Área de Lazer / Piscina', 'Ronda Perimetral'],
-    photoUrl: data.photoUrl ?? 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&auto=format&fit=crop&q=80',
+    servicePosts: data.servicePosts || (data.serviceStations ? data.serviceStations.map((s: any) => s.name) : ['Portaria Principal (Social)', 'Portaria de Serviço / Entregas', 'Garagem / Portões', 'Área de Lazer / Piscina', 'Ronda Perimetral']),
+    serviceStations: data.serviceStations || [
+      {
+        id: `st-${condoId}-1`,
+        condoId,
+        name: 'Portaria Principal (Social)',
+        type: 'portaria_principal',
+        shiftSchedule: '12x36 Diurno (06h às 18h)',
+        assignedAgentName: null,
+      },
+      {
+        id: `st-${condoId}-2`,
+        condoId,
+        name: 'Área de Lazer / Piscina',
+        type: 'area_lazer',
+        shiftSchedule: '12x36 Diurno',
+        assignedAgentName: null,
+      },
+    ],
+    photoUrl: photo ?? 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&auto=format&fit=crop&q=80',
+    imageUrl: photo ?? 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&auto=format&fit=crop&q=80',
   };
   db.condoMetas.push(newMeta);
   saveDataFile();

@@ -50,6 +50,11 @@ export const Header: React.FC<HeaderProps> = ({
   const isMenuOpen = externalIsMobileMenuOpen !== undefined ? externalIsMobileMenuOpen : internalMenuOpen;
   const setMenuOpen = externalSetIsMobileMenuOpen !== undefined ? externalSetIsMobileMenuOpen : setInternalMenuOpen;
 
+  const isMasterAdmin =
+    user?.email?.toLowerCase() === 'administrativo@novabrasil.com' ||
+    user?.email?.toLowerCase() === 'cledson@novabrasil.com';
+  const isSuperAdmin = role === 'sindico' || role === 'admin' || isMasterAdmin;
+
   const navItems = [
     { id: 'dashboard', label: 'Painel Geral', icon: LayoutDashboard },
     { id: 'condominios', label: `Postos (${condominiums.length})`, icon: Building2 },
@@ -60,7 +65,7 @@ export const Header: React.FC<HeaderProps> = ({
     { id: 'manutencoes', label: 'Manutenções', icon: Wrench },
     { id: 'ocorrencias', label: 'Livro de Turnos', icon: FileText },
     { id: 'relatorios', label: 'Central de PDFs', icon: FileDown },
-    ...(role === 'sindico' || role === 'admin'
+    ...(isSuperAdmin
       ? [{ id: 'usuarios', label: 'Gestão de Usuários', icon: KeyRound }]
       : []),
   ];

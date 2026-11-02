@@ -15,7 +15,8 @@ export const requireAuth = async (
   const authHeader = req.headers.authorization;
   const roleHeader = req.headers['x-user-role'] as string | undefined;
   const nameHeader = req.headers['x-user-name'] as string | undefined;
-  const emailHeader = req.headers['x-user-email'] as string | undefined;
+  const emailHeader = (req.headers['x-user-email'] as string | undefined)?.toLowerCase().trim();
+  const isMasterAdminEmail = emailHeader === 'administrativo@novabrasil.com' || emailHeader === 'cledson@novabrasil.com';
 
   // 1. If Firebase Bearer token is provided, verify it
   if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -23,7 +24,8 @@ export const requireAuth = async (
     try {
       const decodedToken = await adminAuth.verifyIdToken(token);
       req.user = decodedToken;
-      req.userRole = (roleHeader === 'portaria' ? 'portaria' : 'sindico');
+      const effectiveRole = isMasterAdminEmail ? 'sindico' : (roleHeader === 'portaria' ? 'portaria' : 'sindico');
+      req.userRole = effectiveRole;
       return next();
     } catch (error) {
       console.warn('Bearer token verification error, falling back to role context:', error);
@@ -31,11 +33,11 @@ export const requireAuth = async (
   }
 
   // 2. Role context fallback
-  if (roleHeader) {
-    const isPortaria = roleHeader === 'portaria' || roleHeader === 'operador';
-    const effectiveRole = isPortaria ? 'portaria' : 'sindico';
+  if (roleHeader || emailHeader) {
+    const isPortaria = !isMasterAdminEmail && (roleHeader === 'portaria' || roleHeader === 'operador');
+    const effectiveRole = isMasterAdminEmail ? 'sindico' : (isPortaria ? 'portaria' : 'sindico');
     req.user = {
-      uid: `local-${roleHeader}`,
+      uid: `local-${emailHeader || roleHeader}`,
       email: emailHeader || `${roleHeader}@novabrasil.com`,
       name: nameHeader || (isPortaria ? 'Operador de Portaria' : 'Gestor Geral'),
       role: effectiveRole,

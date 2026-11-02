@@ -50,7 +50,10 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
   getAuthHeaders,
 }) => {
   const { user, role } = useAuth();
-  const isSuperAdmin = role === 'sindico' || role === 'admin';
+  const isMasterAdmin =
+    user?.email?.toLowerCase() === 'administrativo@novabrasil.com' ||
+    user?.email?.toLowerCase() === 'cledson@novabrasil.com';
+  const isSuperAdmin = role === 'sindico' || role === 'admin' || isMasterAdmin;
   const isSupervisor = role === 'supervisor';
 
   const userAssignedIds: number[] = Array.isArray(user?.condoIds) && user.condoIds.length > 0
@@ -198,26 +201,54 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
       const url = editingCondo ? `/api/condominiums/${editingCondo.id}` : '/api/condominiums';
       const method = editingCondo ? 'PUT' : 'POST';
 
-      // 1. Tentar salvar no servidor backend
-      let savedCondo: any = null;
-      try {
-        const result = await safeFetchJson(url, {
-          method,
-          headers,
-          body: JSON.stringify({
-            ...formData,
-            totalUnits: Number(formData.totalUnits) || 0,
-          }),
-        });
+      const condoPayload = {
+        name: formData.name.trim(),
+        cnpj: formData.cnpj?.trim() || null,
+        address: formData.address?.trim() || null,
+        city: formData.city?.trim() || null,
+        state: formData.state || 'SP',
+        zipCode: formData.zipCode?.trim() || null,
+        totalUnits: Number(formData.totalUnits) || 0,
+        supervisorName: formData.supervisorName?.trim() || formData.sindicoName?.trim() || 'Supervisor Regional',
+        supervisorPhone: formData.supervisorPhone?.trim() || formData.sindicoPhone?.trim() || '',
+        contractType: formData.contractType?.trim() || 'Portaria 24h + Ronda Noturna',
+        sindicoName: formData.supervisorName?.trim() || formData.sindicoName?.trim() || 'Supervisor Regional',
+        sindicoPhone: formData.supervisorPhone?.trim() || formData.sindicoPhone?.trim() || '',
+        sindicoEmail: formData.contractType?.trim() || 'Portaria 24h + Ronda Noturna',
+        status: formData.status || 'ativo',
+        photoUrl: formData.imageUrl?.trim() || null,
+        imageUrl: formData.imageUrl?.trim() || null,
+        serviceStations: editingCondo?.serviceStations || [
+          {
+            id: `st-new-1`,
+            name: 'Portaria Principal (Social)',
+            type: 'portaria_principal',
+            shiftSchedule: '12x36 Diurno (06h às 18h)',
+            assignedAgentName: null,
+          },
+          {
+            id: `st-new-2`,
+            name: 'Área de Lazer / Piscina',
+            type: 'area_lazer',
+            shiftSchedule: '12x36 Diurno',
+            assignedAgentName: null,
+          },
+        ],
+      };
 
-        if (result.success && result.data) {
-          savedCondo = result.data;
-        }
-      } catch (e) {
-        console.warn('Backend indisponível, sincronizando localmente:', e);
+      const result = await safeFetchJson(url, {
+        method,
+        headers,
+        body: JSON.stringify(condoPayload),
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || 'Falha ao salvar condomínio no servidor.');
       }
 
-      // 2. Sincronizar e salvar localmente para garantir persistência mesmo em Vercel ou conexão instável
+      const savedCondo = result.data;
+
+      // 2. Sincronizar e salvar localmente para garantir persistência imediata
       const localCondosStr = localStorage.getItem('novabrasil_condos');
       let localCondos: Condominium[] = localCondosStr
         ? JSON.parse(localCondosStr)
@@ -228,6 +259,7 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
           c.id === editingCondo.id
             ? {
                 ...c,
+                ...(savedCondo || {}),
                 name: formData.name.trim(),
                 cnpj: formData.cnpj || null,
                 address: formData.address || null,
@@ -243,58 +275,18 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
                 sindicoEmail: formData.contractType?.trim() || formData.sindicoEmail || 'Portaria 24h + Ronda Noturna',
                 status: (formData.status as 'ativo' | 'implantacao' | 'inativo') || 'ativo',
                 imageUrl: formData.imageUrl?.trim() || c.imageUrl || null,
-                serviceStations: c.serviceStations || [],
+                photoUrl: formData.imageUrl?.trim() || c.photoUrl || null,
+                serviceStations: savedCondo?.serviceStations || c.serviceStations || [],
               }
             : c
         );
-      } else {
-        const newCondo: Condominium = savedCondo || {
-          id: Date.now(),
-          name: formData.name.trim(),
-          cnpj: formData.cnpj || null,
-          address: formData.address || null,
-          city: formData.city || null,
-          state: formData.state || 'SP',
-          zipCode: formData.zipCode || null,
-          totalUnits: Number(formData.totalUnits) || 0,
-          supervisorName: formData.supervisorName?.trim() || formData.sindicoName?.trim() || null,
-          supervisorPhone: formData.supervisorPhone?.trim() || formData.sindicoPhone?.trim() || null,
-          contractType: formData.contractType?.trim() || 'Portaria 24h + Ronda Noturna',
-          agentsCount: 0,
-          vehiclesCount: 0,
-          assetsCount: 0,
-          maintenancesCount: 0,
-          sindicoName: formData.supervisorName?.trim() || formData.sindicoName || null,
-          sindicoPhone: formData.supervisorPhone?.trim() || formData.sindicoPhone || null,
-          sindicoEmail: formData.contractType?.trim() || formData.sindicoEmail || 'Portaria 24h + Ronda Noturna',
-          status: (formData.status as 'ativo' | 'implantacao' | 'inativo') || 'ativo',
-          imageUrl: formData.imageUrl?.trim() || null,
-          serviceStations: [
-            {
-              id: `st-${Date.now()}-1`,
-              condoId: Date.now(),
-              name: 'Portaria Principal (Social)',
-              type: 'portaria_principal',
-              shiftSchedule: '12x36 Diurno (06h às 18h)',
-              assignedAgentName: null,
-            },
-            {
-              id: `st-${Date.now()}-2`,
-              condoId: Date.now(),
-              name: 'Área de Lazer / Piscina',
-              type: 'area_lazer',
-              shiftSchedule: '12x36 Diurno',
-              assignedAgentName: null,
-            },
-          ],
-          createdAt: new Date().toISOString(),
-        };
-        localCondos.push(newCondo);
+      } else if (savedCondo) {
+        localCondos = [savedCondo, ...localCondos.filter((c) => c.id !== savedCondo.id)];
       }
 
       localStorage.setItem('novabrasil_condos', JSON.stringify(localCondos));
 
-      // 3. Atualizar dados na interface
+      // 3. Atualizar dados autoritativos na interface
       try {
         await onRefresh();
       } catch (e) {
@@ -303,7 +295,7 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
 
       setIsAddModalOpen(false);
     } catch (err: any) {
-      setErrorMsg(err.message || 'Erro inesperado ao salvar.');
+      setErrorMsg(err.message || 'Erro inesperado ao salvar condomínio.');
     } finally {
       setIsSubmitting(false);
     }
@@ -390,6 +382,18 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
     );
     localStorage.setItem('novabrasil_condos', JSON.stringify(localCondos));
 
+    // Sincroniza postos de serviço no servidor backend para persistência multi-dispositivos
+    try {
+      const headers = await getAuthHeaders();
+      await fetch(`/api/condominiums/${managingStationsCondo.id}`, {
+        method: 'PUT',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ serviceStations: updatedStations }),
+      });
+    } catch (e) {
+      console.warn('Erro ao sincronizar postos de serviço no servidor:', e);
+    }
+
     // Se um agente foi escalado, sincroniza no cadastro do agente
     if (assignedAgent) {
       const localAgentsStr = localStorage.getItem('novabrasil_agents');
@@ -432,6 +436,18 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
     );
     localStorage.setItem('novabrasil_condos', JSON.stringify(localCondos));
 
+    // Sincroniza remoção no servidor backend
+    try {
+      const headers = await getAuthHeaders();
+      await fetch(`/api/condominiums/${managingStationsCondo.id}`, {
+        method: 'PUT',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ serviceStations: updatedStations }),
+      });
+    } catch (e) {
+      console.warn('Erro ao sincronizar remoção no servidor:', e);
+    }
+
     setManagingStationsCondo({ ...managingStationsCondo, serviceStations: updatedStations });
     setStationsFeedback('Posto de serviço removido.');
     await onRefresh();
@@ -461,6 +477,18 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
       c.id === managingStationsCondo.id ? { ...c, serviceStations: updatedStations } : c
     );
     localStorage.setItem('novabrasil_condos', JSON.stringify(localCondos));
+
+    // Sincroniza reatribuição no servidor backend
+    try {
+      const headers = await getAuthHeaders();
+      await fetch(`/api/condominiums/${managingStationsCondo.id}`, {
+        method: 'PUT',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ serviceStations: updatedStations }),
+      });
+    } catch (e) {
+      console.warn('Erro ao sincronizar escala no servidor:', e);
+    }
 
     // Sincroniza também no storage dos agentes
     if (assignedAgent) {

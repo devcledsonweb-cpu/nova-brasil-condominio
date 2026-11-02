@@ -114,14 +114,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.warn('Backend indisponível ou em hospedagem estática. Ativando autenticação direta.');
     }
 
-    // 2. Autenticação Master Garantida (Acesso Total)
-    if (cleanEmail === 'administrativo@novabrasil.com') {
-      if (cleanPassword === '@nb32573515') {
+    // 2. Autenticação Master Garantida (Acesso Total da Gestão Nova Brasil)
+    if (cleanEmail === 'administrativo@novabrasil.com' || cleanEmail === 'cledson@novabrasil.com') {
+      const isCledson = cleanEmail === 'cledson@novabrasil.com';
+      const isPasswordValid = isCledson
+        ? (cleanPassword === '123456' || cleanPassword === '@nb32573515')
+        : cleanPassword === '@nb32573515';
+
+      if (isPasswordValid) {
         const masterUser: UserProfile = {
-          id: 1,
-          uid: 'admin-master',
-          email: 'administrativo@novabrasil.com',
-          name: 'Administrador Geral',
+          id: isCledson ? 7 : 1,
+          uid: isCledson ? 'usr-cledson-admin' : 'admin-master',
+          email: cleanEmail,
+          name: isCledson ? 'CLEDSON DA SILVA SALES' : 'Administrador Geral',
           role: 'sindico',
           originalRole: 'sindico',
           permissions: '["all"]',
@@ -134,7 +139,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.setItem('novabrasil_user', JSON.stringify(masterUser));
         return masterUser;
       } else {
-        throw new Error('Senha incorreta para o e-mail administrativo@novabrasil.com');
+        throw new Error(`Senha incorreta para o e-mail ${cleanEmail}`);
       }
     }
 

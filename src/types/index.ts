@@ -29,6 +29,7 @@ export interface Condominium {
   status: 'ativo' | 'inativo' | 'implantacao';
   createdAt?: string;
   imageUrl?: string | null; // Foto da fachada do condomínio
+  photoUrl?: string | null;
   serviceStations?: ServiceStation[]; // Postos de serviço internos (Portaria Principal, Lazer, Garagem, etc.)
   // Métricas operacionais agregadas
   agentsCount?: number;

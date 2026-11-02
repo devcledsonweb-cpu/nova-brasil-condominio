@@ -48,7 +48,10 @@ function NovaBrasilMain() {
 
   // Sincronizar condomínio padrão se o usuário for restrito a um condomínio específico
   useEffect(() => {
-    const isSuper = role === 'sindico' || role === 'admin';
+    const isMaster =
+      user?.email?.toLowerCase() === 'administrativo@novabrasil.com' ||
+      user?.email?.toLowerCase() === 'cledson@novabrasil.com';
+    const isSuper = role === 'sindico' || role === 'admin' || isMaster;
     if (!isSuper && user) {
       const userAssignedIds: number[] = Array.isArray(user.condoIds) && user.condoIds.length > 0
         ? user.condoIds
@@ -109,7 +112,23 @@ function NovaBrasilMain() {
       let loadedCondos: Condominium[] = [];
       const condosData = await parseJsonRes<Condominium[]>(condosRes);
       if (condosData && Array.isArray(condosData)) {
-        loadedCondos = condosData;
+        loadedCondos = condosData.map((c: any) => ({
+          ...c,
+          imageUrl: c.imageUrl || c.photoUrl || 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=600&q=80',
+          photoUrl: c.photoUrl || c.imageUrl || null,
+          serviceStations: Array.isArray(c.serviceStations) && c.serviceStations.length > 0
+            ? c.serviceStations
+            : (Array.isArray(c.servicePosts)
+                ? c.servicePosts.map((p: string, idx: number) => ({
+                    id: `st-${c.id}-${idx + 1}`,
+                    condoId: c.id,
+                    name: p,
+                    type: idx === 0 ? 'portaria_principal' : 'posto_geral',
+                    shiftSchedule: '12x36 Diurno (06h às 18h)',
+                    assignedAgentName: null,
+                  }))
+                : []),
+        }));
         localStorage.setItem('novabrasil_condos', JSON.stringify(loadedCondos));
       } else {
         const defaultCondos: Condominium[] = [

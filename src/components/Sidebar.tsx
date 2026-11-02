@@ -28,6 +28,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const { role, user } = useAuth();
 
+  const isMasterAdmin =
+    user?.email?.toLowerCase() === 'administrativo@novabrasil.com' ||
+    user?.email?.toLowerCase() === 'cledson@novabrasil.com';
+  const isSuperAdmin = role === 'sindico' || role === 'admin' || isMasterAdmin;
+
   const navItems = [
     {
       id: 'dashboard',
@@ -83,7 +88,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: FileDown,
       description: 'Download de relatórios oficiais',
     },
-    ...(role === 'sindico' || role === 'admin'
+    ...(isSuperAdmin
       ? [
           {
             id: 'usuarios',

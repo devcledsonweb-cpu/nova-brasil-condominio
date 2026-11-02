@@ -112,8 +112,27 @@ export async function getCondominiums() {
         sindicoPhone: c.sindicoPhone || '',
         sindicoEmail: c.sindicoEmail || 'Portaria 24h + Ronda Noturna',
         status: (c.status as 'ativo' | 'inativo' | 'implantacao') || 'ativo',
-        photoUrl: meta.photoUrl || null,
+        photoUrl: meta.photoUrl || meta.imageUrl || null,
+        imageUrl: meta.imageUrl || meta.photoUrl || null,
         servicePosts: meta.servicePosts || ['Portaria Principal', 'Garagem / Portões', 'Área de Lazer / Piscina', 'Ronda Perimetral'],
+        serviceStations: meta.serviceStations || [
+          {
+            id: `st-${c.id}-1`,
+            condoId: c.id,
+            name: 'Portaria Principal (Social)',
+            type: 'portaria_principal',
+            shiftSchedule: '12x36 Diurno (06h às 18h)',
+            assignedAgentName: null,
+          },
+          {
+            id: `st-${c.id}-2`,
+            condoId: c.id,
+            name: 'Área de Lazer / Piscina',
+            type: 'area_lazer',
+            shiftSchedule: '12x36 Diurno',
+            assignedAgentName: null,
+          },
+        ],
         createdAt: c.createdAt,
         agentsCount: agents.length,
         vehiclesCount: vehicles.length,
@@ -140,8 +159,27 @@ export async function getCondominiumById(id: number) {
       supervisorName: c.sindicoName || 'Supervisor Regional',
       supervisorPhone: c.sindicoPhone || '',
       contractType: c.sindicoEmail || 'Portaria 24h + Ronda Noturna',
-      photoUrl: meta.photoUrl || null,
+      photoUrl: meta.photoUrl || meta.imageUrl || null,
+      imageUrl: meta.imageUrl || meta.photoUrl || null,
       servicePosts: meta.servicePosts || ['Portaria Principal', 'Garagem / Portões', 'Área de Lazer / Piscina', 'Ronda Perimetral'],
+      serviceStations: meta.serviceStations || [
+        {
+          id: `st-${id}-1`,
+          condoId: id,
+          name: 'Portaria Principal (Social)',
+          type: 'portaria_principal',
+          shiftSchedule: '12x36 Diurno (06h às 18h)',
+          assignedAgentName: null,
+        },
+        {
+          id: `st-${id}-2`,
+          condoId: id,
+          name: 'Área de Lazer / Piscina',
+          type: 'area_lazer',
+          shiftSchedule: '12x36 Diurno',
+          assignedAgentName: null,
+        },
+      ],
     };
   } catch (error) {
     console.error('getCondominiumById failed:', error);
@@ -165,7 +203,9 @@ export async function createCondominium(data: {
   sindicoEmail?: string;
   status?: string;
   photoUrl?: string;
+  imageUrl?: string;
   servicePosts?: string[];
+  serviceStations?: any[];
 }) {
   try {
     const res = await db
@@ -186,12 +226,38 @@ export async function createCondominium(data: {
       .returning();
 
     const c = res[0];
-    if (data.servicePosts || data.photoUrl) {
-      updateStoreCondoMeta(c.id, {
-        servicePosts: data.servicePosts,
-        photoUrl: data.photoUrl,
-      });
-    }
+    const photo = data.imageUrl?.trim() || data.photoUrl?.trim() || null;
+    const initialStations = data.serviceStations && Array.isArray(data.serviceStations) && data.serviceStations.length > 0
+      ? data.serviceStations.map((s: any, idx: number) => ({
+          ...s,
+          id: s.id || `st-${c.id}-${idx + 1}`,
+          condoId: c.id,
+        }))
+      : [
+          {
+            id: `st-${c.id}-1`,
+            condoId: c.id,
+            name: 'Portaria Principal (Social)',
+            type: 'portaria_principal',
+            shiftSchedule: '12x36 Diurno (06h às 18h)',
+            assignedAgentName: null,
+          },
+          {
+            id: `st-${c.id}-2`,
+            condoId: c.id,
+            name: 'Área de Lazer / Piscina',
+            type: 'area_lazer',
+            shiftSchedule: '12x36 Diurno',
+            assignedAgentName: null,
+          },
+        ];
+
+    updateStoreCondoMeta(c.id, {
+      servicePosts: data.servicePosts || initialStations.map((s: any) => s.name),
+      serviceStations: initialStations,
+      photoUrl: photo,
+      imageUrl: photo,
+    });
     const meta = getStoreCondoMeta(c.id);
 
     return {
@@ -200,7 +266,9 @@ export async function createCondominium(data: {
       supervisorPhone: c.sindicoPhone || '',
       contractType: c.sindicoEmail || 'Portaria 24h + Ronda Noturna',
       photoUrl: meta.photoUrl || null,
+      imageUrl: meta.imageUrl || meta.photoUrl || null,
       servicePosts: meta.servicePosts || ['Portaria Principal', 'Garagem / Portões', 'Área de Lazer / Piscina', 'Ronda Perimetral'],
+      serviceStations: meta.serviceStations || initialStations,
     };
   } catch (error) {
     console.error('createCondominium failed:', error);
@@ -226,7 +294,9 @@ export async function updateCondominium(
     sindicoEmail?: string;
     status?: string;
     photoUrl?: string;
+    imageUrl?: string;
     servicePosts?: string[];
+    serviceStations?: any[];
   }
 ) {
   try {
@@ -271,10 +341,12 @@ export async function updateCondominium(
     }
     const c = res[0];
 
-    if (data.servicePosts !== undefined || data.photoUrl !== undefined) {
+    const photo = data.imageUrl !== undefined ? data.imageUrl?.trim() : data.photoUrl?.trim();
+    if (data.servicePosts !== undefined || data.serviceStations !== undefined || photo !== undefined) {
       updateStoreCondoMeta(id, {
         ...(data.servicePosts !== undefined ? { servicePosts: data.servicePosts } : {}),
-        ...(data.photoUrl !== undefined ? { photoUrl: data.photoUrl } : {}),
+        ...(data.serviceStations !== undefined ? { serviceStations: data.serviceStations } : {}),
+        ...(photo !== undefined ? { photoUrl: photo, imageUrl: photo } : {}),
       });
     }
     const meta = getStoreCondoMeta(id);
@@ -285,7 +357,26 @@ export async function updateCondominium(
       supervisorPhone: c.sindicoPhone || '',
       contractType: c.sindicoEmail || 'Portaria 24h + Ronda Noturna',
       photoUrl: meta.photoUrl || null,
+      imageUrl: meta.imageUrl || meta.photoUrl || null,
       servicePosts: meta.servicePosts || ['Portaria Principal', 'Garagem / Portões', 'Área de Lazer / Piscina', 'Ronda Perimetral'],
+      serviceStations: meta.serviceStations || [
+        {
+          id: `st-${id}-1`,
+          condoId: id,
+          name: 'Portaria Principal (Social)',
+          type: 'portaria_principal',
+          shiftSchedule: '12x36 Diurno (06h às 18h)',
+          assignedAgentName: null,
+        },
+        {
+          id: `st-${id}-2`,
+          condoId: id,
+          name: 'Área de Lazer / Piscina',
+          type: 'area_lazer',
+          shiftSchedule: '12x36 Diurno',
+          assignedAgentName: null,
+        },
+      ],
     };
   } catch (error) {
     console.error('updateCondominium failed:', error);
@@ -402,7 +493,29 @@ export async function createSystemUser(data: {
     const cleanEmail = data.email.trim().toLowerCase();
     const existing = await db.select().from(users).where(eq(users.email, cleanEmail));
     if (existing.length > 0) {
-      throw new Error('Já existe um usuário cadastrado com este e-mail.');
+      const updated = await db
+        .update(users)
+        .set({
+          name: data.name.trim(),
+          password: data.password,
+          role: data.role,
+          permissions: data.permissions || (data.role === 'sindico' ? '["all"]' : '["portaria","encomendas","acessos","veiculos"]'),
+          condoId: data.condoId !== undefined ? data.condoId : existing[0].condoId,
+          isActive: true,
+        })
+        .where(eq(users.email, cleanEmail))
+        .returning();
+
+      return {
+        id: updated[0].id,
+        uid: updated[0].uid,
+        email: updated[0].email,
+        name: updated[0].name,
+        role: updated[0].role,
+        permissions: updated[0].permissions,
+        condoId: updated[0].condoId,
+        isActive: updated[0].isActive,
+      };
     }
 
     const uid = `usr-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;

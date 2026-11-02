@@ -308,34 +308,28 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
       const headers = await getAuthHeaders();
       let createdUser: any = null;
 
-      try {
-        const res = await fetch('/api/users', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            name: cleanName,
-            email: cleanEmail,
-            password: cleanPassword,
-            role: selectedRole,
-            permissions,
-            condoId: primaryCondoId,
-            condoIds: userCondoIds,
-          }),
-        });
+      const res = await fetch('/api/users', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          name: cleanName,
+          email: cleanEmail,
+          password: cleanPassword,
+          role: selectedRole,
+          permissions,
+          condoId: primaryCondoId,
+          condoIds: userCondoIds,
+        }),
+      });
 
-        const text = await res.text();
-        if (text && text.trim()) {
-          try {
-            createdUser = JSON.parse(text);
-          } catch {}
-        }
-        if (!res.ok && createdUser?.error) {
-          throw new Error(createdUser.error);
-        }
-      } catch (postErr: any) {
-        if (postErr.message && !postErr.message.includes('fetch')) {
-          throw postErr;
-        }
+      const text = await res.text();
+      if (text && text.trim()) {
+        try {
+          createdUser = JSON.parse(text);
+        } catch {}
+      }
+      if (!res.ok) {
+        throw new Error(createdUser?.error || `Erro ${res.status} ao cadastrar usuário no servidor.`);
       }
 
       const newUserObj: SystemUser = {
