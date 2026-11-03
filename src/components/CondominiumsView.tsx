@@ -7,12 +7,6 @@ import { safeFetchJson } from '../services/api.ts';
 import { PhotoField } from './PhotoField.tsx';
 import { WhatsAppButton } from './WhatsAppButton.tsx';
 import {
-  COLLECTIONS,
-  saveToFirestore,
-  updateInFirestore,
-  deleteFromFirestore,
-} from '../services/firestoreSync.ts';
-import {
   Building2,
   Plus,
   Search,
@@ -244,75 +238,65 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
         ],
       };
 
-      // 1. Gravar prioritariamente no Firebase Firestore para sincronização imediata em todos os dispositivos
-      const condoId = editingCondo ? editingCondo.id : Date.now();
-      const resolvedStations: ServiceStation[] = condoPayload.serviceStations.map((s) => ({
-        ...s,
-        condoId,
-      }));
+      // 1. Gravar de forma definitiva e imediata no PostgreSQL
+      const res = await fetch(url, {
+        method,
+        headers,
+        body: JSON.stringify(condoPayload),
+      });
 
-      const condoToPersist: Condominium = {
-        ...(editingCondo || {}),
-        id: condoId,
-        ...condoPayload,
-        serviceStations: resolvedStations,
-        status: (formData.status as any) || 'ativo',
-        createdAt: editingCondo?.createdAt || new Date().toISOString(),
-      };
-
-      try {
-        await saveToFirestore(COLLECTIONS.CONDOMINIUMS, condoId, condoToPersist);
-      } catch (fErr) {
-        console.warn('Aviso ao sincronizar condomínio no Firestore:', fErr);
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || `Erro ${res.status} ao salvar condomínio.`);
       }
 
-      // 2. Sincroniza em background na API se disponível (não bloqueia em ambiente estático 405)
-      try {
-        const headers = await getAuthHeaders();
-        const url = editingCondo ? `/api/condominiums/${editingCondo.id}` : '/api/condominiums';
-        const method = editingCondo ? 'PUT' : 'POST';
-        const apiRes = await safeFetchJson(url, {
-          method,
-          headers,
-          body: JSON.stringify(condoPayload),
-        });
-        if (apiRes.success && apiRes.data?.id) {
-          condoToPersist.id = apiRes.data.id;
-        }
-      } catch (apiErr) {
-        console.warn('API em modo estático/offline (ignorado com Firestore ativo):', apiErr);
-      }
+      const savedCondo: Condominium = await res.json();
 
-      // 3. Sincronizar e salvar localmente para garantir persistência imediata
+      // 2. Atualizar estado local e cache
       const localCondosStr = localStorage.getItem('novabrasil_condos');
       let localCondos: Condominium[] = localCondosStr
         ? JSON.parse(localCondosStr)
         : [...condominiums];
 
       if (editingCondo) {
-        localCondos = localCondos.map((c) =>
-          c.id === editingCondo.id
-            ? {
-                ...c,
-                ...condoToPersist,
-              }
-            : c
-        );
+        localCondos = localCondos.map((c) => (c.id === editingCondo.id ? { ...c, ...savedCondo } : c));
       } else {
-        localCondos = [condoToPersist, ...localCondos.filter((c) => c.id !== condoToPersist.id)];
+        localCondos = [savedCondo, ...localCondos.filter((c) => c.id !== savedCondo.id)];
       }
-
       localStorage.setItem('novabrasil_condos', JSON.stringify(localCondos));
 
-      // 4. Atualizar dados autoritativos na interface
+      // 3. Notificar sincronização para outras abas e dispositivos
       try {
-        await onRefresh();
-      } catch (e) {
-        console.warn('Erro ao atualizar lista de condomínios:', e);
-      }
+        const bc = new BroadcastChannel('novabrasil_sync');
+        bc.postMessage({ type: 'SYNC_UPDATE', entity: 'condominiums' });
+        bc.close();
+      } catch {}
 
+      // 4. Fechar modal imediatamente para feedback instantâneo
       setIsAddModalOpen(false);
+      setEditingCondo(null);
+      setFormData({
+        name: '',
+        cnpj: '',
+        address: '',
+        city: '',
+        state: 'SP',
+        zipCode: '',
+        supervisorName: '',
+        supervisorPhone: '',
+        contractType: 'Portaria 24h + Ronda Noturna',
+        totalUnits: 0,
+        sindicoName: '',
+        sindicoPhone: '',
+        sindicoEmail: '',
+        status: 'ativo',
+        imageUrl: '',
+      });
+
+      // 5. Atualizar lista de condomínios da aplicação
+      await onRefresh().catch(() => {});
     } catch (err: any) {
+      console.error('Erro ao salvar condomínio:', err);
       setErrorMsg(err.message || 'Erro inesperado ao salvar condomínio.');
     } finally {
       setIsSubmitting(false);
@@ -329,21 +313,15 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
     }
 
     try {
-      // 1. Remover do Firebase Firestore (reflete instantaneamente em todos os celulares/computadores)
-      try {
-        await deleteFromFirestore(COLLECTIONS.CONDOMINIUMS, condo.id);
-      } catch (fErr) {
-        console.warn('Aviso ao remover condomínio do Firestore:', fErr);
-      }
-
       const headers = await getAuthHeaders();
-      try {
-        await safeFetchJson(`/api/condominiums/${condo.id}`, {
-          method: 'DELETE',
-          headers,
-        });
-      } catch (e) {
-        console.warn('API indisponível, deletando localmente:', e);
+      const res = await fetch(`/api/condominiums/${condo.id}`, {
+        method: 'DELETE',
+        headers,
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || 'Falha ao excluir condomínio no servidor.');
       }
 
       // Remover do localStorage
@@ -352,6 +330,12 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
         const localCondos = JSON.parse(localCondosStr).filter((c: any) => c.id !== condo.id);
         localStorage.setItem('novabrasil_condos', JSON.stringify(localCondos));
       }
+
+      try {
+        const bc = new BroadcastChannel('novabrasil_sync');
+        bc.postMessage({ type: 'CONDOMINIUMS_UPDATED' });
+        bc.close();
+      } catch {}
 
       if (selectedCondoId === condo.id) {
         onSelectCondo('all');
@@ -407,15 +391,6 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
     );
     localStorage.setItem('novabrasil_condos', JSON.stringify(localCondos));
 
-    // Sincroniza postos de serviço no Firebase Firestore
-    try {
-      await updateInFirestore(COLLECTIONS.CONDOMINIUMS, managingStationsCondo.id, {
-        serviceStations: updatedStations,
-      });
-    } catch (fErr) {
-      console.warn('Erro ao sincronizar postos no Firestore:', fErr);
-    }
-
     // Sincroniza postos de serviço no servidor backend para persistência multi-dispositivos
     try {
       const headers = await getAuthHeaders();
@@ -424,6 +399,13 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
         headers: { ...headers, 'Content-Type': 'application/json' },
         body: JSON.stringify({ serviceStations: updatedStations }),
       });
+      try {
+        const bc = new BroadcastChannel('novabrasil_sync');
+        bc.postMessage({ type: 'SYNC_UPDATE', entity: 'condominiums' });
+        bc.close();
+      } catch {
+        // BroadcastChannel optional
+      }
     } catch (e) {
       console.warn('Erro ao sincronizar postos de serviço no servidor:', e);
     }
@@ -470,15 +452,6 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
     );
     localStorage.setItem('novabrasil_condos', JSON.stringify(localCondos));
 
-    // Sincroniza remoção no Firebase Firestore
-    try {
-      await updateInFirestore(COLLECTIONS.CONDOMINIUMS, managingStationsCondo.id, {
-        serviceStations: updatedStations,
-      });
-    } catch (fErr) {
-      console.warn('Erro ao atualizar postos no Firestore:', fErr);
-    }
-
     // Sincroniza remoção no servidor backend
     try {
       const headers = await getAuthHeaders();
@@ -487,6 +460,13 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
         headers: { ...headers, 'Content-Type': 'application/json' },
         body: JSON.stringify({ serviceStations: updatedStations }),
       });
+      try {
+        const bc = new BroadcastChannel('novabrasil_sync');
+        bc.postMessage({ type: 'SYNC_UPDATE', entity: 'condominiums' });
+        bc.close();
+      } catch {
+        // BroadcastChannel optional
+      }
     } catch (e) {
       console.warn('Erro ao sincronizar remoção no servidor:', e);
     }

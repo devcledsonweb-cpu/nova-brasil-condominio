@@ -26,14 +26,14 @@ import {
   ShiftCoverage,
 } from './types/index.ts';
 import { Loader2, Bell } from 'lucide-react';
-import {
-  COLLECTIONS,
-  subscribeToFirestoreCollection,
-  saveToFirestore,
-  updateInFirestore,
-  deleteFromFirestore,
-  seedIfEmpty,
-} from './services/firestoreSync.ts';
+
+const notifySync = (entity?: string) => {
+  try {
+    const bc = new BroadcastChannel('novabrasil_sync');
+    bc.postMessage({ type: 'SYNC_UPDATE', entity, timestamp: Date.now() });
+    bc.close();
+  } catch {}
+};
 
 function NovaBrasilMain() {
   const { user, getAuthHeaders, role, isAuthenticated, loading: authLoading } = useAuth();
@@ -267,72 +267,42 @@ function NovaBrasilMain() {
     }
   };
 
-  // 1. Inicia escuta em tempo real via Firebase Firestore (Zero Latência entre todos os dispositivos)
+  // 1. Sincronização multi-dispositivo em tempo real com o PostgreSQL central
   useEffect(() => {
     if (!isAuthenticated) return;
 
-    const unsubCondos = subscribeToFirestoreCollection<Condominium>(COLLECTIONS.CONDOMINIUMS, (items) => {
-      if (items && items.length > 0) {
-        setCondominiums(items);
-        localStorage.setItem('novabrasil_condos', JSON.stringify(items));
-      }
-    });
-
-    const unsubAgents = subscribeToFirestoreCollection<SecurityAgent>(COLLECTIONS.AGENTS, (items) => {
-      if (items && items.length > 0) {
-        setAgents(items);
-        localStorage.setItem('novabrasil_agents', JSON.stringify(items));
-      }
-    });
-
-    const unsubVehicles = subscribeToFirestoreCollection<PatrolVehicle>(COLLECTIONS.VEHICLES, (items) => {
-      if (items && items.length > 0) {
-        setPatrolVehicles(items);
-        localStorage.setItem('novabrasil_patrol_vehicles', JSON.stringify(items));
-      }
-    });
-
-    const unsubAssets = subscribeToFirestoreCollection<CompanyAsset>(COLLECTIONS.ASSETS, (items) => {
-      if (items && items.length > 0) {
-        setCompanyAssets(items);
-        localStorage.setItem('novabrasil_company_assets', JSON.stringify(items));
-      }
-    });
-
-    const unsubMaintenances = subscribeToFirestoreCollection<MaintenanceOrder>(COLLECTIONS.MAINTENANCES, (items) => {
-      if (items && items.length > 0) {
-        setMaintenances(items);
-        localStorage.setItem('novabrasil_maintenances', JSON.stringify(items));
-      }
-    });
-
-    const unsubLogs = subscribeToFirestoreCollection<OperationalLog>(COLLECTIONS.LOGS, (items) => {
-      if (items && items.length > 0) {
-        setOperationalLogs(items);
-        localStorage.setItem('novabrasil_operational_logs', JSON.stringify(items));
-      }
-    });
-
-    const unsubCoverages = subscribeToFirestoreCollection<ShiftCoverage>(COLLECTIONS.COVERAGES, (items) => {
-      if (items && items.length > 0) {
-        setCoverages(items);
-        localStorage.setItem('novabrasil_shift_coverages', JSON.stringify(items));
-      }
-    });
-
-    // Carga inicial do servidor / cache
+    // Carga inicial
     fetchAllData();
 
-    return () => {
-      unsubCondos();
-      unsubAgents();
-      unsubVehicles();
-      unsubAssets();
-      unsubMaintenances();
-      unsubLogs();
-      unsubCoverages();
+    // Sincronização instantânea no mesmo dispositivo (outras abas)
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel('novabrasil_sync');
+      bc.onmessage = () => {
+        fetchAllData();
+      };
+    } catch {}
+
+    // Polling ativo a cada 3 segundos: garante que novos condomínios, usuários e alterações
+    // apareçam automaticamente em todos os celulares, outros navegadores e computadores
+    const pollInterval = setInterval(() => {
+      fetchAllData();
+    }, 3000);
+
+    // Atualização imediata ao reabrir a janela ou retornar ao navegador no celular
+    const handleFocus = () => {
+      fetchAllData();
     };
-  }, [isAuthenticated]);
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleFocus);
+
+    return () => {
+      clearInterval(pollInterval);
+      if (bc) bc.close();
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleFocus);
+    };
+  }, [isAuthenticated, selectedCondoId]);
 
   // 2. Atualiza estatísticas consolidadas sempre que os dados mudam
   useEffect(() => {
@@ -350,35 +320,33 @@ function NovaBrasilMain() {
     setStats(updatedStats);
   }, [condominiums.length, agents, patrolVehicles, companyAssets, maintenances, operationalLogs]);
 
-  // --- HANDLERS: AGENTES (FIRESTORE) ---
+  // --- HANDLERS: AGENTES (POSTGRESQL CENTRAL) ---
   const handleAddAgent = async (agentData: Omit<SecurityAgent, 'id' | 'createdAt'>): Promise<boolean> => {
     try {
-      const newId = Date.now();
-      const newAgent: SecurityAgent = {
-        ...agentData,
-        id: newId,
-        createdAt: new Date().toISOString(),
-      };
+      const headers = await getAuthHeaders();
+      const res = await fetch('/api/agents', {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify(agentData),
+      });
 
-      // 1. Gravação no Firebase Firestore para sincronização multi-dispositivos
-      await saveToFirestore(COLLECTIONS.AGENTS, newAgent.id, newAgent);
+      let savedAgent: SecurityAgent;
+      if (res.ok) {
+        savedAgent = await res.json();
+      } else {
+        savedAgent = {
+          ...agentData,
+          id: Date.now(),
+          createdAt: new Date().toISOString(),
+        };
+      }
 
-      // 2. Atualização otimista no estado local
-      const updated = [newAgent, ...agents.filter((a) => a.id !== newAgent.id)];
+      const updated = [savedAgent, ...agents.filter((a) => a.id !== savedAgent.id)];
       setAgents(updated);
       localStorage.setItem('novabrasil_agents', JSON.stringify(updated));
+      notifySync('agents');
 
-      // 3. Fallback/Sync backend em background
-      try {
-        const headers = await getAuthHeaders();
-        fetch('/api/agents', {
-          method: 'POST',
-          headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify(newAgent),
-        }).catch(() => {});
-      } catch {}
-
-      // Se foi solicitado gerar acesso ao sistema, adiciona automaticamente na Gestão de Usuários e no Firestore
+      // Se foi solicitado gerar acesso ao sistema
       const dataWithAccess = agentData as any;
       if (dataWithAccess.createAccess && dataWithAccess.accessEmail && dataWithAccess.accessPassword) {
         const cleanEmail = dataWithAccess.accessEmail.trim().toLowerCase();
@@ -386,38 +354,9 @@ function NovaBrasilMain() {
         const assignedIds = Array.isArray(agentData.condoIds) && agentData.condoIds.length > 0
           ? agentData.condoIds
           : (agentData.condoId ? [agentData.condoId] : []);
-        const assignedNames = agentData.condoNames || (agentData.condoName ? [agentData.condoName] : []);
-        const selectedCondo = condominiums.find((c) => c.id === Number(agentData.condoId));
-
-        const newUserObj = {
-          id: Date.now() + 1,
-          uid: `usr-agent-${Date.now()}`,
-          name: agentData.name,
-          email: cleanEmail,
-          password: cleanPassword,
-          role: 'portaria',
-          permissions: JSON.stringify(['portaria', 'ronda', 'materiais', 'ocorrencias']),
-          condoId: agentData.condoId ? Number(agentData.condoId) : null,
-          condoIds: assignedIds,
-          condoName: selectedCondo?.name || agentData.condoName || null,
-          condoNames: assignedNames,
-          isActive: true,
-          createdAt: new Date().toISOString(),
-        };
-
-        // Salva usuário no Firestore
-        await saveToFirestore(COLLECTIONS.USERS, newUserObj.id, newUserObj);
 
         try {
-          const savedUsers = localStorage.getItem('novabrasil_users_list');
-          const usersList = savedUsers ? JSON.parse(savedUsers) : [];
-          const filtered = usersList.filter((u: any) => u.email.toLowerCase() !== cleanEmail);
-          localStorage.setItem('novabrasil_users_list', JSON.stringify([newUserObj, ...filtered]));
-        } catch {}
-
-        try {
-          const headers = await getAuthHeaders();
-          fetch('/api/users', {
+          await fetch('/api/users', {
             method: 'POST',
             headers: { ...headers, 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -429,10 +368,14 @@ function NovaBrasilMain() {
               condoId: agentData.condoId ? Number(agentData.condoId) : null,
               condoIds: assignedIds,
             }),
-          }).catch(() => {});
-        } catch {}
+          });
+          notifySync('users');
+        } catch (uErr) {
+          console.warn('Aviso ao registrar usuário do agente:', uErr);
+        }
       }
 
+      await fetchAllData();
       return true;
     } catch (err) {
       console.warn('Erro ao salvar agente:', err);
@@ -442,25 +385,18 @@ function NovaBrasilMain() {
 
   const handleUpdateAgent = async (id: number, patch: Partial<SecurityAgent>): Promise<boolean> => {
     try {
-      // 1. Atualiza no Firestore
-      await updateInFirestore(COLLECTIONS.AGENTS, id, patch);
+      const headers = await getAuthHeaders();
+      await fetch(`/api/agents/${id}`, {
+        method: 'PUT',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      });
 
-      // 2. Atualiza estado local
       const updated = agents.map((a) => (a.id === id ? { ...a, ...patch } : a));
       setAgents(updated);
       localStorage.setItem('novabrasil_agents', JSON.stringify(updated));
+      notifySync('agents');
 
-      // 3. Sync API backend
-      try {
-        const headers = await getAuthHeaders();
-        fetch(`/api/agents/${id}`, {
-          method: 'PUT',
-          headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify(patch),
-        }).catch(() => {});
-      } catch {}
-
-      // Se na edição foi solicitado gerar acesso que não existia
       const patchWithAccess = patch as any;
       if (patchWithAccess.createAccess && patchWithAccess.accessEmail && patchWithAccess.accessPassword) {
         const cleanEmail = patchWithAccess.accessEmail.trim().toLowerCase();
@@ -468,34 +404,12 @@ function NovaBrasilMain() {
         const agentObj = agents.find((a) => a.id === id);
         const agentName = patch.name || agentObj?.name || 'Agente de Portaria';
         const condoIdVal = patch.condoId !== undefined ? patch.condoId : agentObj?.condoId;
-        const selectedCondo = condominiums.find((c) => c.id === Number(condoIdVal));
-
-        const newUserObj = {
-          id: Date.now() + 1,
-          uid: `usr-agent-${Date.now()}`,
-          name: agentName,
-          email: cleanEmail,
-          password: cleanPassword,
-          role: 'portaria',
-          permissions: JSON.stringify(['portaria', 'ronda', 'materiais', 'ocorrencias']),
-          condoId: condoIdVal ? Number(condoIdVal) : null,
-          condoName: selectedCondo?.name || null,
-          isActive: true,
-          createdAt: new Date().toISOString(),
-        };
-
-        await saveToFirestore(COLLECTIONS.USERS, newUserObj.id, newUserObj);
+        const assignedIds = Array.isArray(patch.condoIds) && patch.condoIds.length > 0
+          ? patch.condoIds
+          : (condoIdVal ? [Number(condoIdVal)] : []);
 
         try {
-          const savedUsers = localStorage.getItem('novabrasil_users_list');
-          const usersList = savedUsers ? JSON.parse(savedUsers) : [];
-          const filtered = usersList.filter((u: any) => u.email.toLowerCase() !== cleanEmail);
-          localStorage.setItem('novabrasil_users_list', JSON.stringify([newUserObj, ...filtered]));
-        } catch {}
-
-        try {
-          const headers = await getAuthHeaders();
-          fetch('/api/users', {
+          await fetch('/api/users', {
             method: 'POST',
             headers: { ...headers, 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -505,11 +419,14 @@ function NovaBrasilMain() {
               role: 'portaria',
               permissions: ['portaria', 'ronda', 'materiais', 'ocorrencias'],
               condoId: condoIdVal ? Number(condoIdVal) : null,
+              condoIds: assignedIds,
             }),
-          }).catch(() => {});
+          });
+          notifySync('users');
         } catch {}
       }
 
+      await fetchAllData();
       return true;
     } catch (err) {
       console.warn('Erro ao atualizar agente:', err);
@@ -519,20 +436,13 @@ function NovaBrasilMain() {
 
   const handleDeleteAgent = async (id: number): Promise<boolean> => {
     try {
-      // 1. Remove do Firestore
-      await deleteFromFirestore(COLLECTIONS.AGENTS, id);
-
-      // 2. Atualiza estado local
+      const headers = await getAuthHeaders();
+      await fetch(`/api/agents/${id}`, { method: 'DELETE', headers });
       const updated = agents.filter((a) => a.id !== id);
       setAgents(updated);
       localStorage.setItem('novabrasil_agents', JSON.stringify(updated));
-
-      // 3. Sync API backend
-      try {
-        const headers = await getAuthHeaders();
-        fetch(`/api/agents/${id}`, { method: 'DELETE', headers }).catch(() => {});
-      } catch {}
-
+      notifySync('agents');
+      await fetchAllData();
       return true;
     } catch (err) {
       console.warn('Erro ao excluir agente:', err);
@@ -540,31 +450,28 @@ function NovaBrasilMain() {
     }
   };
 
-  // --- HANDLERS: VEÍCULOS DE RONDA (FIRESTORE) ---
+  // --- HANDLERS: VEÍCULOS DE RONDA ---
   const handleAddPatrolVehicle = async (vehData: Omit<PatrolVehicle, 'id' | 'createdAt'>): Promise<boolean> => {
     try {
-      const newVeh: PatrolVehicle = {
-        ...vehData,
-        id: Date.now(),
-        createdAt: new Date().toISOString(),
-      };
+      const headers = await getAuthHeaders();
+      const res = await fetch('/api/patrol-vehicles', {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify(vehData),
+      });
 
-      // Gravação no Firestore
-      await saveToFirestore(COLLECTIONS.VEHICLES, newVeh.id, newVeh);
+      let newVeh: PatrolVehicle;
+      if (res.ok) {
+        newVeh = await res.json();
+      } else {
+        newVeh = { ...vehData, id: Date.now(), createdAt: new Date().toISOString() };
+      }
 
       const updated = [newVeh, ...patrolVehicles.filter((v) => v.id !== newVeh.id)];
       setPatrolVehicles(updated);
       localStorage.setItem('novabrasil_patrol_vehicles', JSON.stringify(updated));
-
-      try {
-        const headers = await getAuthHeaders();
-        fetch('/api/patrol-vehicles', {
-          method: 'POST',
-          headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify(newVeh),
-        }).catch(() => {});
-      } catch {}
-
+      notifySync('vehicles');
+      await fetchAllData();
       return true;
     } catch (err) {
       console.warn('Erro ao adicionar veículo:', err);
@@ -574,21 +481,18 @@ function NovaBrasilMain() {
 
   const handleUpdatePatrolVehicle = async (id: number, patch: Partial<PatrolVehicle>): Promise<boolean> => {
     try {
-      await updateInFirestore(COLLECTIONS.VEHICLES, id, patch);
+      const headers = await getAuthHeaders();
+      await fetch(`/api/patrol-vehicles/${id}`, {
+        method: 'PUT',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      });
 
       const updated = patrolVehicles.map((v) => (v.id === id ? { ...v, ...patch } : v));
       setPatrolVehicles(updated);
       localStorage.setItem('novabrasil_patrol_vehicles', JSON.stringify(updated));
-
-      try {
-        const headers = await getAuthHeaders();
-        fetch(`/api/patrol-vehicles/${id}`, {
-          method: 'PUT',
-          headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify(patch),
-        }).catch(() => {});
-      } catch {}
-
+      notifySync('vehicles');
+      await fetchAllData();
       return true;
     } catch (err) {
       console.warn('Erro ao atualizar veículo:', err);
@@ -598,17 +502,13 @@ function NovaBrasilMain() {
 
   const handleDeletePatrolVehicle = async (id: number): Promise<boolean> => {
     try {
-      await deleteFromFirestore(COLLECTIONS.VEHICLES, id);
-
+      const headers = await getAuthHeaders();
+      await fetch(`/api/patrol-vehicles/${id}`, { method: 'DELETE', headers });
       const updated = patrolVehicles.filter((v) => v.id !== id);
       setPatrolVehicles(updated);
       localStorage.setItem('novabrasil_patrol_vehicles', JSON.stringify(updated));
-
-      try {
-        const headers = await getAuthHeaders();
-        fetch(`/api/patrol-vehicles/${id}`, { method: 'DELETE', headers }).catch(() => {});
-      } catch {}
-
+      notifySync('vehicles');
+      await fetchAllData();
       return true;
     } catch (err) {
       console.warn('Erro ao excluir veículo:', err);
@@ -616,30 +516,28 @@ function NovaBrasilMain() {
     }
   };
 
-  // --- HANDLERS: MATERIAIS / PATRIMÔNIO (FIRESTORE) ---
+  // --- HANDLERS: MATERIAIS / PATRIMÔNIO ---
   const handleAddAsset = async (assetData: Omit<CompanyAsset, 'id' | 'createdAt'>): Promise<boolean> => {
     try {
-      const newAsset: CompanyAsset = {
-        ...assetData,
-        id: Date.now(),
-        createdAt: new Date().toISOString(),
-      };
+      const headers = await getAuthHeaders();
+      const res = await fetch('/api/company-assets', {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify(assetData),
+      });
 
-      await saveToFirestore(COLLECTIONS.ASSETS, newAsset.id, newAsset);
+      let newAsset: CompanyAsset;
+      if (res.ok) {
+        newAsset = await res.json();
+      } else {
+        newAsset = { ...assetData, id: Date.now(), createdAt: new Date().toISOString() };
+      }
 
       const updated = [newAsset, ...companyAssets.filter((a) => a.id !== newAsset.id)];
       setCompanyAssets(updated);
       localStorage.setItem('novabrasil_company_assets', JSON.stringify(updated));
-
-      try {
-        const headers = await getAuthHeaders();
-        fetch('/api/company-assets', {
-          method: 'POST',
-          headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify(newAsset),
-        }).catch(() => {});
-      } catch {}
-
+      notifySync('assets');
+      await fetchAllData();
       return true;
     } catch (err) {
       console.warn('Erro ao adicionar material:', err);
@@ -649,21 +547,18 @@ function NovaBrasilMain() {
 
   const handleUpdateAsset = async (id: number, patch: Partial<CompanyAsset>): Promise<boolean> => {
     try {
-      await updateInFirestore(COLLECTIONS.ASSETS, id, patch);
+      const headers = await getAuthHeaders();
+      await fetch(`/api/company-assets/${id}`, {
+        method: 'PUT',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      });
 
       const updated = companyAssets.map((a) => (a.id === id ? { ...a, ...patch } : a));
       setCompanyAssets(updated);
       localStorage.setItem('novabrasil_company_assets', JSON.stringify(updated));
-
-      try {
-        const headers = await getAuthHeaders();
-        fetch(`/api/company-assets/${id}`, {
-          method: 'PUT',
-          headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify(patch),
-        }).catch(() => {});
-      } catch {}
-
+      notifySync('assets');
+      await fetchAllData();
       return true;
     } catch (err) {
       console.warn('Erro ao atualizar material:', err);
@@ -673,17 +568,13 @@ function NovaBrasilMain() {
 
   const handleDeleteAsset = async (id: number): Promise<boolean> => {
     try {
-      await deleteFromFirestore(COLLECTIONS.ASSETS, id);
-
+      const headers = await getAuthHeaders();
+      await fetch(`/api/company-assets/${id}`, { method: 'DELETE', headers });
       const updated = companyAssets.filter((a) => a.id !== id);
       setCompanyAssets(updated);
       localStorage.setItem('novabrasil_company_assets', JSON.stringify(updated));
-
-      try {
-        const headers = await getAuthHeaders();
-        fetch(`/api/company-assets/${id}`, { method: 'DELETE', headers }).catch(() => {});
-      } catch {}
-
+      notifySync('assets');
+      await fetchAllData();
       return true;
     } catch (err) {
       console.warn('Erro ao excluir material:', err);
@@ -691,30 +582,28 @@ function NovaBrasilMain() {
     }
   };
 
-  // --- HANDLERS: MANUTENÇÕES (FIRESTORE) ---
+  // --- HANDLERS: MANUTENÇÕES ---
   const handleAddMaintenance = async (maintData: Omit<MaintenanceOrder, 'id' | 'createdAt'>): Promise<boolean> => {
     try {
-      const newMaint: MaintenanceOrder = {
-        ...maintData,
-        id: Date.now(),
-        createdAt: new Date().toISOString(),
-      };
+      const headers = await getAuthHeaders();
+      const res = await fetch('/api/maintenances', {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify(maintData),
+      });
 
-      await saveToFirestore(COLLECTIONS.MAINTENANCES, newMaint.id, newMaint);
+      let newMaint: MaintenanceOrder;
+      if (res.ok) {
+        newMaint = await res.json();
+      } else {
+        newMaint = { ...maintData, id: Date.now(), createdAt: new Date().toISOString() };
+      }
 
       const updated = [newMaint, ...maintenances.filter((m) => m.id !== newMaint.id)];
       setMaintenances(updated);
       localStorage.setItem('novabrasil_maintenances', JSON.stringify(updated));
-
-      try {
-        const headers = await getAuthHeaders();
-        fetch('/api/maintenances', {
-          method: 'POST',
-          headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify(newMaint),
-        }).catch(() => {});
-      } catch {}
-
+      notifySync('maintenances');
+      await fetchAllData();
       return true;
     } catch (err) {
       console.warn('Erro ao adicionar manutenção:', err);
@@ -724,21 +613,18 @@ function NovaBrasilMain() {
 
   const handleUpdateMaintenance = async (id: number, patch: Partial<MaintenanceOrder>): Promise<boolean> => {
     try {
-      await updateInFirestore(COLLECTIONS.MAINTENANCES, id, patch);
+      const headers = await getAuthHeaders();
+      await fetch(`/api/maintenances/${id}`, {
+        method: 'PUT',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      });
 
       const updated = maintenances.map((m) => (m.id === id ? { ...m, ...patch } : m));
       setMaintenances(updated);
       localStorage.setItem('novabrasil_maintenances', JSON.stringify(updated));
-
-      try {
-        const headers = await getAuthHeaders();
-        fetch(`/api/maintenances/${id}`, {
-          method: 'PUT',
-          headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify(patch),
-        }).catch(() => {});
-      } catch {}
-
+      notifySync('maintenances');
+      await fetchAllData();
       return true;
     } catch (err) {
       console.warn('Erro ao atualizar manutenção:', err);
@@ -748,17 +634,13 @@ function NovaBrasilMain() {
 
   const handleDeleteMaintenance = async (id: number): Promise<boolean> => {
     try {
-      await deleteFromFirestore(COLLECTIONS.MAINTENANCES, id);
-
+      const headers = await getAuthHeaders();
+      await fetch(`/api/maintenances/${id}`, { method: 'DELETE', headers });
       const updated = maintenances.filter((m) => m.id !== id);
       setMaintenances(updated);
       localStorage.setItem('novabrasil_maintenances', JSON.stringify(updated));
-
-      try {
-        const headers = await getAuthHeaders();
-        fetch(`/api/maintenances/${id}`, { method: 'DELETE', headers }).catch(() => {});
-      } catch {}
-
+      notifySync('maintenances');
+      await fetchAllData();
       return true;
     } catch (err) {
       console.warn('Erro ao excluir manutenção:', err);
@@ -766,30 +648,28 @@ function NovaBrasilMain() {
     }
   };
 
-  // --- HANDLERS: LIVRO DE OCORRÊNCIAS (FIRESTORE) ---
+  // --- HANDLERS: LIVRO DE OCORRÊNCIAS ---
   const handleAddLog = async (logData: Omit<OperationalLog, 'id' | 'createdAt'>): Promise<boolean> => {
     try {
-      const newLog: OperationalLog = {
-        ...logData,
-        id: Date.now(),
-        createdAt: new Date().toISOString(),
-      };
+      const headers = await getAuthHeaders();
+      const res = await fetch('/api/operational-logs', {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify(logData),
+      });
 
-      await saveToFirestore(COLLECTIONS.LOGS, newLog.id, newLog);
+      let newLog: OperationalLog;
+      if (res.ok) {
+        newLog = await res.json();
+      } else {
+        newLog = { ...logData, id: Date.now(), createdAt: new Date().toISOString() };
+      }
 
       const updated = [newLog, ...operationalLogs.filter((l) => l.id !== newLog.id)];
       setOperationalLogs(updated);
       localStorage.setItem('novabrasil_operational_logs', JSON.stringify(updated));
-
-      try {
-        const headers = await getAuthHeaders();
-        fetch('/api/operational-logs', {
-          method: 'POST',
-          headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify(newLog),
-        }).catch(() => {});
-      } catch {}
-
+      notifySync('logs');
+      await fetchAllData();
       return true;
     } catch (err) {
       console.warn('Erro ao registrar ocorrência:', err);
@@ -799,21 +679,18 @@ function NovaBrasilMain() {
 
   const handleUpdateLog = async (id: number, patch: Partial<OperationalLog>): Promise<boolean> => {
     try {
-      await updateInFirestore(COLLECTIONS.LOGS, id, patch);
+      const headers = await getAuthHeaders();
+      await fetch(`/api/operational-logs/${id}`, {
+        method: 'PUT',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      });
 
       const updated = operationalLogs.map((l) => (l.id === id ? { ...l, ...patch } : l));
       setOperationalLogs(updated);
       localStorage.setItem('novabrasil_operational_logs', JSON.stringify(updated));
-
-      try {
-        const headers = await getAuthHeaders();
-        fetch(`/api/operational-logs/${id}`, {
-          method: 'PUT',
-          headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify(patch),
-        }).catch(() => {});
-      } catch {}
-
+      notifySync('logs');
+      await fetchAllData();
       return true;
     } catch (err) {
       console.warn('Erro ao atualizar ocorrência:', err);
@@ -823,17 +700,13 @@ function NovaBrasilMain() {
 
   const handleDeleteLog = async (id: number): Promise<boolean> => {
     try {
-      await deleteFromFirestore(COLLECTIONS.LOGS, id);
-
+      const headers = await getAuthHeaders();
+      await fetch(`/api/operational-logs/${id}`, { method: 'DELETE', headers });
       const updated = operationalLogs.filter((l) => l.id !== id);
       setOperationalLogs(updated);
       localStorage.setItem('novabrasil_operational_logs', JSON.stringify(updated));
-
-      try {
-        const headers = await getAuthHeaders();
-        fetch(`/api/operational-logs/${id}`, { method: 'DELETE', headers }).catch(() => {});
-      } catch {}
-
+      notifySync('logs');
+      await fetchAllData();
       return true;
     } catch (err) {
       console.warn('Erro ao excluir ocorrência:', err);
@@ -841,30 +714,28 @@ function NovaBrasilMain() {
     }
   };
 
-  // --- HANDLERS: ESCALA 12x36 & COBERTURAS (FIRESTORE) ---
+  // --- HANDLERS: ESCALA 12x36 & COBERTURAS ---
   const handleAddCoverage = async (coverageData: Omit<ShiftCoverage, 'id' | 'createdAt'>): Promise<boolean> => {
     try {
-      const newCov: ShiftCoverage = {
-        ...coverageData,
-        id: Date.now(),
-        createdAt: new Date().toISOString(),
-      };
+      const headers = await getAuthHeaders();
+      const res = await fetch('/api/shift-coverages', {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify(coverageData),
+      });
 
-      await saveToFirestore(COLLECTIONS.COVERAGES, newCov.id, newCov);
+      let newCov: ShiftCoverage;
+      if (res.ok) {
+        newCov = await res.json();
+      } else {
+        newCov = { ...coverageData, id: Date.now(), createdAt: new Date().toISOString() };
+      }
 
       const updated = [newCov, ...coverages.filter((c) => c.id !== newCov.id)];
       setCoverages(updated);
       localStorage.setItem('novabrasil_shift_coverages', JSON.stringify(updated));
-
-      try {
-        const headers = await getAuthHeaders();
-        fetch('/api/shift-coverages', {
-          method: 'POST',
-          headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify(newCov),
-        }).catch(() => {});
-      } catch {}
-
+      notifySync('coverages');
+      await fetchAllData();
       return true;
     } catch (err) {
       console.warn('Erro ao salvar escala:', err);
@@ -874,21 +745,18 @@ function NovaBrasilMain() {
 
   const handleUpdateCoverage = async (id: number, patch: Partial<ShiftCoverage>): Promise<boolean> => {
     try {
-      await updateInFirestore(COLLECTIONS.COVERAGES, id, patch);
+      const headers = await getAuthHeaders();
+      await fetch(`/api/shift-coverages/${id}`, {
+        method: 'PUT',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      });
 
       const updated = coverages.map((c) => (c.id === id ? { ...c, ...patch } : c));
       setCoverages(updated);
       localStorage.setItem('novabrasil_shift_coverages', JSON.stringify(updated));
-
-      try {
-        const headers = await getAuthHeaders();
-        fetch(`/api/shift-coverages/${id}`, {
-          method: 'PUT',
-          headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify(patch),
-        }).catch(() => {});
-      } catch {}
-
+      notifySync('coverages');
+      await fetchAllData();
       return true;
     } catch (err) {
       console.warn('Erro ao atualizar escala:', err);
@@ -898,17 +766,13 @@ function NovaBrasilMain() {
 
   const handleDeleteCoverage = async (id: number): Promise<boolean> => {
     try {
-      await deleteFromFirestore(COLLECTIONS.COVERAGES, id);
-
+      const headers = await getAuthHeaders();
+      await fetch(`/api/shift-coverages/${id}`, { method: 'DELETE', headers });
       const updated = coverages.filter((c) => c.id !== id);
       setCoverages(updated);
       localStorage.setItem('novabrasil_shift_coverages', JSON.stringify(updated));
-
-      try {
-        const headers = await getAuthHeaders();
-        fetch(`/api/shift-coverages/${id}`, { method: 'DELETE', headers }).catch(() => {});
-      } catch {}
-
+      notifySync('coverages');
+      await fetchAllData();
       return true;
     } catch (err) {
       console.warn('Erro ao excluir escala:', err);
