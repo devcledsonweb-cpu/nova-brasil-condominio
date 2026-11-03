@@ -7,6 +7,12 @@ import { safeFetchJson } from '../services/api.ts';
 import { PhotoField } from './PhotoField.tsx';
 import { WhatsAppButton } from './WhatsAppButton.tsx';
 import {
+  COLLECTIONS,
+  saveToFirestore,
+  updateInFirestore,
+  deleteFromFirestore,
+} from '../services/firestoreSync.ts';
+import {
   Building2,
   Plus,
   Search,
@@ -248,7 +254,24 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
 
       const savedCondo = result.data;
 
-      // 2. Sincronizar e salvar localmente para garantir persistência imediata
+      // 2. Gravar no Firebase Firestore para sincronização imediata em todos os dispositivos
+      const condoId = editingCondo ? editingCondo.id : (savedCondo?.id || Date.now());
+      const condoToPersist: Condominium = {
+        ...(editingCondo || {}),
+        ...(savedCondo || {}),
+        id: condoId,
+        ...condoPayload,
+        status: (formData.status as any) || 'ativo',
+        createdAt: editingCondo?.createdAt || new Date().toISOString(),
+      };
+
+      try {
+        await saveToFirestore(COLLECTIONS.CONDOMINIUMS, condoId, condoToPersist);
+      } catch (fErr) {
+        console.warn('Aviso ao sincronizar condomínio no Firestore:', fErr);
+      }
+
+      // 3. Sincronizar e salvar localmente para garantir persistência imediata
       const localCondosStr = localStorage.getItem('novabrasil_condos');
       let localCondos: Condominium[] = localCondosStr
         ? JSON.parse(localCondosStr)
@@ -259,34 +282,17 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
           c.id === editingCondo.id
             ? {
                 ...c,
-                ...(savedCondo || {}),
-                name: formData.name.trim(),
-                cnpj: formData.cnpj || null,
-                address: formData.address || null,
-                city: formData.city || null,
-                state: formData.state || 'SP',
-                zipCode: formData.zipCode || null,
-                totalUnits: Number(formData.totalUnits) || 0,
-                supervisorName: formData.supervisorName?.trim() || formData.sindicoName?.trim() || null,
-                supervisorPhone: formData.supervisorPhone?.trim() || formData.sindicoPhone?.trim() || null,
-                contractType: formData.contractType?.trim() || 'Portaria 24h + Ronda Noturna',
-                sindicoName: formData.supervisorName?.trim() || formData.sindicoName || null,
-                sindicoPhone: formData.supervisorPhone?.trim() || formData.sindicoPhone || null,
-                sindicoEmail: formData.contractType?.trim() || formData.sindicoEmail || 'Portaria 24h + Ronda Noturna',
-                status: (formData.status as 'ativo' | 'implantacao' | 'inativo') || 'ativo',
-                imageUrl: formData.imageUrl?.trim() || c.imageUrl || null,
-                photoUrl: formData.imageUrl?.trim() || c.photoUrl || null,
-                serviceStations: savedCondo?.serviceStations || c.serviceStations || [],
+                ...condoToPersist,
               }
             : c
         );
-      } else if (savedCondo) {
-        localCondos = [savedCondo, ...localCondos.filter((c) => c.id !== savedCondo.id)];
+      } else {
+        localCondos = [condoToPersist, ...localCondos.filter((c) => c.id !== condoToPersist.id)];
       }
 
       localStorage.setItem('novabrasil_condos', JSON.stringify(localCondos));
 
-      // 3. Atualizar dados autoritativos na interface
+      // 4. Atualizar dados autoritativos na interface
       try {
         await onRefresh();
       } catch (e) {
@@ -311,6 +317,13 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
     }
 
     try {
+      // 1. Remover do Firebase Firestore (reflete instantaneamente em todos os celulares/computadores)
+      try {
+        await deleteFromFirestore(COLLECTIONS.CONDOMINIUMS, condo.id);
+      } catch (fErr) {
+        console.warn('Aviso ao remover condomínio do Firestore:', fErr);
+      }
+
       const headers = await getAuthHeaders();
       try {
         await safeFetchJson(`/api/condominiums/${condo.id}`, {
@@ -382,6 +395,15 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
     );
     localStorage.setItem('novabrasil_condos', JSON.stringify(localCondos));
 
+    // Sincroniza postos de serviço no Firebase Firestore
+    try {
+      await updateInFirestore(COLLECTIONS.CONDOMINIUMS, managingStationsCondo.id, {
+        serviceStations: updatedStations,
+      });
+    } catch (fErr) {
+      console.warn('Erro ao sincronizar postos no Firestore:', fErr);
+    }
+
     // Sincroniza postos de serviço no servidor backend para persistência multi-dispositivos
     try {
       const headers = await getAuthHeaders();
@@ -435,6 +457,15 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
       c.id === managingStationsCondo.id ? { ...c, serviceStations: updatedStations } : c
     );
     localStorage.setItem('novabrasil_condos', JSON.stringify(localCondos));
+
+    // Sincroniza remoção no Firebase Firestore
+    try {
+      await updateInFirestore(COLLECTIONS.CONDOMINIUMS, managingStationsCondo.id, {
+        serviceStations: updatedStations,
+      });
+    } catch (fErr) {
+      console.warn('Erro ao atualizar postos no Firestore:', fErr);
+    }
 
     // Sincroniza remoção no servidor backend
     try {

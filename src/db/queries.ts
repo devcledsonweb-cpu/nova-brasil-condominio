@@ -22,30 +22,7 @@ import {
   maintenanceOrders,
   operationalLogs,
 } from './schema.ts';
-import {
-  getStoreAgents,
-  createStoreAgent,
-  updateStoreAgent,
-  deleteStoreAgent,
-  getStorePatrolVehicles,
-  createStorePatrolVehicle,
-  updateStorePatrolVehicle,
-  deleteStorePatrolVehicle,
-  getStoreCompanyAssets,
-  createStoreCompanyAsset,
-  updateStoreCompanyAsset,
-  deleteStoreCompanyAsset,
-  getStoreMaintenances,
-  createStoreMaintenance,
-  updateStoreMaintenance,
-  deleteStoreMaintenance,
-  getStoreOperationalLogs,
-  createStoreOperationalLog,
-  deleteStoreOperationalLog,
-  getStoreDashboardStats,
-  getStoreCondoMeta,
-  updateStoreCondoMeta,
-} from './operationalStore.ts';
+// Operações migradas 100% para o Cloud SQL PostgreSQL centralizado
 
 // Cache auxiliar para nomes de condomínios
 async function getCondoNameMap(): Promise<Map<number, string>> {
@@ -68,34 +45,81 @@ export async function ensureEnterpriseTables() {
 
 // --- GESTÃO DE CONDOMÍNIOS / POSTOS DE ATENDIMENTO ---
 
+function parseCondoStations(c: any) {
+  let stations = c.service_stations;
+  if (typeof stations === 'string') {
+    try {
+      stations = JSON.parse(stations);
+    } catch {
+      stations = [];
+    }
+  }
+  if (!Array.isArray(stations) || stations.length === 0) {
+    stations = [
+      {
+        id: `st-${c.id}-1`,
+        condoId: c.id,
+        name: 'Portaria Principal (Social)',
+        type: 'portaria_principal',
+        shiftSchedule: '12x36 Diurno (06h às 18h)',
+        assignedAgentName: null,
+      },
+      {
+        id: `st-${c.id}-2`,
+        condoId: c.id,
+        name: 'Área de Lazer / Piscina',
+        type: 'area_lazer',
+        shiftSchedule: '12x36 Diurno',
+        assignedAgentName: null,
+      },
+    ];
+  }
+  return stations;
+}
+
+function parseCondoPosts(c: any, stations: any[]) {
+  if (Array.isArray(c.service_posts) && c.service_posts.length > 0) {
+    return c.service_posts;
+  }
+  if (stations && stations.length > 0) {
+    return stations.map((s: any) => s.name);
+  }
+  return ['Portaria Principal (Social)', 'Garagem / Portões', 'Área de Lazer / Piscina', 'Ronda Perimetral'];
+}
+
 export async function getCondominiums() {
+  const pool = createPool();
   try {
-    const list = await db
-      .select({
-        id: condominiums.id,
-        name: condominiums.name,
-        cnpj: condominiums.cnpj,
-        address: condominiums.address,
-        city: condominiums.city,
-        state: condominiums.state,
-        zipCode: condominiums.zipCode,
-        totalUnits: condominiums.totalUnits,
-        sindicoName: condominiums.sindicoName,
-        sindicoPhone: condominiums.sindicoPhone,
-        sindicoEmail: condominiums.sindicoEmail,
-        status: condominiums.status,
-        createdAt: condominiums.createdAt,
-      })
-      .from(condominiums)
-      .orderBy(condominiums.name);
+    const query = `
+      SELECT 
+        c.id,
+        c.name,
+        c.cnpj,
+        c.address,
+        c.city,
+        c.state,
+        c.zip_code,
+        c.total_units,
+        c.sindico_name,
+        c.sindico_phone,
+        c.sindico_email,
+        c.status,
+        c.image_url,
+        c.service_posts,
+        c.service_stations,
+        c.created_at,
+        (SELECT count(*)::int FROM security_agents a WHERE a.condo_id = c.id OR c.id = ANY(a.condo_ids)) AS agents_count,
+        (SELECT count(*)::int FROM patrol_vehicles v WHERE v.condo_id = c.id) AS vehicles_count,
+        (SELECT COALESCE(sum(quantity), 0)::int FROM company_assets s WHERE s.condo_id = c.id) AS assets_count,
+        (SELECT count(*)::int FROM maintenance_orders m WHERE m.condo_id = c.id AND m.status IN ('agendada', 'em_andamento')) AS maintenances_count
+      FROM condominiums c
+      ORDER BY c.name ASC
+    `;
+    const res = await pool.query(query);
 
-    const results = list.map((c) => {
-      const agents = getStoreAgents(c.id);
-      const vehicles = getStorePatrolVehicles(c.id);
-      const assets = getStoreCompanyAssets(c.id);
-      const maintenances = getStoreMaintenances(c.id);
-      const meta = getStoreCondoMeta(c.id);
-
+    return res.rows.map((c: any) => {
+      const stations = parseCondoStations(c);
+      const posts = parseCondoPosts(c, stations);
       return {
         id: c.id,
         name: c.name,
@@ -103,45 +127,26 @@ export async function getCondominiums() {
         address: c.address,
         city: c.city,
         state: c.state,
-        zipCode: c.zipCode,
-        totalUnits: c.totalUnits || 0,
-        supervisorName: c.sindicoName || 'Supervisor Regional',
-        supervisorPhone: c.sindicoPhone || '',
-        contractType: c.sindicoEmail || 'Portaria 24h + Ronda Noturna',
-        sindicoName: c.sindicoName || 'Supervisor Regional',
-        sindicoPhone: c.sindicoPhone || '',
-        sindicoEmail: c.sindicoEmail || 'Portaria 24h + Ronda Noturna',
+        zipCode: c.zip_code,
+        totalUnits: c.total_units || 0,
+        supervisorName: c.sindico_name || 'Supervisor Regional',
+        supervisorPhone: c.sindico_phone || '',
+        contractType: c.sindico_email || 'Portaria 24h + Ronda Noturna',
+        sindicoName: c.sindico_name || 'Supervisor Regional',
+        sindicoPhone: c.sindico_phone || '',
+        sindicoEmail: c.sindico_email || 'Portaria 24h + Ronda Noturna',
         status: (c.status as 'ativo' | 'inativo' | 'implantacao') || 'ativo',
-        photoUrl: meta.photoUrl || meta.imageUrl || null,
-        imageUrl: meta.imageUrl || meta.photoUrl || null,
-        servicePosts: meta.servicePosts || ['Portaria Principal', 'Garagem / Portões', 'Área de Lazer / Piscina', 'Ronda Perimetral'],
-        serviceStations: meta.serviceStations || [
-          {
-            id: `st-${c.id}-1`,
-            condoId: c.id,
-            name: 'Portaria Principal (Social)',
-            type: 'portaria_principal',
-            shiftSchedule: '12x36 Diurno (06h às 18h)',
-            assignedAgentName: null,
-          },
-          {
-            id: `st-${c.id}-2`,
-            condoId: c.id,
-            name: 'Área de Lazer / Piscina',
-            type: 'area_lazer',
-            shiftSchedule: '12x36 Diurno',
-            assignedAgentName: null,
-          },
-        ],
-        createdAt: c.createdAt,
-        agentsCount: agents.length,
-        vehiclesCount: vehicles.length,
-        assetsCount: assets.reduce((acc, curr) => acc + (curr.quantity || 1), 0),
-        maintenancesCount: maintenances.filter((m) => m.status === 'agendada' || m.status === 'em_andamento').length,
+        photoUrl: c.image_url || null,
+        imageUrl: c.image_url || null,
+        servicePosts: posts,
+        serviceStations: stations,
+        createdAt: c.created_at,
+        agentsCount: c.agents_count || 0,
+        vehiclesCount: c.vehicles_count || 0,
+        assetsCount: c.assets_count || 0,
+        maintenancesCount: c.maintenances_count || 0,
       };
     });
-
-    return results;
   } catch (error) {
     console.error('getCondominiums failed:', error);
     throw new Error('Falha ao listar condomínios.', { cause: error });
@@ -149,37 +154,64 @@ export async function getCondominiums() {
 }
 
 export async function getCondominiumById(id: number) {
+  const pool = createPool();
   try {
-    const res = await db.select().from(condominiums).where(eq(condominiums.id, id));
-    if (!res || !res[0]) return null;
-    const c = res[0];
-    const meta = getStoreCondoMeta(id);
+    const query = `
+      SELECT 
+        c.id,
+        c.name,
+        c.cnpj,
+        c.address,
+        c.city,
+        c.state,
+        c.zip_code,
+        c.total_units,
+        c.sindico_name,
+        c.sindico_phone,
+        c.sindico_email,
+        c.status,
+        c.image_url,
+        c.service_posts,
+        c.service_stations,
+        c.created_at,
+        (SELECT count(*)::int FROM security_agents a WHERE a.condo_id = c.id OR c.id = ANY(a.condo_ids)) AS agents_count,
+        (SELECT count(*)::int FROM patrol_vehicles v WHERE v.condo_id = c.id) AS vehicles_count,
+        (SELECT COALESCE(sum(quantity), 0)::int FROM company_assets s WHERE s.condo_id = c.id) AS assets_count,
+        (SELECT count(*)::int FROM maintenance_orders m WHERE m.condo_id = c.id AND m.status IN ('agendada', 'em_andamento')) AS maintenances_count
+      FROM condominiums c
+      WHERE c.id = $1
+    `;
+    const res = await pool.query(query, [id]);
+    if (res.rows.length === 0) return null;
+    const c = res.rows[0];
+    const stations = parseCondoStations(c);
+    const posts = parseCondoPosts(c, stations);
+
     return {
-      ...c,
-      supervisorName: c.sindicoName || 'Supervisor Regional',
-      supervisorPhone: c.sindicoPhone || '',
-      contractType: c.sindicoEmail || 'Portaria 24h + Ronda Noturna',
-      photoUrl: meta.photoUrl || meta.imageUrl || null,
-      imageUrl: meta.imageUrl || meta.photoUrl || null,
-      servicePosts: meta.servicePosts || ['Portaria Principal', 'Garagem / Portões', 'Área de Lazer / Piscina', 'Ronda Perimetral'],
-      serviceStations: meta.serviceStations || [
-        {
-          id: `st-${id}-1`,
-          condoId: id,
-          name: 'Portaria Principal (Social)',
-          type: 'portaria_principal',
-          shiftSchedule: '12x36 Diurno (06h às 18h)',
-          assignedAgentName: null,
-        },
-        {
-          id: `st-${id}-2`,
-          condoId: id,
-          name: 'Área de Lazer / Piscina',
-          type: 'area_lazer',
-          shiftSchedule: '12x36 Diurno',
-          assignedAgentName: null,
-        },
-      ],
+      id: c.id,
+      name: c.name,
+      cnpj: c.cnpj,
+      address: c.address,
+      city: c.city,
+      state: c.state,
+      zipCode: c.zip_code,
+      totalUnits: c.total_units || 0,
+      supervisorName: c.sindico_name || 'Supervisor Regional',
+      supervisorPhone: c.sindico_phone || '',
+      contractType: c.sindico_email || 'Portaria 24h + Ronda Noturna',
+      sindicoName: c.sindico_name || 'Supervisor Regional',
+      sindicoPhone: c.sindico_phone || '',
+      sindicoEmail: c.sindico_email || 'Portaria 24h + Ronda Noturna',
+      status: (c.status as 'ativo' | 'inativo' | 'implantacao') || 'ativo',
+      photoUrl: c.image_url || null,
+      imageUrl: c.image_url || null,
+      servicePosts: posts,
+      serviceStations: stations,
+      createdAt: c.created_at,
+      agentsCount: c.agents_count || 0,
+      vehiclesCount: c.vehicles_count || 0,
+      assetsCount: c.assets_count || 0,
+      maintenancesCount: c.maintenances_count || 0,
     };
   } catch (error) {
     console.error('getCondominiumById failed:', error);
@@ -207,44 +239,21 @@ export async function createCondominium(data: {
   servicePosts?: string[];
   serviceStations?: any[];
 }) {
+  const pool = createPool();
   try {
-    const res = await db
-      .insert(condominiums)
-      .values({
-        name: data.name.trim(),
-        cnpj: data.cnpj?.trim() || null,
-        address: data.address?.trim() || null,
-        city: data.city?.trim() || null,
-        state: data.state?.trim() || 'SP',
-        zipCode: data.zipCode?.trim() || null,
-        totalUnits: parseInt(String(data.totalUnits || 0), 10) || 0,
-        sindicoName: (data.supervisorName || data.sindicoName)?.trim() || null,
-        sindicoPhone: (data.supervisorPhone || data.sindicoPhone)?.trim() || null,
-        sindicoEmail: (data.contractType || data.sindicoEmail)?.trim() || 'Portaria 24h + Ronda Noturna',
-        status: data.status || 'ativo',
-      })
-      .returning();
-
-    const c = res[0];
     const photo = data.imageUrl?.trim() || data.photoUrl?.trim() || null;
     const initialStations = data.serviceStations && Array.isArray(data.serviceStations) && data.serviceStations.length > 0
-      ? data.serviceStations.map((s: any, idx: number) => ({
-          ...s,
-          id: s.id || `st-${c.id}-${idx + 1}`,
-          condoId: c.id,
-        }))
+      ? data.serviceStations
       : [
           {
-            id: `st-${c.id}-1`,
-            condoId: c.id,
+            id: `st-new-1`,
             name: 'Portaria Principal (Social)',
             type: 'portaria_principal',
             shiftSchedule: '12x36 Diurno (06h às 18h)',
             assignedAgentName: null,
           },
           {
-            id: `st-${c.id}-2`,
-            condoId: c.id,
+            id: `st-new-2`,
             name: 'Área de Lazer / Piscina',
             type: 'area_lazer',
             shiftSchedule: '12x36 Diurno',
@@ -252,23 +261,64 @@ export async function createCondominium(data: {
           },
         ];
 
-    updateStoreCondoMeta(c.id, {
-      servicePosts: data.servicePosts || initialStations.map((s: any) => s.name),
-      serviceStations: initialStations,
-      photoUrl: photo,
-      imageUrl: photo,
-    });
-    const meta = getStoreCondoMeta(c.id);
+    const posts = data.servicePosts && Array.isArray(data.servicePosts) && data.servicePosts.length > 0
+      ? data.servicePosts
+      : initialStations.map((s: any) => s.name);
+
+    const insertSql = `
+      INSERT INTO condominiums (
+        name, cnpj, address, city, state, zip_code, total_units,
+        sindico_name, sindico_phone, sindico_email, status,
+        image_url, service_stations, service_posts
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      RETURNING *
+    `;
+
+    const res = await pool.query(insertSql, [
+      data.name.trim(),
+      data.cnpj?.trim() || null,
+      data.address?.trim() || null,
+      data.city?.trim() || null,
+      data.state?.trim() || 'SP',
+      data.zipCode?.trim() || null,
+      parseInt(String(data.totalUnits || 0), 10) || 0,
+      (data.supervisorName || data.sindicoName)?.trim() || null,
+      (data.supervisorPhone || data.sindicoPhone)?.trim() || null,
+      (data.contractType || data.sindicoEmail)?.trim() || 'Portaria 24h + Ronda Noturna',
+      data.status || 'ativo',
+      photo,
+      JSON.stringify(initialStations),
+      posts,
+    ]);
+
+    const c = res.rows[0];
+    const stations = parseCondoStations(c);
 
     return {
-      ...c,
-      supervisorName: c.sindicoName || 'Supervisor Regional',
-      supervisorPhone: c.sindicoPhone || '',
-      contractType: c.sindicoEmail || 'Portaria 24h + Ronda Noturna',
-      photoUrl: meta.photoUrl || null,
-      imageUrl: meta.imageUrl || meta.photoUrl || null,
-      servicePosts: meta.servicePosts || ['Portaria Principal', 'Garagem / Portões', 'Área de Lazer / Piscina', 'Ronda Perimetral'],
-      serviceStations: meta.serviceStations || initialStations,
+      id: c.id,
+      name: c.name,
+      cnpj: c.cnpj,
+      address: c.address,
+      city: c.city,
+      state: c.state,
+      zipCode: c.zip_code,
+      totalUnits: c.total_units || 0,
+      supervisorName: c.sindico_name || 'Supervisor Regional',
+      supervisorPhone: c.sindico_phone || '',
+      contractType: c.sindico_email || 'Portaria 24h + Ronda Noturna',
+      sindicoName: c.sindico_name || 'Supervisor Regional',
+      sindicoPhone: c.sindico_phone || '',
+      sindicoEmail: c.sindico_email || 'Portaria 24h + Ronda Noturna',
+      status: (c.status as 'ativo' | 'inativo' | 'implantacao') || 'ativo',
+      photoUrl: c.image_url || null,
+      imageUrl: c.image_url || null,
+      servicePosts: parseCondoPosts(c, stations),
+      serviceStations: stations,
+      createdAt: c.created_at,
+      agentsCount: 0,
+      vehiclesCount: 0,
+      assetsCount: 0,
+      maintenancesCount: 0,
     };
   } catch (error) {
     console.error('createCondominium failed:', error);
@@ -299,85 +349,79 @@ export async function updateCondominium(
     serviceStations?: any[];
   }
 ) {
+  const pool = createPool();
   try {
-    const updateData: any = {};
-    if (data.name) updateData.name = data.name.trim();
-    if (data.cnpj !== undefined) updateData.cnpj = data.cnpj?.trim() || null;
-    if (data.address !== undefined) updateData.address = data.address?.trim() || null;
-    if (data.city !== undefined) updateData.city = data.city?.trim() || null;
-    if (data.state !== undefined) updateData.state = data.state?.trim() || null;
-    if (data.zipCode !== undefined) updateData.zipCode = data.zipCode?.trim() || null;
-    if (data.totalUnits !== undefined) updateData.totalUnits = parseInt(String(data.totalUnits || 0), 10) || 0;
-    
+    const fields: string[] = [];
+    const values: any[] = [];
+    let idx = 1;
+
+    if (data.name !== undefined) {
+      fields.push(`name = $${idx++}`);
+      values.push(data.name.trim());
+    }
+    if (data.cnpj !== undefined) {
+      fields.push(`cnpj = $${idx++}`);
+      values.push(data.cnpj?.trim() || null);
+    }
+    if (data.address !== undefined) {
+      fields.push(`address = $${idx++}`);
+      values.push(data.address?.trim() || null);
+    }
+    if (data.city !== undefined) {
+      fields.push(`city = $${idx++}`);
+      values.push(data.city?.trim() || null);
+    }
+    if (data.state !== undefined) {
+      fields.push(`state = $${idx++}`);
+      values.push(data.state?.trim() || null);
+    }
+    if (data.zipCode !== undefined) {
+      fields.push(`zip_code = $${idx++}`);
+      values.push(data.zipCode?.trim() || null);
+    }
+    if (data.totalUnits !== undefined) {
+      fields.push(`total_units = $${idx++}`);
+      values.push(parseInt(String(data.totalUnits || 0), 10) || 0);
+    }
     if (data.supervisorName !== undefined || data.sindicoName !== undefined) {
-      updateData.sindicoName = (data.supervisorName ?? data.sindicoName)?.trim() || null;
+      fields.push(`sindico_name = $${idx++}`);
+      values.push((data.supervisorName ?? data.sindicoName)?.trim() || null);
     }
     if (data.supervisorPhone !== undefined || data.sindicoPhone !== undefined) {
-      updateData.sindicoPhone = (data.supervisorPhone ?? data.sindicoPhone)?.trim() || null;
+      fields.push(`sindico_phone = $${idx++}`);
+      values.push((data.supervisorPhone ?? data.sindicoPhone)?.trim() || null);
     }
     if (data.contractType !== undefined || data.sindicoEmail !== undefined) {
-      updateData.sindicoEmail = (data.contractType ?? data.sindicoEmail)?.trim() || 'Portaria 24h + Ronda Noturna';
+      fields.push(`sindico_email = $${idx++}`);
+      values.push((data.contractType ?? data.sindicoEmail)?.trim() || 'Portaria 24h + Ronda Noturna');
     }
-    if (data.status !== undefined) updateData.status = data.status;
-
-    let res = await db.update(condominiums).set(updateData).where(eq(condominiums.id, id)).returning();
-    if (!res || res.length === 0) {
-      res = await db
-        .insert(condominiums)
-        .values({
-          name: updateData.name || 'Condomínio',
-          cnpj: updateData.cnpj || null,
-          address: updateData.address || null,
-          city: updateData.city || null,
-          state: updateData.state || 'SP',
-          zipCode: updateData.zipCode || null,
-          totalUnits: updateData.totalUnits || 0,
-          sindicoName: updateData.sindicoName || null,
-          sindicoPhone: updateData.sindicoPhone || null,
-          sindicoEmail: updateData.sindicoEmail || 'Portaria 24h + Ronda Noturna',
-          status: updateData.status || 'ativo',
-        })
-        .returning();
+    if (data.status !== undefined) {
+      fields.push(`status = $${idx++}`);
+      values.push(data.status);
     }
-    const c = res[0];
-
     const photo = data.imageUrl !== undefined ? data.imageUrl?.trim() : data.photoUrl?.trim();
-    if (data.servicePosts !== undefined || data.serviceStations !== undefined || photo !== undefined) {
-      updateStoreCondoMeta(id, {
-        ...(data.servicePosts !== undefined ? { servicePosts: data.servicePosts } : {}),
-        ...(data.serviceStations !== undefined ? { serviceStations: data.serviceStations } : {}),
-        ...(photo !== undefined ? { photoUrl: photo, imageUrl: photo } : {}),
-      });
+    if (photo !== undefined) {
+      fields.push(`image_url = $${idx++}`);
+      values.push(photo || null);
     }
-    const meta = getStoreCondoMeta(id);
+    if (data.serviceStations !== undefined) {
+      fields.push(`service_stations = $${idx++}`);
+      values.push(JSON.stringify(data.serviceStations));
+    }
+    if (data.servicePosts !== undefined) {
+      fields.push(`service_posts = $${idx++}`);
+      values.push(data.servicePosts);
+    }
 
-    return {
-      ...c,
-      supervisorName: c.sindicoName || 'Supervisor Regional',
-      supervisorPhone: c.sindicoPhone || '',
-      contractType: c.sindicoEmail || 'Portaria 24h + Ronda Noturna',
-      photoUrl: meta.photoUrl || null,
-      imageUrl: meta.imageUrl || meta.photoUrl || null,
-      servicePosts: meta.servicePosts || ['Portaria Principal', 'Garagem / Portões', 'Área de Lazer / Piscina', 'Ronda Perimetral'],
-      serviceStations: meta.serviceStations || [
-        {
-          id: `st-${id}-1`,
-          condoId: id,
-          name: 'Portaria Principal (Social)',
-          type: 'portaria_principal',
-          shiftSchedule: '12x36 Diurno (06h às 18h)',
-          assignedAgentName: null,
-        },
-        {
-          id: `st-${id}-2`,
-          condoId: id,
-          name: 'Área de Lazer / Piscina',
-          type: 'area_lazer',
-          shiftSchedule: '12x36 Diurno',
-          assignedAgentName: null,
-        },
-      ],
-    };
+    if (fields.length > 0) {
+      values.push(id);
+      await pool.query(
+        `UPDATE condominiums SET ${fields.join(', ')} WHERE id = $${idx}`,
+        values
+      );
+    }
+
+    return await getCondominiumById(id);
   } catch (error) {
     console.error('updateCondominium failed:', error);
     throw new Error('Falha ao atualizar condomínio.', { cause: error });
@@ -385,8 +429,30 @@ export async function updateCondominium(
 }
 
 export async function deleteCondominium(id: number) {
+  const pool = createPool();
   try {
-    await db.delete(condominiums).where(eq(condominiums.id, id));
+    // Cascata completa em todas as tabelas com referência ao condomínio
+    await pool.query('DELETE FROM shift_coverages WHERE condo_id = $1', [id]);
+    await pool.query('DELETE FROM operational_logs WHERE condo_id = $1', [id]);
+    await pool.query('DELETE FROM maintenance_orders WHERE condo_id = $1', [id]);
+    await pool.query('DELETE FROM company_assets WHERE condo_id = $1', [id]);
+    await pool.query('DELETE FROM patrol_vehicles WHERE condo_id = $1', [id]);
+    await pool.query('DELETE FROM security_agents WHERE condo_id = $1 OR $1 = ANY(condo_ids)', [id]);
+    await pool.query('DELETE FROM access_logs WHERE condo_id = $1', [id]);
+    await pool.query('DELETE FROM deliveries WHERE condo_id = $1', [id]);
+    await pool.query('DELETE FROM incidents WHERE condo_id = $1', [id]);
+    await pool.query('DELETE FROM reservations WHERE condo_id = $1', [id]);
+    await pool.query('DELETE FROM common_areas WHERE condo_id = $1', [id]);
+    await pool.query('DELETE FROM announcements WHERE condo_id = $1', [id]);
+    await pool.query('DELETE FROM poll_votes WHERE poll_id IN (SELECT id FROM polls WHERE condo_id = $1)', [id]);
+    await pool.query('DELETE FROM poll_options WHERE poll_id IN (SELECT id FROM polls WHERE condo_id = $1)', [id]);
+    await pool.query('DELETE FROM polls WHERE condo_id = $1', [id]);
+    await pool.query('DELETE FROM vehicles WHERE condo_id = $1', [id]);
+    await pool.query('DELETE FROM residents WHERE condo_id = $1', [id]);
+    await pool.query('DELETE FROM units WHERE condo_id = $1', [id]);
+    await pool.query('DELETE FROM blocks WHERE condo_id = $1', [id]);
+    await pool.query('UPDATE users SET condo_id = NULL WHERE condo_id = $1', [id]);
+    await pool.query('DELETE FROM condominiums WHERE id = $1', [id]);
     return { success: true };
   } catch (error) {
     console.error('deleteCondominium failed:', error);
@@ -1596,32 +1662,56 @@ export async function votePoll(pollId: number, optionId: number, unitId: number,
 
 // --- AGENTES DE PORTARIA E EQUIPE OPERACIONAL DA EMPRESA ---
 
+function formatAgentRow(r: any, condoMap: Map<number, string>) {
+  const ids: number[] = Array.isArray(r.condo_ids) && r.condo_ids.length > 0
+    ? r.condo_ids
+    : (r.condo_id ? [r.condo_id] : []);
+  const names = ids.map((id) => condoMap.get(id)).filter(Boolean) as string[];
+
+  let mainCondoName = 'Operações Regionais';
+  if (names.length === 1) {
+    mainCondoName = names[0];
+  } else if (names.length > 1) {
+    mainCondoName = `${names[0]} (+${names.length - 1} postos)`;
+  } else if (r.condo_id) {
+    mainCondoName = condoMap.get(r.condo_id) || 'Posto Geral';
+  }
+
+  return {
+    id: r.id,
+    condoId: r.condo_id,
+    condoIds: ids,
+    condoNames: names,
+    condoName: mainCondoName,
+    name: r.name,
+    cpf: r.cpf,
+    phone: r.phone,
+    badgeNumber: r.badge_number,
+    roleTitle: r.role_title,
+    shift: r.shift,
+    status: r.status,
+    admissionDate: r.admission_date,
+    notes: r.notes,
+    createdAt: r.created_at,
+    photoUrl: r.photo_url,
+    servicePost: r.assigned_station,
+    assignedStation: r.assigned_station,
+    assignedStationId: r.assigned_station_id,
+  };
+}
+
 export async function getSecurityAgents(condoId?: number) {
+  const pool = createPool();
   try {
-    const list = getStoreAgents(condoId);
     const condoMap = await getCondoNameMap();
-    return list.map((a) => {
-      const ids: number[] = Array.isArray(a.condoIds) && a.condoIds.length > 0
-        ? a.condoIds
-        : (a.condoId ? [a.condoId] : []);
-      const names = ids.map((id) => condoMap.get(id)).filter(Boolean) as string[];
-
-      let mainCondoName = 'Operações Regionais';
-      if (names.length === 1) {
-        mainCondoName = names[0];
-      } else if (names.length > 1) {
-        mainCondoName = `${names[0]} (+${names.length - 1} postos)`;
-      } else if (a.condoId) {
-        mainCondoName = condoMap.get(a.condoId) || 'Posto Geral';
-      }
-
-      return {
-        ...a,
-        condoIds: ids,
-        condoNames: names,
-        condoName: mainCondoName,
-      };
-    });
+    let query = 'SELECT * FROM security_agents ORDER BY name ASC';
+    const params: any[] = [];
+    if (condoId) {
+      query = 'SELECT * FROM security_agents WHERE condo_id = $1 OR $1 = ANY(condo_ids) ORDER BY name ASC';
+      params.push(condoId);
+    }
+    const res = await pool.query(query, params);
+    return res.rows.map((r: any) => formatAgentRow(r, condoMap));
   } catch (error) {
     console.error('getSecurityAgents failed:', error);
     return [];
@@ -1639,43 +1729,48 @@ export async function createSecurityAgent(data: {
   shift?: any;
   status?: any;
   servicePost?: string;
+  assignedStation?: string;
+  assignedStationId?: string;
   photoUrl?: string;
   admissionDate?: string;
   notes?: string;
 }) {
+  const pool = createPool();
   try {
     const ids: number[] = Array.isArray(data.condoIds) && data.condoIds.length > 0
       ? data.condoIds.map(Number)
       : (data.condoId ? [Number(data.condoId)] : []);
     const primaryCondoId = ids[0] ?? (data.condoId ? Number(data.condoId) : null);
+    const badge = (data.badgeNumber || `AG-${Math.floor(1000 + Math.random() * 9000)}`).trim();
+    const station = data.assignedStation?.trim() || data.servicePost?.trim() || null;
 
-    const newAgent = createStoreAgent({
-      condoId: primaryCondoId,
-      condoIds: ids,
-      name: (data.name || '').trim(),
-      cpf: data.cpf ? String(data.cpf).trim() : null,
-      phone: (data.phone || '').trim(),
-      badgeNumber: (data.badgeNumber || `AG-${Math.floor(1000 + Math.random() * 9000)}`).trim(),
-      roleTitle: data.roleTitle || 'agente_portaria',
-      shift: data.shift || '12x36_dia',
-      status: data.status || 'em_servico',
-      servicePost: data.servicePost?.trim() || null,
-      photoUrl: data.photoUrl?.trim() || null,
-      admissionDate: data.admissionDate ? String(data.admissionDate).trim() : null,
-      notes: data.notes ? String(data.notes).trim() : null,
-    });
+    const res = await pool.query(
+      `INSERT INTO security_agents (
+        condo_id, condo_ids, name, cpf, phone, badge_number,
+        role_title, shift, status, admission_date, notes,
+        photo_url, assigned_station, assigned_station_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      RETURNING *`,
+      [
+        primaryCondoId,
+        ids,
+        data.name.trim(),
+        data.cpf ? String(data.cpf).trim() : null,
+        data.phone.trim(),
+        badge,
+        data.roleTitle || 'agente_portaria',
+        data.shift || '12x36_dia',
+        data.status || 'em_servico',
+        data.admissionDate ? String(data.admissionDate).trim() : null,
+        data.notes ? String(data.notes).trim() : null,
+        data.photoUrl?.trim() || null,
+        station,
+        data.assignedStationId?.trim() || null,
+      ]
+    );
+
     const condoMap = await getCondoNameMap();
-    const names = ids.map((id) => condoMap.get(id)).filter(Boolean) as string[];
-    const mainCondoName = names.length > 1
-      ? `${names[0]} (+${names.length - 1} postos)`
-      : (names[0] || (newAgent.condoId ? condoMap.get(newAgent.condoId) || 'Posto Geral' : 'Operações Regionais'));
-
-    return {
-      ...newAgent,
-      condoIds: ids,
-      condoNames: names,
-      condoName: mainCondoName,
-    };
+    return formatAgentRow(res.rows[0], condoMap);
   } catch (error) {
     console.error('createSecurityAgent failed:', error);
     throw new Error('Falha ao cadastrar agente de portaria.', { cause: error });
@@ -1693,40 +1788,92 @@ export async function updateSecurityAgent(id: number, data: Partial<{
   shift?: any;
   status?: any;
   servicePost?: string;
+  assignedStation?: string;
+  assignedStationId?: string;
   photoUrl?: string;
   admissionDate?: string;
   notes?: string;
 }>) {
+  const pool = createPool();
   try {
-    const safeData: any = { ...data };
-    if (data.name !== undefined) safeData.name = (data.name || '').trim();
-    if (data.phone !== undefined) safeData.phone = (data.phone || '').trim();
-    if (data.badgeNumber !== undefined) safeData.badgeNumber = (data.badgeNumber || '').trim();
-    if (data.servicePost !== undefined) safeData.servicePost = data.servicePost?.trim() || null;
-    if (data.photoUrl !== undefined) safeData.photoUrl = data.photoUrl?.trim() || null;
-    if (data.condoIds !== undefined && Array.isArray(data.condoIds)) {
-      safeData.condoIds = data.condoIds.map(Number);
-      safeData.condoId = safeData.condoIds[0] ?? null;
-    } else if (data.condoId !== undefined) {
-      safeData.condoId = data.condoId ? Number(data.condoId) : null;
-      safeData.condoIds = safeData.condoId ? [safeData.condoId] : [];
-    }
-    const updated = updateStoreAgent(id, safeData);
-    const condoMap = await getCondoNameMap();
-    const ids: number[] = Array.isArray(updated.condoIds) && updated.condoIds.length > 0
-      ? updated.condoIds
-      : (updated.condoId ? [updated.condoId] : []);
-    const names = ids.map((cid) => condoMap.get(cid)).filter(Boolean) as string[];
-    const mainCondoName = names.length > 1
-      ? `${names[0]} (+${names.length - 1} postos)`
-      : (names[0] || (updated.condoId ? condoMap.get(updated.condoId) || 'Posto Geral' : 'Operações Regionais'));
+    const fields: string[] = [];
+    const values: any[] = [];
+    let idx = 1;
 
-    return {
-      ...updated,
-      condoIds: ids,
-      condoNames: names,
-      condoName: mainCondoName,
-    };
+    if (data.name !== undefined) {
+      fields.push(`name = $${idx++}`);
+      values.push(data.name.trim());
+    }
+    if (data.cpf !== undefined) {
+      fields.push(`cpf = $${idx++}`);
+      values.push(data.cpf ? String(data.cpf).trim() : null);
+    }
+    if (data.phone !== undefined) {
+      fields.push(`phone = $${idx++}`);
+      values.push(data.phone.trim());
+    }
+    if (data.badgeNumber !== undefined) {
+      fields.push(`badge_number = $${idx++}`);
+      values.push(data.badgeNumber.trim());
+    }
+    if (data.roleTitle !== undefined) {
+      fields.push(`role_title = $${idx++}`);
+      values.push(data.roleTitle);
+    }
+    if (data.shift !== undefined) {
+      fields.push(`shift = $${idx++}`);
+      values.push(data.shift);
+    }
+    if (data.status !== undefined) {
+      fields.push(`status = $${idx++}`);
+      values.push(data.status);
+    }
+    if (data.assignedStation !== undefined || data.servicePost !== undefined) {
+      fields.push(`assigned_station = $${idx++}`);
+      values.push(data.assignedStation?.trim() || data.servicePost?.trim() || null);
+    }
+    if (data.assignedStationId !== undefined) {
+      fields.push(`assigned_station_id = $${idx++}`);
+      values.push(data.assignedStationId?.trim() || null);
+    }
+    if (data.photoUrl !== undefined) {
+      fields.push(`photo_url = $${idx++}`);
+      values.push(data.photoUrl?.trim() || null);
+    }
+    if (data.admissionDate !== undefined) {
+      fields.push(`admission_date = $${idx++}`);
+      values.push(data.admissionDate ? String(data.admissionDate).trim() : null);
+    }
+    if (data.notes !== undefined) {
+      fields.push(`notes = $${idx++}`);
+      values.push(data.notes ? String(data.notes).trim() : null);
+    }
+    if (data.condoIds !== undefined && Array.isArray(data.condoIds)) {
+      const ids = data.condoIds.map(Number);
+      fields.push(`condo_ids = $${idx++}`);
+      values.push(ids);
+      fields.push(`condo_id = $${idx++}`);
+      values.push(ids[0] ?? null);
+    } else if (data.condoId !== undefined) {
+      const cid = data.condoId ? Number(data.condoId) : null;
+      fields.push(`condo_id = $${idx++}`);
+      values.push(cid);
+      fields.push(`condo_ids = $${idx++}`);
+      values.push(cid ? [cid] : []);
+    }
+
+    if (fields.length > 0) {
+      values.push(id);
+      await pool.query(
+        `UPDATE security_agents SET ${fields.join(', ')} WHERE id = $${idx}`,
+        values
+      );
+    }
+
+    const res = await pool.query('SELECT * FROM security_agents WHERE id = $1', [id]);
+    if (res.rows.length === 0) throw new Error('Agente não encontrado.');
+    const condoMap = await getCondoNameMap();
+    return formatAgentRow(res.rows[0], condoMap);
   } catch (error) {
     console.error('updateSecurityAgent failed:', error);
     throw new Error('Falha ao atualizar agente.', { cause: error });
@@ -1734,8 +1881,9 @@ export async function updateSecurityAgent(id: number, data: Partial<{
 }
 
 export async function deleteSecurityAgent(id: number) {
+  const pool = createPool();
   try {
-    deleteStoreAgent(id);
+    await pool.query('DELETE FROM security_agents WHERE id = $1', [id]);
     return { success: true };
   } catch (error) {
     console.error('deleteSecurityAgent failed:', error);
@@ -1745,14 +1893,43 @@ export async function deleteSecurityAgent(id: number) {
 
 // --- VEÍCULOS DE RONDA DA EMPRESA (MOTO, CARRO, ETC.) ---
 
+function formatVehicleRow(r: any, condoMap: Map<number, string>) {
+  return {
+    id: r.id,
+    condoId: r.condo_id,
+    condoName: r.condo_id ? (condoMap.get(r.condo_id) || 'Posto Geral') : 'Frota Geral',
+    type: r.type,
+    plate: r.plate,
+    model: r.model,
+    brand: r.brand,
+    color: r.color,
+    currentKm: r.current_km || 0,
+    driverName: r.driver_name,
+    activeDriver: r.active_driver,
+    checkoutKm: r.checkout_km,
+    checkoutFuel: r.checkout_fuel,
+    checkoutAt: r.checkout_at,
+    checkoutChecklist: Array.isArray(r.checkout_checklist) ? r.checkout_checklist : [],
+    status: r.status,
+    routeDescription: r.route_description,
+    lastPatrolAt: r.last_patrol_at,
+    photoUrl: r.photo_url,
+    createdAt: r.created_at,
+  };
+}
+
 export async function getPatrolVehicles(condoId?: number) {
+  const pool = createPool();
   try {
-    const list = getStorePatrolVehicles(condoId);
     const condoMap = await getCondoNameMap();
-    return list.map((v) => ({
-      ...v,
-      condoName: v.condoId ? (condoMap.get(v.condoId) || 'Posto Geral') : 'Frota Geral',
-    }));
+    let query = 'SELECT * FROM patrol_vehicles ORDER BY id DESC';
+    const params: any[] = [];
+    if (condoId) {
+      query = 'SELECT * FROM patrol_vehicles WHERE condo_id = $1 ORDER BY id DESC';
+      params.push(condoId);
+    }
+    const res = await pool.query(query, params);
+    return res.rows.map((r: any) => formatVehicleRow(r, condoMap));
   } catch (error) {
     console.error('getPatrolVehicles failed:', error);
     return [];
@@ -1778,31 +1955,39 @@ export async function createPatrolVehicle(data: {
   lastPatrolAt?: string;
   photoUrl?: string;
 }) {
+  const pool = createPool();
   try {
-    const newVehicle = createStorePatrolVehicle({
-      condoId: data.condoId ? Number(data.condoId) : null,
-      type: data.type || 'moto',
-      plate: data.plate.trim().toUpperCase(),
-      model: data.model.trim(),
-      brand: data.brand?.trim() || null,
-      color: data.color?.trim() || 'Preto',
-      currentKm: parseInt(String(data.currentKm || 0), 10) || 0,
-      driverName: data.driverName?.trim() || null,
-      activeDriver: data.activeDriver?.trim() || null,
-      checkoutKm: data.checkoutKm !== undefined ? Number(data.checkoutKm) : null,
-      checkoutFuel: data.checkoutFuel || null,
-      checkoutAt: data.checkoutAt || null,
-      checkoutChecklist: Array.isArray(data.checkoutChecklist) ? data.checkoutChecklist : [],
-      status: data.status || 'disponivel',
-      routeDescription: data.routeDescription?.trim() || null,
-      lastPatrolAt: data.lastPatrolAt?.trim() || ('Hoje às ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })),
-      photoUrl: data.photoUrl?.trim() || null,
-    });
+    const res = await pool.query(
+      `INSERT INTO patrol_vehicles (
+        condo_id, type, plate, model, brand, color, current_km,
+        driver_name, active_driver, checkout_km, checkout_fuel,
+        checkout_at, checkout_checklist, status, route_description,
+        last_patrol_at, photo_url
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+      RETURNING *`,
+      [
+        data.condoId ? Number(data.condoId) : null,
+        data.type || 'moto',
+        data.plate.trim().toUpperCase(),
+        data.model.trim(),
+        data.brand?.trim() || null,
+        data.color?.trim() || 'Preto',
+        parseInt(String(data.currentKm || 0), 10) || 0,
+        data.driverName?.trim() || null,
+        data.activeDriver?.trim() || null,
+        data.checkoutKm !== undefined && data.checkoutKm !== null ? Number(data.checkoutKm) : null,
+        data.checkoutFuel || null,
+        data.checkoutAt || null,
+        Array.isArray(data.checkoutChecklist) ? data.checkoutChecklist : [],
+        data.status || 'disponivel',
+        data.routeDescription?.trim() || null,
+        data.lastPatrolAt?.trim() || ('Hoje às ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })),
+        data.photoUrl?.trim() || null,
+      ]
+    );
+
     const condoMap = await getCondoNameMap();
-    return {
-      ...newVehicle,
-      condoName: newVehicle.condoId ? (condoMap.get(newVehicle.condoId) || 'Posto Geral') : 'Frota Geral',
-    };
+    return formatVehicleRow(res.rows[0], condoMap);
   } catch (error) {
     console.error('createPatrolVehicle failed:', error);
     throw new Error('Falha ao cadastrar veículo de ronda.', { cause: error });
@@ -1828,13 +2013,93 @@ export async function updatePatrolVehicle(id: number, data: Partial<{
   lastPatrolAt?: string;
   photoUrl?: string;
 }>) {
+  const pool = createPool();
   try {
-    const updated = updateStorePatrolVehicle(id, data);
+    const fields: string[] = [];
+    const values: any[] = [];
+    let idx = 1;
+
+    if (data.condoId !== undefined) {
+      fields.push(`condo_id = $${idx++}`);
+      values.push(data.condoId ? Number(data.condoId) : null);
+    }
+    if (data.type !== undefined) {
+      fields.push(`type = $${idx++}`);
+      values.push(data.type);
+    }
+    if (data.plate !== undefined) {
+      fields.push(`plate = $${idx++}`);
+      values.push(data.plate.trim().toUpperCase());
+    }
+    if (data.model !== undefined) {
+      fields.push(`model = $${idx++}`);
+      values.push(data.model.trim());
+    }
+    if (data.brand !== undefined) {
+      fields.push(`brand = $${idx++}`);
+      values.push(data.brand?.trim() || null);
+    }
+    if (data.color !== undefined) {
+      fields.push(`color = $${idx++}`);
+      values.push(data.color?.trim() || 'Preto');
+    }
+    if (data.currentKm !== undefined) {
+      fields.push(`current_km = $${idx++}`);
+      values.push(parseInt(String(data.currentKm || 0), 10) || 0);
+    }
+    if (data.driverName !== undefined) {
+      fields.push(`driver_name = $${idx++}`);
+      values.push(data.driverName?.trim() || null);
+    }
+    if (data.activeDriver !== undefined) {
+      fields.push(`active_driver = $${idx++}`);
+      values.push(data.activeDriver?.trim() || null);
+    }
+    if (data.checkoutKm !== undefined) {
+      fields.push(`checkout_km = $${idx++}`);
+      values.push(data.checkoutKm !== null ? Number(data.checkoutKm) : null);
+    }
+    if (data.checkoutFuel !== undefined) {
+      fields.push(`checkout_fuel = $${idx++}`);
+      values.push(data.checkoutFuel || null);
+    }
+    if (data.checkoutAt !== undefined) {
+      fields.push(`checkout_at = $${idx++}`);
+      values.push(data.checkoutAt || null);
+    }
+    if (data.checkoutChecklist !== undefined) {
+      fields.push(`checkout_checklist = $${idx++}`);
+      values.push(Array.isArray(data.checkoutChecklist) ? data.checkoutChecklist : []);
+    }
+    if (data.status !== undefined) {
+      fields.push(`status = $${idx++}`);
+      values.push(data.status);
+    }
+    if (data.routeDescription !== undefined) {
+      fields.push(`route_description = $${idx++}`);
+      values.push(data.routeDescription?.trim() || null);
+    }
+    if (data.lastPatrolAt !== undefined) {
+      fields.push(`last_patrol_at = $${idx++}`);
+      values.push(data.lastPatrolAt?.trim() || null);
+    }
+    if (data.photoUrl !== undefined) {
+      fields.push(`photo_url = $${idx++}`);
+      values.push(data.photoUrl?.trim() || null);
+    }
+
+    if (fields.length > 0) {
+      values.push(id);
+      await pool.query(
+        `UPDATE patrol_vehicles SET ${fields.join(', ')} WHERE id = $${idx}`,
+        values
+      );
+    }
+
+    const res = await pool.query('SELECT * FROM patrol_vehicles WHERE id = $1', [id]);
+    if (res.rows.length === 0) throw new Error('Veículo não encontrado.');
     const condoMap = await getCondoNameMap();
-    return {
-      ...updated,
-      condoName: updated.condoId ? (condoMap.get(updated.condoId) || 'Posto Geral') : 'Frota Geral',
-    };
+    return formatVehicleRow(res.rows[0], condoMap);
   } catch (error) {
     console.error('updatePatrolVehicle failed:', error);
     throw new Error('Falha ao atualizar veículo de ronda.', { cause: error });
@@ -1842,8 +2107,9 @@ export async function updatePatrolVehicle(id: number, data: Partial<{
 }
 
 export async function deletePatrolVehicle(id: number) {
+  const pool = createPool();
   try {
-    deleteStorePatrolVehicle(id);
+    await pool.query('DELETE FROM patrol_vehicles WHERE id = $1', [id]);
     return { success: true };
   } catch (error) {
     console.error('deletePatrolVehicle failed:', error);
@@ -1853,14 +2119,40 @@ export async function deletePatrolVehicle(id: number) {
 
 // --- MATERIAIS E PATRIMÔNIO DA EMPRESA NO CONDOMÍNIO ---
 
+function formatAssetRow(r: any, condoMap: Map<number, string>) {
+  return {
+    id: r.id,
+    condoId: r.condo_id,
+    condoName: r.condo_id ? (condoMap.get(r.condo_id) || 'Posto Geral') : 'Almoxarifado Central',
+    name: r.name,
+    category: r.category,
+    assetTag: r.asset_tag,
+    serialNumber: r.serial_number,
+    quantity: r.quantity || 1,
+    condition: r.condition,
+    deliveryDate: r.delivery_date,
+    responsibleAgent: r.responsible_agent,
+    notes: r.notes,
+    photoUrl: r.photo_url,
+    cautelaAt: r.cautela_at,
+    cautelaNotes: r.cautela_notes,
+    cautelaItems: Array.isArray(r.cautela_items) ? r.cautela_items : [],
+    createdAt: r.created_at,
+  };
+}
+
 export async function getCompanyAssets(condoId?: number) {
+  const pool = createPool();
   try {
-    const list = getStoreCompanyAssets(condoId);
     const condoMap = await getCondoNameMap();
-    return list.map((a) => ({
-      ...a,
-      condoName: a.condoId ? (condoMap.get(a.condoId) || 'Posto Geral') : 'Almoxarifado Central',
-    }));
+    let query = 'SELECT * FROM company_assets ORDER BY id DESC';
+    const params: any[] = [];
+    if (condoId) {
+      query = 'SELECT * FROM company_assets WHERE condo_id = $1 ORDER BY id DESC';
+      params.push(condoId);
+    }
+    const res = await pool.query(query, params);
+    return res.rows.map((r: any) => formatAssetRow(r, condoMap));
   } catch (error) {
     console.error('getCompanyAssets failed:', error);
     return [];
@@ -1883,28 +2175,35 @@ export async function createCompanyAsset(data: {
   photoUrl?: string;
   notes?: string;
 }) {
+  const pool = createPool();
   try {
-    const newAsset = createStoreCompanyAsset({
-      condoId: data.condoId ? Number(data.condoId) : null,
-      name: data.name.trim(),
-      category: data.category || 'comunicacao',
-      assetTag: data.assetTag?.trim() || null,
-      serialNumber: data.serialNumber?.trim() || null,
-      quantity: parseInt(String(data.quantity || 1), 10) || 1,
-      condition: data.condition || 'bom',
-      deliveryDate: data.deliveryDate?.trim() || null,
-      responsibleAgent: data.responsibleAgent?.trim() || null,
-      cautelaAt: data.cautelaAt?.trim() || null,
-      cautelaNotes: data.cautelaNotes?.trim() || null,
-      cautelaItems: Array.isArray(data.cautelaItems) ? data.cautelaItems : [],
-      photoUrl: data.photoUrl?.trim() || null,
-      notes: data.notes?.trim() || null,
-    });
+    const res = await pool.query(
+      `INSERT INTO company_assets (
+        condo_id, name, category, asset_tag, serial_number, quantity,
+        condition, delivery_date, responsible_agent, cautela_at,
+        cautela_notes, cautela_items, photo_url, notes
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      RETURNING *`,
+      [
+        data.condoId ? Number(data.condoId) : null,
+        data.name.trim(),
+        data.category || 'comunicacao',
+        data.assetTag?.trim() || null,
+        data.serialNumber?.trim() || null,
+        parseInt(String(data.quantity || 1), 10) || 1,
+        data.condition || 'bom',
+        data.deliveryDate?.trim() || null,
+        data.responsibleAgent?.trim() || null,
+        data.cautelaAt?.trim() || null,
+        data.cautelaNotes?.trim() || null,
+        Array.isArray(data.cautelaItems) ? data.cautelaItems : [],
+        data.photoUrl?.trim() || null,
+        data.notes?.trim() || null,
+      ]
+    );
+
     const condoMap = await getCondoNameMap();
-    return {
-      ...newAsset,
-      condoName: newAsset.condoId ? (condoMap.get(newAsset.condoId) || 'Posto Geral') : 'Almoxarifado Central',
-    };
+    return formatAssetRow(res.rows[0], condoMap);
   } catch (error) {
     console.error('createCompanyAsset failed:', error);
     throw new Error('Falha ao cadastrar material da empresa.', { cause: error });
@@ -1927,13 +2226,81 @@ export async function updateCompanyAsset(id: number, data: Partial<{
   photoUrl?: string;
   notes?: string;
 }>) {
+  const pool = createPool();
   try {
-    const updated = updateStoreCompanyAsset(id, data);
+    const fields: string[] = [];
+    const values: any[] = [];
+    let idx = 1;
+
+    if (data.condoId !== undefined) {
+      fields.push(`condo_id = $${idx++}`);
+      values.push(data.condoId ? Number(data.condoId) : null);
+    }
+    if (data.name !== undefined) {
+      fields.push(`name = $${idx++}`);
+      values.push(data.name.trim());
+    }
+    if (data.category !== undefined) {
+      fields.push(`category = $${idx++}`);
+      values.push(data.category);
+    }
+    if (data.assetTag !== undefined) {
+      fields.push(`asset_tag = $${idx++}`);
+      values.push(data.assetTag?.trim() || null);
+    }
+    if (data.serialNumber !== undefined) {
+      fields.push(`serial_number = $${idx++}`);
+      values.push(data.serialNumber?.trim() || null);
+    }
+    if (data.quantity !== undefined) {
+      fields.push(`quantity = $${idx++}`);
+      values.push(parseInt(String(data.quantity || 1), 10) || 1);
+    }
+    if (data.condition !== undefined) {
+      fields.push(`condition = $${idx++}`);
+      values.push(data.condition);
+    }
+    if (data.deliveryDate !== undefined) {
+      fields.push(`delivery_date = $${idx++}`);
+      values.push(data.deliveryDate?.trim() || null);
+    }
+    if (data.responsibleAgent !== undefined) {
+      fields.push(`responsible_agent = $${idx++}`);
+      values.push(data.responsibleAgent?.trim() || null);
+    }
+    if (data.cautelaAt !== undefined) {
+      fields.push(`cautela_at = $${idx++}`);
+      values.push(data.cautelaAt?.trim() || null);
+    }
+    if (data.cautelaNotes !== undefined) {
+      fields.push(`cautela_notes = $${idx++}`);
+      values.push(data.cautelaNotes?.trim() || null);
+    }
+    if (data.cautelaItems !== undefined) {
+      fields.push(`cautela_items = $${idx++}`);
+      values.push(Array.isArray(data.cautelaItems) ? data.cautelaItems : []);
+    }
+    if (data.photoUrl !== undefined) {
+      fields.push(`photo_url = $${idx++}`);
+      values.push(data.photoUrl?.trim() || null);
+    }
+    if (data.notes !== undefined) {
+      fields.push(`notes = $${idx++}`);
+      values.push(data.notes?.trim() || null);
+    }
+
+    if (fields.length > 0) {
+      values.push(id);
+      await pool.query(
+        `UPDATE company_assets SET ${fields.join(', ')} WHERE id = $${idx}`,
+        values
+      );
+    }
+
+    const res = await pool.query('SELECT * FROM company_assets WHERE id = $1', [id]);
+    if (res.rows.length === 0) throw new Error('Material não encontrado.');
     const condoMap = await getCondoNameMap();
-    return {
-      ...updated,
-      condoName: updated.condoId ? (condoMap.get(updated.condoId) || 'Posto Geral') : 'Almoxarifado Central',
-    };
+    return formatAssetRow(res.rows[0], condoMap);
   } catch (error) {
     console.error('updateCompanyAsset failed:', error);
     throw new Error('Falha ao atualizar material.', { cause: error });
@@ -1941,8 +2308,9 @@ export async function updateCompanyAsset(id: number, data: Partial<{
 }
 
 export async function deleteCompanyAsset(id: number) {
+  const pool = createPool();
   try {
-    deleteStoreCompanyAsset(id);
+    await pool.query('DELETE FROM company_assets WHERE id = $1', [id]);
     return { success: true };
   } catch (error) {
     console.error('deleteCompanyAsset failed:', error);
@@ -1952,14 +2320,37 @@ export async function deleteCompanyAsset(id: number) {
 
 // --- MANUTENÇÕES REALIZADAS PELA EMPRESA NO CONDOMÍNIO ---
 
+function formatMaintenanceRow(r: any, condoMap: Map<number, string>) {
+  return {
+    id: r.id,
+    condoId: r.condo_id,
+    condoName: r.condo_id ? (condoMap.get(r.condo_id) || 'Posto Geral') : 'Contrato Geral',
+    title: r.title,
+    category: r.category,
+    maintenanceType: r.maintenance_type,
+    technicianName: r.technician_name,
+    scheduledDate: r.scheduled_date,
+    completedDate: r.completed_date,
+    cost: r.cost,
+    status: r.status,
+    description: r.description,
+    solutionDetails: r.solution_details,
+    createdAt: r.created_at,
+  };
+}
+
 export async function getMaintenanceOrders(condoId?: number) {
+  const pool = createPool();
   try {
-    const list = getStoreMaintenances(condoId);
     const condoMap = await getCondoNameMap();
-    return list.map((m) => ({
-      ...m,
-      condoName: m.condoId ? (condoMap.get(m.condoId) || 'Posto Geral') : 'Contrato Geral',
-    }));
+    let query = 'SELECT * FROM maintenance_orders ORDER BY scheduled_date DESC, id DESC';
+    const params: any[] = [];
+    if (condoId) {
+      query = 'SELECT * FROM maintenance_orders WHERE condo_id = $1 ORDER BY scheduled_date DESC, id DESC';
+      params.push(condoId);
+    }
+    const res = await pool.query(query, params);
+    return res.rows.map((r: any) => formatMaintenanceRow(r, condoMap));
   } catch (error) {
     console.error('getMaintenanceOrders failed:', error);
     return [];
@@ -1979,25 +2370,31 @@ export async function createMaintenanceOrder(data: {
   description: string;
   solutionDetails?: string;
 }) {
+  const pool = createPool();
   try {
-    const newM = createStoreMaintenance({
-      condoId: data.condoId ? Number(data.condoId) : null,
-      title: data.title.trim(),
-      category: data.category || 'portoes',
-      maintenanceType: data.maintenanceType || 'preventiva',
-      technicianName: data.technicianName.trim(),
-      scheduledDate: data.scheduledDate.trim(),
-      completedDate: data.completedDate?.trim() || null,
-      cost: data.cost?.trim() || 'R$ 0,00',
-      status: data.status || 'agendada',
-      description: data.description.trim(),
-      solutionDetails: data.solutionDetails?.trim() || null,
-    });
+    const res = await pool.query(
+      `INSERT INTO maintenance_orders (
+        condo_id, title, category, maintenance_type, technician_name,
+        scheduled_date, completed_date, cost, status, description, solution_details
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      RETURNING *`,
+      [
+        data.condoId ? Number(data.condoId) : null,
+        data.title.trim(),
+        data.category || 'portoes',
+        data.maintenanceType || 'preventiva',
+        data.technicianName.trim(),
+        data.scheduledDate.trim(),
+        data.completedDate?.trim() || null,
+        data.cost?.trim() || 'R$ 0,00',
+        data.status || 'agendada',
+        data.description.trim(),
+        data.solutionDetails?.trim() || null,
+      ]
+    );
+
     const condoMap = await getCondoNameMap();
-    return {
-      ...newM,
-      condoName: newM.condoId ? (condoMap.get(newM.condoId) || 'Posto Geral') : 'Contrato Geral',
-    };
+    return formatMaintenanceRow(res.rows[0], condoMap);
   } catch (error) {
     console.error('createMaintenanceOrder failed:', error);
     throw new Error('Falha ao cadastrar ordem de manutenção.', { cause: error });
@@ -2017,13 +2414,69 @@ export async function updateMaintenanceOrder(id: number, data: Partial<{
   description?: string;
   solutionDetails?: string;
 }>) {
+  const pool = createPool();
   try {
-    const updated = updateStoreMaintenance(id, data);
+    const fields: string[] = [];
+    const values: any[] = [];
+    let idx = 1;
+
+    if (data.condoId !== undefined) {
+      fields.push(`condo_id = $${idx++}`);
+      values.push(data.condoId ? Number(data.condoId) : null);
+    }
+    if (data.title !== undefined) {
+      fields.push(`title = $${idx++}`);
+      values.push(data.title.trim());
+    }
+    if (data.category !== undefined) {
+      fields.push(`category = $${idx++}`);
+      values.push(data.category);
+    }
+    if (data.maintenanceType !== undefined) {
+      fields.push(`maintenance_type = $${idx++}`);
+      values.push(data.maintenanceType);
+    }
+    if (data.technicianName !== undefined) {
+      fields.push(`technician_name = $${idx++}`);
+      values.push(data.technicianName.trim());
+    }
+    if (data.scheduledDate !== undefined) {
+      fields.push(`scheduled_date = $${idx++}`);
+      values.push(data.scheduledDate.trim());
+    }
+    if (data.completedDate !== undefined) {
+      fields.push(`completed_date = $${idx++}`);
+      values.push(data.completedDate?.trim() || null);
+    }
+    if (data.cost !== undefined) {
+      fields.push(`cost = $${idx++}`);
+      values.push(data.cost?.trim() || 'R$ 0,00');
+    }
+    if (data.status !== undefined) {
+      fields.push(`status = $${idx++}`);
+      values.push(data.status);
+    }
+    if (data.description !== undefined) {
+      fields.push(`description = $${idx++}`);
+      values.push(data.description.trim());
+    }
+    if (data.solutionDetails !== undefined) {
+      fields.push(`solution_details = $${idx++}`);
+      values.push(data.solutionDetails?.trim() || null);
+    }
+
+    if (fields.length > 0) {
+      values.push(id);
+      await pool.query(
+        `UPDATE maintenance_orders SET ${fields.join(', ')} WHERE id = $${idx}`,
+        values
+      );
+    }
+
+    const res = await pool.query('SELECT * FROM maintenance_orders WHERE id = $1', [id]);
+    if (res.rows.length === 0) throw new Error('Manutenção não encontrada.');
     const condoMap = await getCondoNameMap();
-    return {
-      ...updated,
-      condoName: updated.condoId ? (condoMap.get(updated.condoId) || 'Posto Geral') : 'Contrato Geral',
-    };
+    return formatMaintenanceRow(res.rows[0], condoMap);
   } catch (error) {
     console.error('updateMaintenanceOrder failed:', error);
     throw new Error('Falha ao atualizar manutenção.', { cause: error });
@@ -2031,8 +2484,9 @@ export async function updateMaintenanceOrder(id: number, data: Partial<{
 }
 
 export async function deleteMaintenanceOrder(id: number) {
+  const pool = createPool();
   try {
-    deleteStoreMaintenance(id);
+    await pool.query('DELETE FROM maintenance_orders WHERE id = $1', [id]);
     return { success: true };
   } catch (error) {
     console.error('deleteMaintenanceOrder failed:', error);
@@ -2042,14 +2496,45 @@ export async function deleteMaintenanceOrder(id: number) {
 
 // --- LIVRO DE OCORRÊNCIAS OPERACIONAIS E PASSAGEM DE TURNO ---
 
+function formatOperationalLogRow(r: any, condoMap: Map<number, string>) {
+  return {
+    id: r.id,
+    condoId: r.condo_id,
+    condoName: r.condo_id ? (condoMap.get(r.condo_id) || 'Posto Geral') : 'Supervisão Geral',
+    agentName: r.agent_name,
+    shiftType: r.shift_type,
+    logType: r.log_type,
+    severity: r.severity,
+    status: r.status,
+    title: r.title,
+    description: r.description,
+    actionTaken: r.action_taken,
+    logDate: r.log_date,
+    logTime: r.log_time,
+    photoUrl: r.photo_url,
+    designatedIncomingAgentName: r.designated_incoming_agent_name,
+    designatedIncomingAgentId: r.designated_incoming_agent_id,
+    incomingAgentAccepted: !!r.incoming_agent_accepted,
+    incomingAgentName: r.incoming_agent_name,
+    incomingAcceptedAt: r.incoming_accepted_at,
+    incomingChecklist: r.incoming_checklist || null,
+    incomingNotes: r.incoming_notes,
+    createdAt: r.created_at,
+  };
+}
+
 export async function getOperationalLogs(condoId?: number) {
+  const pool = createPool();
   try {
-    const list = getStoreOperationalLogs(condoId);
     const condoMap = await getCondoNameMap();
-    return list.map((l) => ({
-      ...l,
-      condoName: l.condoId ? (condoMap.get(l.condoId) || 'Posto Geral') : 'Supervisão Geral',
-    }));
+    let query = 'SELECT * FROM operational_logs ORDER BY log_date DESC, log_time DESC, id DESC';
+    const params: any[] = [];
+    if (condoId) {
+      query = 'SELECT * FROM operational_logs WHERE condo_id = $1 ORDER BY log_date DESC, log_time DESC, id DESC';
+      params.push(condoId);
+    }
+    const res = await pool.query(query, params);
+    return res.rows.map((r: any) => formatOperationalLogRow(r, condoMap));
   } catch (error) {
     console.error('getOperationalLogs failed:', error);
     return [];
@@ -2068,35 +2553,113 @@ export async function createOperationalLog(data: {
   actionTaken?: string;
   logDate: string;
   logTime: string;
+  photoUrl?: string;
+  designatedIncomingAgentName?: string;
+  designatedIncomingAgentId?: number;
 }) {
+  const pool = createPool();
   try {
-    const newLog = createStoreOperationalLog({
-      condoId: data.condoId ? Number(data.condoId) : null,
-      agentName: data.agentName.trim(),
-      shiftType: data.shiftType || 'dia',
-      logType: data.logType || 'passagem_turno',
-      severity: data.severity || 'informativa',
-      status: data.status || 'resolvida',
-      title: data.title.trim(),
-      description: data.description.trim(),
-      actionTaken: data.actionTaken?.trim() || null,
-      logDate: data.logDate.trim(),
-      logTime: data.logTime.trim(),
-    });
+    const res = await pool.query(
+      `INSERT INTO operational_logs (
+        condo_id, agent_name, shift_type, log_type, severity, status,
+        title, description, action_taken, log_date, log_time, photo_url,
+        designated_incoming_agent_name, designated_incoming_agent_id,
+        incoming_agent_accepted
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+      RETURNING *`,
+      [
+        data.condoId ? Number(data.condoId) : null,
+        data.agentName.trim(),
+        data.shiftType || 'dia',
+        data.logType || 'passagem_turno',
+        data.severity || 'informativa',
+        data.status || 'resolvida',
+        data.title.trim(),
+        data.description.trim(),
+        data.actionTaken?.trim() || null,
+        data.logDate.trim(),
+        data.logTime.trim(),
+        data.photoUrl?.trim() || null,
+        data.designatedIncomingAgentName?.trim() || null,
+        data.designatedIncomingAgentId ? Number(data.designatedIncomingAgentId) : null,
+        false,
+      ]
+    );
+
     const condoMap = await getCondoNameMap();
-    return {
-      ...newLog,
-      condoName: newLog.condoId ? (condoMap.get(newLog.condoId) || 'Posto Geral') : 'Supervisão Geral',
-    };
+    return formatOperationalLogRow(res.rows[0], condoMap);
   } catch (error) {
     console.error('createOperationalLog failed:', error);
     throw new Error('Falha ao registrar ocorrência operacional.', { cause: error });
   }
 }
 
-export async function deleteOperationalLog(id: number) {
+export async function updateOperationalLog(id: number, data: Partial<{
+  status?: string;
+  actionTaken?: string;
+  incomingAgentAccepted?: boolean;
+  incomingAgentName?: string;
+  incomingAcceptedAt?: string;
+  incomingChecklist?: any;
+  incomingNotes?: string;
+}>) {
+  const pool = createPool();
   try {
-    deleteStoreOperationalLog(id);
+    const fields: string[] = [];
+    const values: any[] = [];
+    let idx = 1;
+
+    if (data.status !== undefined) {
+      fields.push(`status = $${idx++}`);
+      values.push(data.status);
+    }
+    if (data.actionTaken !== undefined) {
+      fields.push(`action_taken = $${idx++}`);
+      values.push(data.actionTaken?.trim() || null);
+    }
+    if (data.incomingAgentAccepted !== undefined) {
+      fields.push(`incoming_agent_accepted = $${idx++}`);
+      values.push(Boolean(data.incomingAgentAccepted));
+    }
+    if (data.incomingAgentName !== undefined) {
+      fields.push(`incoming_agent_name = $${idx++}`);
+      values.push(data.incomingAgentName?.trim() || null);
+    }
+    if (data.incomingAcceptedAt !== undefined) {
+      fields.push(`incoming_accepted_at = $${idx++}`);
+      values.push(data.incomingAcceptedAt || null);
+    }
+    if (data.incomingChecklist !== undefined) {
+      fields.push(`incoming_checklist = $${idx++}`);
+      values.push(data.incomingChecklist ? JSON.stringify(data.incomingChecklist) : null);
+    }
+    if (data.incomingNotes !== undefined) {
+      fields.push(`incoming_notes = $${idx++}`);
+      values.push(data.incomingNotes?.trim() || null);
+    }
+
+    if (fields.length > 0) {
+      values.push(id);
+      await pool.query(
+        `UPDATE operational_logs SET ${fields.join(', ')} WHERE id = $${idx}`,
+        values
+      );
+    }
+
+    const res = await pool.query('SELECT * FROM operational_logs WHERE id = $1', [id]);
+    if (res.rows.length === 0) throw new Error('Ocorrência não encontrada.');
+    const condoMap = await getCondoNameMap();
+    return formatOperationalLogRow(res.rows[0], condoMap);
+  } catch (error) {
+    console.error('updateOperationalLog failed:', error);
+    throw new Error('Falha ao atualizar ocorrência operacional.', { cause: error });
+  }
+}
+
+export async function deleteOperationalLog(id: number) {
+  const pool = createPool();
+  try {
+    await pool.query('DELETE FROM operational_logs WHERE id = $1', [id]);
     return { success: true };
   } catch (error) {
     console.error('deleteOperationalLog failed:', error);
@@ -2104,23 +2667,222 @@ export async function deleteOperationalLog(id: number) {
   }
 }
 
+// --- ESCALA 12x36, CONTROLE DE FALTAS E COBERTURAS ---
+
+function formatShiftCoverageRow(r: any, condoMap: Map<number, string>) {
+  return {
+    id: r.id,
+    condoId: r.condo_id,
+    condoName: r.condo_id ? (condoMap.get(r.condo_id) || 'Posto Geral') : 'Geral',
+    stationId: r.station_id,
+    stationName: r.station_name,
+    date: r.date,
+    shiftType: r.shift_type,
+    scheduledAgentId: r.scheduled_agent_id,
+    scheduledAgentName: r.scheduled_agent_name,
+    absenceType: r.absence_type,
+    absenceReason: r.absence_reason,
+    coverageStatus: r.coverage_status,
+    coveringAgentName: r.covering_agent_name,
+    notes: r.notes,
+    assignedBy: r.assigned_by,
+    createdAt: r.created_at,
+  };
+}
+
+export async function getShiftCoverages(condoId?: number) {
+  const pool = createPool();
+  try {
+    const condoMap = await getCondoNameMap();
+    let query = 'SELECT * FROM shift_coverages ORDER BY id DESC';
+    const params: any[] = [];
+    if (condoId) {
+      query = 'SELECT * FROM shift_coverages WHERE condo_id = $1 ORDER BY id DESC';
+      params.push(condoId);
+    }
+    const res = await pool.query(query, params);
+    return res.rows.map((r: any) => formatShiftCoverageRow(r, condoMap));
+  } catch (error) {
+    console.error('getShiftCoverages failed:', error);
+    return [];
+  }
+}
+
+export async function createShiftCoverage(data: {
+  condoId?: number;
+  stationId?: string;
+  stationName?: string;
+  date: string;
+  shiftType?: string;
+  scheduledAgentId?: number;
+  scheduledAgentName?: string;
+  absenceType?: string;
+  absenceReason?: string;
+  coverageStatus?: string;
+  coveringAgentName?: string;
+  notes?: string;
+  assignedBy?: string;
+}) {
+  const pool = createPool();
+  try {
+    const res = await pool.query(
+      `INSERT INTO shift_coverages (
+        condo_id, station_id, station_name, date, shift_type,
+        scheduled_agent_id, scheduled_agent_name, absence_type,
+        absence_reason, coverage_status, covering_agent_name,
+        notes, assigned_by
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      RETURNING *`,
+      [
+        data.condoId ? Number(data.condoId) : null,
+        data.stationId || 'st-default',
+        data.stationName || 'Portaria Principal',
+        data.date,
+        data.shiftType || '12x36_dia',
+        data.scheduledAgentId ? Number(data.scheduledAgentId) : null,
+        data.scheduledAgentName || null,
+        data.absenceType || 'falta_injustificada',
+        data.absenceReason || null,
+        data.coverageStatus || 'descoberto',
+        data.coveringAgentName || null,
+        data.notes || null,
+        data.assignedBy || 'Supervisor de Operações',
+      ]
+    );
+
+    const condoMap = await getCondoNameMap();
+    return formatShiftCoverageRow(res.rows[0], condoMap);
+  } catch (error) {
+    console.error('createShiftCoverage failed:', error);
+    throw new Error('Falha ao registrar cobertura de escala.', { cause: error });
+  }
+}
+
+export async function updateShiftCoverage(id: number, data: Partial<{
+  coverageStatus?: string;
+  coveringAgentName?: string;
+  notes?: string;
+  absenceReason?: string;
+}>) {
+  const pool = createPool();
+  try {
+    const fields: string[] = [];
+    const values: any[] = [];
+    let idx = 1;
+
+    if (data.coverageStatus !== undefined) {
+      fields.push(`coverage_status = $${idx++}`);
+      values.push(data.coverageStatus);
+    }
+    if (data.coveringAgentName !== undefined) {
+      fields.push(`covering_agent_name = $${idx++}`);
+      values.push(data.coveringAgentName?.trim() || null);
+    }
+    if (data.notes !== undefined) {
+      fields.push(`notes = $${idx++}`);
+      values.push(data.notes?.trim() || null);
+    }
+    if (data.absenceReason !== undefined) {
+      fields.push(`absence_reason = $${idx++}`);
+      values.push(data.absenceReason?.trim() || null);
+    }
+
+    if (fields.length > 0) {
+      values.push(id);
+      await pool.query(
+        `UPDATE shift_coverages SET ${fields.join(', ')} WHERE id = $${idx}`,
+        values
+      );
+    }
+
+    const res = await pool.query('SELECT * FROM shift_coverages WHERE id = $1', [id]);
+    if (res.rows.length === 0) throw new Error('Escala de cobertura não encontrada.');
+    const condoMap = await getCondoNameMap();
+    return formatShiftCoverageRow(res.rows[0], condoMap);
+  } catch (error) {
+    console.error('updateShiftCoverage failed:', error);
+    throw new Error('Falha ao atualizar cobertura de escala.', { cause: error });
+  }
+}
+
+export async function deleteShiftCoverage(id: number) {
+  const pool = createPool();
+  try {
+    await pool.query('DELETE FROM shift_coverages WHERE id = $1', [id]);
+    return { success: true };
+  } catch (error) {
+    console.error('deleteShiftCoverage failed:', error);
+    throw new Error('Falha ao excluir cobertura de escala.', { cause: error });
+  }
+}
+
 // --- ESTATÍSTICAS DO PAINEL OPERACIONAL DA EMPRESA ---
 
 export async function getDashboardStats(condoId?: number) {
+  const pool = createPool();
   try {
-    let totalCondos = 0;
-    try {
-      const res = await db.select({ count: sql<number>`count(*)::int` }).from(condominiums);
-      totalCondos = res[0]?.count || 0;
-    } catch {
-      totalCondos = 0;
-    }
+    const whereCondo = condoId ? 'WHERE condo_id = $1' : '';
+    const params = condoId ? [condoId] : [];
 
-    const opStats = getStoreDashboardStats(condoId);
+    const totalCondosRes = await pool.query('SELECT count(*)::int as c FROM condominiums');
+    const totalCondos = totalCondosRes.rows[0]?.c || 0;
+
+    let agentsQuery = `
+      SELECT 
+        count(*)::int as total,
+        count(*) FILTER (WHERE status = 'em_servico')::int as active
+      FROM security_agents
+    `;
+    if (condoId) {
+      agentsQuery = `
+        SELECT 
+          count(*)::int as total,
+          count(*) FILTER (WHERE status = 'em_servico')::int as active
+        FROM security_agents
+        WHERE condo_id = $1 OR $1 = ANY(condo_ids)
+      `;
+    }
+    const agentsRes = await pool.query(agentsQuery, params);
+
+    const vehiclesQuery = `
+      SELECT 
+        count(*)::int as total,
+        count(*) FILTER (WHERE status IN ('em_ronda', 'disponivel'))::int as active
+      FROM patrol_vehicles ${whereCondo}
+    `;
+    const vehiclesRes = await pool.query(vehiclesQuery, params);
+
+    const assetsQuery = `
+      SELECT COALESCE(sum(quantity), 0)::int as total
+      FROM company_assets ${whereCondo}
+    `;
+    const assetsRes = await pool.query(assetsQuery, params);
+
+    const maintQuery = `
+      SELECT 
+        count(*) FILTER (WHERE status IN ('agendada', 'em_andamento'))::int as pending,
+        count(*) FILTER (WHERE status = 'concluida')::int as completed
+      FROM maintenance_orders ${whereCondo}
+    `;
+    const maintRes = await pool.query(maintQuery, params);
+
+    const logsQuery = `
+      SELECT count(*)::int as today
+      FROM operational_logs
+      WHERE ${condoId ? 'condo_id = $1 AND ' : ''} (log_date = CURRENT_DATE::text OR log_date = TO_CHAR(CURRENT_DATE, 'YYYY-MM-DD'))
+    `;
+    const logsRes = await pool.query(logsQuery, params);
 
     return {
       totalCondos,
-      ...opStats,
+      totalAgents: agentsRes.rows[0]?.total || 0,
+      agentsOnDuty: agentsRes.rows[0]?.active || 0,
+      totalPatrolVehicles: vehiclesRes.rows[0]?.total || 0,
+      activePatrolVehicles: vehiclesRes.rows[0]?.active || 0,
+      totalAssets: assetsRes.rows[0]?.total || 0,
+      pendingMaintenances: maintRes.rows[0]?.pending || 0,
+      completedMaintenances: maintRes.rows[0]?.completed || 0,
+      todayLogs: logsRes.rows[0]?.today || 0,
     };
   } catch (error) {
     console.error('getDashboardStats failed:', error);

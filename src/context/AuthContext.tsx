@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, signInWithPopup, signOut as fbSignOut, User } from 'firebase/auth';
-import { auth, googleAuthProvider } from '../lib/firebase.ts';
+import { collection, getDocs } from 'firebase/firestore';
+import { auth, db, googleAuthProvider } from '../lib/firebase.ts';
 import { UserProfile, UserRole } from '../types/index.ts';
 
 interface AuthContextType {
@@ -206,6 +207,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } catch (e: any) {
       if (e.message) throw e;
+    }
+
+    // 5. Consulta usuários sincronizados no Firebase Firestore (acesso cross-device instantâneo)
+    try {
+      const snap = await getDocs(collection(db, 'appUsers'));
+      for (const d of snap.docs) {
+        const u = d.data() as any;
+        if (u.email && u.email.trim().toLowerCase() === cleanEmail) {
+          if (u.password && u.password.trim() === cleanPassword) {
+            const assignedIds: number[] = Array.isArray(u.condoIds) && u.condoIds.length > 0
+              ? u.condoIds
+              : (u.condoId ? [u.condoId] : []);
+            const assignedNames: string[] = Array.isArray(u.condoNames) && u.condoNames.length > 0
+              ? u.condoNames
+              : (u.condoName ? [u.condoName] : []);
+
+            const userProfile: UserProfile = {
+              id: u.id || Date.now(),
+              uid: u.uid || `firestore-${d.id}`,
+              email: u.email,
+              name: u.name,
+              role: u.role || 'portaria',
+              originalRole: u.role || 'portaria',
+              permissions: typeof u.permissions === 'string' ? u.permissions : JSON.stringify(u.permissions || []),
+              condoId: u.condoId || null,
+              condoIds: assignedIds,
+              condoName: u.condoName || null,
+              condoNames: assignedNames,
+              isActive: u.isActive !== false,
+            };
+            setUser(userProfile);
+            localStorage.setItem('novabrasil_user', JSON.stringify(userProfile));
+            return userProfile;
+          } else {
+            throw new Error('Senha incorreta.');
+          }
+        }
+      }
+    } catch (fErr: any) {
+      if (fErr.message && fErr.message.includes('Senha incorreta')) throw fErr;
+      console.warn('Aviso ao consultar usuários no Firestore:', fErr);
     }
 
     throw new Error('E-mail ou senha incorretos.');

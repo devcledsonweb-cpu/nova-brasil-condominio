@@ -26,6 +26,14 @@ import {
   ShiftCoverage,
 } from './types/index.ts';
 import { Loader2, Bell } from 'lucide-react';
+import {
+  COLLECTIONS,
+  subscribeToFirestoreCollection,
+  saveToFirestore,
+  updateInFirestore,
+  deleteFromFirestore,
+  seedIfEmpty,
+} from './services/firestoreSync.ts';
 
 function NovaBrasilMain() {
   const { user, getAuthHeaders, role, isAuthenticated, loading: authLoading } = useAuth();
@@ -85,6 +93,7 @@ function NovaBrasilMain() {
         assetsRes,
         maintenancesRes,
         logsRes,
+        coveragesRes,
       ] = await Promise.all([
         fetch('/api/condominiums', { headers }),
         fetch(`/api/dashboard/stats${queryParam}`, { headers }),
@@ -93,6 +102,7 @@ function NovaBrasilMain() {
         fetch('/api/company-assets', { headers }),
         fetch('/api/maintenances', { headers }),
         fetch('/api/operational-logs', { headers }),
+        fetch('/api/shift-coverages', { headers }),
       ]);
 
       // Helper para ler JSON com segurança e prevenir erros de parse caso o host retorne HTML
@@ -131,125 +141,10 @@ function NovaBrasilMain() {
         }));
         localStorage.setItem('novabrasil_condos', JSON.stringify(loadedCondos));
       } else {
-        const defaultCondos: Condominium[] = [
-          {
-            id: 1,
-            name: 'Condomínio Residencial Jardins',
-            address: 'Av. Paulista, 1000 - Bela Vista',
-            city: 'São Paulo',
-            state: 'SP',
-            zipCode: '01310-100',
-            cnpj: '12.345.678/0001-90',
-            supervisorName: 'Supervisor Roberto Alves',
-            supervisorPhone: '(11) 98888-1234',
-            contractType: 'Portaria 24h + Ronda Noturna Motorizada',
-            sindicoName: 'Administradora Predial Aliança',
-            sindicoPhone: '(11) 3250-9000',
-            status: 'ativo',
-            imageUrl: 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=600&q=80',
-            serviceStations: [
-              {
-                id: 'st-jardins-1',
-                condoId: 1,
-                name: 'Portaria Principal (Social)',
-                type: 'portaria_principal',
-                shiftSchedule: '12x36 Diurno (06h às 18h)',
-                assignedAgentName: 'Carlos Eduardo da Silva',
-                assignedAgentId: 1,
-                instructions: 'Controle de pedestres e identificação biométrica de visitantes',
-              },
-              {
-                id: 'st-jardins-2',
-                condoId: 1,
-                name: 'Portaria de Serviços & Entregas',
-                type: 'portaria_servico',
-                shiftSchedule: '12x36 Diurno',
-                assignedAgentName: 'Marcos Antônio Ribeiro',
-                assignedAgentId: 2,
-                instructions: 'Triagem de prestadores, entregadores de aplicativo e encomendas',
-              },
-              {
-                id: 'st-jardins-3',
-                condoId: 1,
-                name: 'Área de Lazer & Piscinas',
-                type: 'area_lazer',
-                shiftSchedule: 'Finais de semana e feriados',
-                assignedAgentName: null,
-                instructions: 'Fiscalização de convidados nas piscinas e quiosques gourmet',
-              },
-              {
-                id: 'st-jardins-4',
-                condoId: 1,
-                name: 'Ronda Noturna Perimetral',
-                type: 'ronda_perimetro',
-                shiftSchedule: '12x36 Noturno (18h às 06h)',
-                assignedAgentName: 'Lucas Ferreira dos Santos',
-                assignedAgentId: 3,
-                instructions: 'Ronda motorizada com bastão nos muros e subsolos',
-              },
-            ],
-            agentsCount: 4,
-            vehiclesCount: 2,
-            assetsCount: 8,
-            maintenancesCount: 2,
-            createdAt: new Date().toISOString(),
-          },
-          {
-            id: 2,
-            name: 'Condomínio Solar das Palmeiras',
-            address: 'Rua das Flores, 250 - Moema',
-            city: 'São Paulo',
-            state: 'SP',
-            zipCode: '04500-001',
-            cnpj: '98.765.432/0001-10',
-            supervisorName: 'Supervisor Marcelo Duarte',
-            supervisorPhone: '(11) 97777-5678',
-            contractType: 'Portaria Diurna + Ronda Perimetral',
-            sindicoName: 'CondoPrime Gestão Imobiliária',
-            sindicoPhone: '(11) 3100-4400',
-            status: 'ativo',
-            imageUrl: 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=600&q=80',
-            serviceStations: [
-              {
-                id: 'st-solar-1',
-                condoId: 2,
-                name: 'Guarita Principal',
-                type: 'portaria_principal',
-                shiftSchedule: 'Escala 6x1 Diurno',
-                assignedAgentName: 'José Roberto de Oliveira',
-                assignedAgentId: 4,
-                instructions: 'Atendimento geral e conferência de portões de garagem',
-              },
-              {
-                id: 'st-solar-2',
-                condoId: 2,
-                name: 'Área de Lazer & Salão de Festas',
-                type: 'area_lazer',
-                shiftSchedule: 'Escala diurna',
-                assignedAgentName: null,
-              },
-            ],
-            agentsCount: 2,
-            vehiclesCount: 1,
-            assetsCount: 5,
-            maintenancesCount: 1,
-            createdAt: new Date().toISOString(),
-          },
-        ];
-
         const saved = localStorage.getItem('novabrasil_condos');
         if (saved) {
-          const parsed = JSON.parse(saved);
-          // Migração de fotos e postos se não existirem
-          loadedCondos = parsed.map((c: Condominium, idx: number) => ({
-            ...c,
-            imageUrl: c.imageUrl || defaultCondos[idx]?.imageUrl || 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=600&q=80',
-            serviceStations: c.serviceStations && c.serviceStations.length > 0 ? c.serviceStations : defaultCondos[idx]?.serviceStations || [],
-          }));
-        } else {
-          loadedCondos = defaultCondos;
+          try { loadedCondos = JSON.parse(saved); } catch {}
         }
-        localStorage.setItem('novabrasil_condos', JSON.stringify(loadedCondos));
       }
       setCondominiums(loadedCondos);
 
@@ -260,89 +155,10 @@ function NovaBrasilMain() {
         loadedAgents = agentsData;
         localStorage.setItem('novabrasil_agents', JSON.stringify(loadedAgents));
       } else {
-        const defaultAgents: SecurityAgent[] = [
-          {
-            id: 1,
-            condoId: 1,
-            condoName: 'Condomínio Residencial Jardins',
-            name: 'Carlos Eduardo da Silva',
-            photoUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80',
-            assignedStation: 'Portaria Principal (Social)',
-            assignedStationId: 'st-jardins-1',
-            cpf: '123.456.789-00',
-            phone: '(11) 98111-2233',
-            badgeNumber: 'AG-101',
-            roleTitle: 'agente_portaria',
-            shift: '12x36_dia',
-            status: 'em_servico',
-            admissionDate: '10/01/2023',
-            notes: 'Operador com curso de CFTV e controle de acesso.',
-          },
-          {
-            id: 2,
-            condoId: 1,
-            condoName: 'Condomínio Residencial Jardins',
-            name: 'Marcos Antônio Ribeiro',
-            photoUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=300&q=80',
-            assignedStation: 'Portaria de Serviços & Entregas',
-            assignedStationId: 'st-jardins-2',
-            cpf: '234.567.890-11',
-            phone: '(11) 98222-3344',
-            badgeNumber: 'AG-102',
-            roleTitle: 'agente_portaria',
-            shift: '12x36_noite',
-            status: 'folga',
-            admissionDate: '15/03/2023',
-            notes: 'Turno noturno.',
-          },
-          {
-            id: 3,
-            condoId: 1,
-            condoName: 'Condomínio Residencial Jardins',
-            name: 'Lucas Ferreira dos Santos',
-            photoUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=300&q=80',
-            assignedStation: 'Ronda Noturna Perimetral',
-            assignedStationId: 'st-jardins-4',
-            cpf: '345.678.901-22',
-            phone: '(11) 98333-4455',
-            badgeNumber: 'RD-201',
-            roleTitle: 'ronda_motorizada',
-            shift: '12x36_noite',
-            status: 'em_servico',
-            admissionDate: '01/06/2023',
-            notes: 'Habilitação A/B e curso de vigilância patrimonial.',
-          },
-          {
-            id: 4,
-            condoId: 2,
-            condoName: 'Condomínio Solar das Palmeiras',
-            name: 'José Roberto de Oliveira',
-            photoUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=300&q=80',
-            assignedStation: 'Guarita Principal',
-            assignedStationId: 'st-solar-1',
-            cpf: '456.789.012-33',
-            phone: '(11) 98444-5566',
-            badgeNumber: 'AG-103',
-            roleTitle: 'lider_posto',
-            shift: '6x1',
-            status: 'em_servico',
-            admissionDate: '05/02/2022',
-            notes: 'Líder de guarita e conferência de materiais.',
-          },
-        ];
-
         const saved = localStorage.getItem('novabrasil_agents');
         if (saved) {
-          const parsed = JSON.parse(saved);
-          loadedAgents = parsed.map((ag: SecurityAgent, idx: number) => ({
-            ...ag,
-            photoUrl: ag.photoUrl || defaultAgents[idx]?.photoUrl || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80',
-            assignedStation: ag.assignedStation || defaultAgents[idx]?.assignedStation || 'Portaria Principal (Social)',
-          }));
-        } else {
-          loadedAgents = defaultAgents;
+          try { loadedAgents = JSON.parse(saved); } catch {}
         }
-        localStorage.setItem('novabrasil_agents', JSON.stringify(loadedAgents));
       }
       setAgents(loadedAgents);
 
@@ -353,174 +169,24 @@ function NovaBrasilMain() {
         loadedVehicles = vehiclesData;
         localStorage.setItem('novabrasil_patrol_vehicles', JSON.stringify(loadedVehicles));
       } else {
-        const defaultVehicles: PatrolVehicle[] = [
-          {
-            id: 1,
-            condoId: 1,
-            condoName: 'Condomínio Residencial Jardins',
-            type: 'moto',
-            plate: 'BRA2E19',
-            model: 'Honda CG 160 Fan',
-            brand: 'Honda',
-            color: 'Preto',
-            currentKm: 14250,
-            driverName: 'Lucas Ferreira dos Santos',
-            inServiceWithAgentName: 'Lucas Ferreira dos Santos',
-            serviceStartedAt: '19:00',
-            startKm: 14230,
-            fuelLevel: '3/4',
-            status: 'em_ronda',
-            photoUrl: 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=600&q=80',
-            routeDescription: 'Ronda perimetral nos muros externos e checagem de garagens a cada 30min',
-            lastPatrolAt: '20:45',
-          },
-          {
-            id: 2,
-            condoId: 1,
-            condoName: 'Condomínio Residencial Jardins',
-            type: 'carro',
-            plate: 'ABC-1020',
-            model: 'Fiat Mobi Easy 1.0',
-            brand: 'Fiat',
-            color: 'Branco',
-            currentKm: 48900,
-            driverName: null,
-            inServiceWithAgentName: null,
-            status: 'disponivel',
-            photoUrl: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=600&q=80',
-            routeDescription: 'Viatura de apoio operacional e rondas de perímetro expandido',
-            lastPatrolAt: '19:10',
-          },
-          {
-            id: 3,
-            condoId: 2,
-            condoName: 'Condomínio Solar das Palmeiras',
-            type: 'moto',
-            plate: 'MER4C22',
-            model: 'Yamaha Fazer 150',
-            brand: 'Yamaha',
-            color: 'Azul',
-            currentKm: 9800,
-            driverName: 'Agente Ronda Moema',
-            inServiceWithAgentName: 'Agente Ronda Moema',
-            serviceStartedAt: '20:15',
-            startKm: 9785,
-            fuelLevel: 'Cheio',
-            status: 'em_ronda',
-            photoUrl: 'https://images.unsplash.com/photo-1568772585407-9361f9bf3a87?auto=format&fit=crop&w=600&q=80',
-            routeDescription: 'Perímetro dos portões e garagens dos blocos',
-            lastPatrolAt: '21:00',
-          },
-        ];
-
         const saved = localStorage.getItem('novabrasil_patrol_vehicles');
         if (saved) {
-          const parsed = JSON.parse(saved);
-          loadedVehicles = parsed.map((v: PatrolVehicle, idx: number) => ({
-            ...v,
-            photoUrl: v.photoUrl || defaultVehicles[idx]?.photoUrl || 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=600&q=80',
-            inServiceWithAgentName: v.inServiceWithAgentName ?? (v.status === 'em_ronda' ? (v.driverName || 'Agente de Ronda') : null),
-            serviceStartedAt: v.serviceStartedAt ?? (v.status === 'em_ronda' ? '19:00' : null),
-            startKm: v.startKm ?? v.currentKm,
-            fuelLevel: v.fuelLevel || '3/4',
-          }));
-        } else {
-          loadedVehicles = defaultVehicles;
+          try { loadedVehicles = JSON.parse(saved); } catch {}
         }
-        localStorage.setItem('novabrasil_patrol_vehicles', JSON.stringify(loadedVehicles));
       }
       setPatrolVehicles(loadedVehicles);
 
-      // 4. Materiais e Patrimônio da Empresa no Condomínio
+      // 4. Materiais e Patrimônio da Empresa
       let loadedAssets: CompanyAsset[] = [];
       const assetsData = await parseJsonRes<CompanyAsset[]>(assetsRes);
       if (assetsData && Array.isArray(assetsData)) {
         loadedAssets = assetsData;
         localStorage.setItem('novabrasil_company_assets', JSON.stringify(loadedAssets));
       } else {
-        const defaultAssets: CompanyAsset[] = [
-          {
-            id: 1,
-            condoId: 1,
-            condoName: 'Condomínio Residencial Jardins',
-            name: 'Rádio Comunicador HT Baofeng UV-5R',
-            category: 'comunicacao',
-            assetTag: 'PAT-1011',
-            serialNumber: 'SN-998231',
-            quantity: 4,
-            condition: 'bom',
-            deliveryDate: '15/01/2023',
-            responsibleAgent: 'Agente Carlos Silva (Guarita)',
-            inUseWithAgentName: 'Carlos Eduardo da Silva',
-            inUseSince: '18:00',
-            notes: 'Acompanha 4 bases carregadoras e fones PTT.',
-            photoUrl: 'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?auto=format&fit=crop&w=600&q=80',
-          },
-          {
-            id: 2,
-            condoId: 1,
-            condoName: 'Condomínio Residencial Jardins',
-            name: 'Bastão de Ronda Vigia Eletrônico Guardus',
-            category: 'seguranca_ronda',
-            assetTag: 'PAT-1012',
-            serialNumber: 'GD-4421',
-            quantity: 1,
-            condition: 'novo',
-            deliveryDate: '01/02/2023',
-            responsibleAgent: 'Lucas Ferreira (Ronda)',
-            inUseWithAgentName: 'Lucas Ferreira dos Santos',
-            inUseSince: '19:00',
-            notes: 'Com 12 botões iButton instalados nos pontos de ronda.',
-            photoUrl: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=600&q=80',
-          },
-          {
-            id: 3,
-            condoId: 1,
-            condoName: 'Condomínio Residencial Jardins',
-            name: 'Kit de Ferramentas de Manutenção (Maleta Completa)',
-            category: 'ferramentas',
-            assetTag: 'PAT-1013',
-            serialNumber: 'KT-7710',
-            quantity: 1,
-            condition: 'bom',
-            deliveryDate: '20/02/2023',
-            responsibleAgent: 'Equipe de Manutenção Predial',
-            inUseWithAgentName: null,
-            notes: 'Alicates, chaves de fenda/phillips, multímetro e furadeira Bosch.',
-            photoUrl: 'https://images.unsplash.com/photo-1581244277943-fe4a9c777189?auto=format&fit=crop&w=600&q=80',
-          },
-          {
-            id: 4,
-            condoId: 2,
-            condoName: 'Condomínio Solar das Palmeiras',
-            name: 'Rádio Comunicador HT Motorola Talkabout',
-            category: 'comunicacao',
-            assetTag: 'PAT-2001',
-            serialNumber: 'MT-8812',
-            quantity: 2,
-            condition: 'bom',
-            deliveryDate: '10/03/2023',
-            responsibleAgent: 'José Roberto (Líder)',
-            inUseWithAgentName: 'José Roberto de Oliveira',
-            inUseSince: '07:00',
-            notes: 'Baterias revisadas.',
-            photoUrl: 'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?auto=format&fit=crop&w=600&q=80',
-          },
-        ];
-
         const saved = localStorage.getItem('novabrasil_company_assets');
         if (saved) {
-          const parsed = JSON.parse(saved);
-          loadedAssets = parsed.map((a: CompanyAsset, idx: number) => ({
-            ...a,
-            photoUrl: a.photoUrl || defaultAssets[idx]?.photoUrl || 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=600&q=80',
-            inUseWithAgentName: a.inUseWithAgentName ?? (a.responsibleAgent?.includes('(') ? a.responsibleAgent.split('(')[0].trim() : a.responsibleAgent || null),
-            inUseSince: a.inUseSince ?? (a.inUseWithAgentName ? '18:00' : null),
-          }));
-        } else {
-          loadedAssets = defaultAssets;
+          try { loadedAssets = JSON.parse(saved); } catch {}
         }
-        localStorage.setItem('novabrasil_company_assets', JSON.stringify(loadedAssets));
       }
       setCompanyAssets(loadedAssets);
 
@@ -532,51 +198,9 @@ function NovaBrasilMain() {
         localStorage.setItem('novabrasil_maintenances', JSON.stringify(loadedMaintenances));
       } else {
         const saved = localStorage.getItem('novabrasil_maintenances');
-        loadedMaintenances = saved ? JSON.parse(saved) : [
-          {
-            id: 1,
-            condoId: 1,
-            condoName: 'Condomínio Residencial Jardins',
-            title: 'Substituição da Placa Central do Portão Social',
-            category: 'portoes',
-            maintenanceType: 'corretiva',
-            technicianName: 'Técnico Rodrigo Ramos',
-            scheduledDate: '12/03/2024',
-            completedDate: '12/03/2024',
-            cost: 'R$ 480,00',
-            status: 'concluida',
-            description: 'Portão travando no fechamento. Troca de sensores de fim de curso e placa Peccinin.',
-            solutionDetails: 'Instalada nova placa inversora, ajustado tempo de rampa e configurados novos controles.',
-          },
-          {
-            id: 2,
-            condoId: 1,
-            condoName: 'Condomínio Residencial Jardins',
-            title: 'Manutenção Preventiva Semanal do Gerador',
-            category: 'gerador',
-            maintenanceType: 'preventiva',
-            technicianName: 'Equipe Eletrotécnica',
-            scheduledDate: '18/03/2024',
-            completedDate: '',
-            cost: 'R$ 250,00',
-            status: 'agendada',
-            description: 'Teste de carga de 30 minutos, verificação do nível de diesel, filtro de óleo e bateria 12V.',
-          },
-          {
-            id: 3,
-            condoId: 2,
-            condoName: 'Condomínio Solar das Palmeiras',
-            title: 'Reparo nas Câmeras Bullet do Perímetro e DVR',
-            category: 'cftv',
-            maintenanceType: 'corretiva',
-            technicianName: 'Especialista em CFTV Marcos',
-            scheduledDate: '14/03/2024',
-            completedDate: '',
-            cost: 'R$ 620,00',
-            status: 'em_andamento',
-            description: 'Câmera 04 e 07 apresentando ruído na imagem. Substituição do conector BNC e fonte colmeia 12V.',
-          },
-        ];
+        if (saved) {
+          try { loadedMaintenances = JSON.parse(saved); } catch {}
+        }
       }
       setMaintenances(loadedMaintenances);
 
@@ -588,141 +212,38 @@ function NovaBrasilMain() {
         localStorage.setItem('novabrasil_operational_logs', JSON.stringify(loadedLogs));
       } else {
         const saved = localStorage.getItem('novabrasil_operational_logs');
-        loadedLogs = saved ? JSON.parse(saved) : [
-          {
-            id: 1,
-            condoId: 1,
-            condoName: 'Condomínio Residencial Jardins',
-            agentName: 'Carlos Eduardo da Silva',
-            shiftType: 'dia',
-            logType: 'passagem_turno',
-            severity: 'informativa',
-            status: 'resolvida',
-            title: 'Passagem de Turno Diurno para Noturno',
-            description: 'Guarita entregue em ordem com os 4 rádios HT carregados, bastão de vigia conferido e livro de chaves assinado. Sem ocorrências durante o dia.',
-            actionTaken: 'Entregue as chaves da sala técnica ao vigilante noturno.',
-            logDate: new Date().toLocaleDateString('pt-BR'),
-            logTime: '18:00',
-            designatedIncomingAgentName: 'Marcos Antônio Ribeiro',
-            designatedIncomingAgentId: 2,
-            incomingAgentAccepted: true,
-            incomingAgentName: 'Marcos Antônio Ribeiro',
-            incomingAcceptedAt: `18:05 - ${new Date().toLocaleDateString('pt-BR')}`,
-            incomingChecklist: {
-              keysReceived: true,
-              radiosOk: true,
-              stationClean: true,
-              patrolStickOk: true,
-              noPendingIssues: true,
-            },
-            incomingNotes: 'Rádios comunicadores e guarita conferidos em perfeita ordem.',
-          },
-          {
-            id: 2,
-            condoId: 1,
-            condoName: 'Condomínio Residencial Jardins',
-            agentName: 'Lucas Ferreira (Ronda)',
-            shiftType: 'noite',
-            logType: 'ronda_preventiva',
-            severity: 'informativa',
-            status: 'resolvida',
-            title: 'Ronda Perimetral Realizada com Moto',
-            description: 'Verificados os 12 pontos iButton nos muros e garagens subterrâneas. Iluminação das garagens e portões operando normalmente.',
-            actionTaken: 'Check concluído em 22 minutos.',
-            logDate: new Date().toLocaleDateString('pt-BR'),
-            logTime: '20:30',
-          },
-          {
-            id: 3,
-            condoId: 1,
-            condoName: 'Condomínio Residencial Jardins',
-            agentName: 'Marcos Antônio Ribeiro',
-            shiftType: 'noite',
-            logType: 'passagem_turno',
-            severity: 'informativa',
-            status: 'aberta',
-            title: 'Passagem de Turno Noturno para Diurno',
-            description: 'Plantão noturno concluído sem anormalidades no perímetro. Livro de encomendas com 3 entregas a retirar. Aguardando conferência do plantonista entrante.',
-            actionTaken: 'Rádios deixados nas bases carregadoras da guarita social.',
-            logDate: new Date().toLocaleDateString('pt-BR'),
-            logTime: '06:00',
-            designatedIncomingAgentName: 'Carlos Eduardo da Silva',
-            designatedIncomingAgentId: 1,
-            incomingAgentAccepted: false,
-          },
-        ];
+        if (saved) {
+          try { loadedLogs = JSON.parse(saved); } catch {}
+        }
       }
       setOperationalLogs(loadedLogs);
 
       // 7. Escala 12x36 e Cobertura de Faltas
-      const defaultCoverages: ShiftCoverage[] = [
-        {
-          id: 1,
-          condoId: 1,
-          condoName: 'Condomínio Residencial Jardins',
-          stationId: 'st-jardins-1',
-          stationName: 'Portaria Principal (Social)',
-          date: new Date().toLocaleDateString('pt-BR'),
-          shiftType: '12x36_dia',
-          scheduledAgentId: 1,
-          scheduledAgentName: 'Carlos Eduardo da Silva',
-          absenceType: 'atestado_medico',
-          absenceReason: 'Apresentou atestado médico por crise de lombalgia (CID M54.5).',
-          medicalLeaveDays: 2,
-          cidCode: 'M54.5',
-          coverageStatus: 'coberto',
-          coveringAgentId: 4,
-          coveringAgentName: 'José Roberto de Oliveira',
-          notes: 'Folguista acionado prontamente pela supervisão para cobrir o plantão 12x36.',
-          assignedBy: 'Supervisor Roberto Alves',
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: 2,
-          condoId: 1,
-          condoName: 'Condomínio Residencial Jardins',
-          stationId: 'st-jardins-4',
-          stationName: 'Ronda Noturna Perimetral',
-          date: new Date().toLocaleDateString('pt-BR'),
-          shiftType: '12x36_noite',
-          scheduledAgentId: 3,
-          scheduledAgentName: 'Lucas Ferreira dos Santos',
-          absenceType: 'falta_injustificada',
-          absenceReason: 'Colaborador faltou sem prévio aviso ao plantão noturno. Ronda desguarnecida.',
-          coverageStatus: 'descoberto',
-          coveringAgentName: null,
-          notes: 'Posto de ronda sem vigilante motorizado no momento. Urgência de substituição.',
-          assignedBy: 'Supervisor Roberto Alves',
-          createdAt: new Date().toISOString(),
-        },
-      ];
-
-      const savedCoverages = localStorage.getItem('novabrasil_shift_coverages');
       let loadedCoverages: ShiftCoverage[] = [];
-      if (savedCoverages) {
-        try {
-          loadedCoverages = JSON.parse(savedCoverages);
-        } catch {
-          loadedCoverages = defaultCoverages;
-        }
-      } else {
-        loadedCoverages = defaultCoverages;
+      const coveragesData = await parseJsonRes<ShiftCoverage[]>(coveragesRes);
+      if (coveragesData && Array.isArray(coveragesData)) {
+        loadedCoverages = coveragesData;
         localStorage.setItem('novabrasil_shift_coverages', JSON.stringify(loadedCoverages));
+      } else {
+        const saved = localStorage.getItem('novabrasil_shift_coverages');
+        if (saved) {
+          try { loadedCoverages = JSON.parse(saved); } catch {}
+        }
       }
       setCoverages(loadedCoverages);
 
       // Sincronizar dinamicamente as contagens de agentes, rondas, materiais e O.S. nos condomínios
       const condosWithDynamicCounts = loadedCondos.map((c) => ({
         ...c,
-        agentsCount: loadedAgents.filter((a) => Number(a.condoId) === Number(c.id)).length,
+        agentsCount: loadedAgents.filter((a) => Number(a.condoId) === Number(c.id) || (Array.isArray(a.condoIds) && a.condoIds.includes(Number(c.id)))).length,
         vehiclesCount: loadedVehicles.filter((v) => Number(v.condoId) === Number(c.id)).length,
-        assetsCount: loadedAssets.filter((a) => Number(a.condoId) === Number(c.id)).length,
-        maintenancesCount: loadedMaintenances.filter((m) => Number(m.condoId) === Number(c.id)).length,
+        assetsCount: loadedAssets.filter((a) => Number(a.condoId) === Number(c.id)).reduce((acc, a) => acc + (a.quantity || 1), 0),
+        maintenancesCount: loadedMaintenances.filter((m) => Number(m.condoId) === Number(c.id) && m.status !== 'concluida').length,
       }));
       setCondominiums(condosWithDynamicCounts);
       localStorage.setItem('novabrasil_condos', JSON.stringify(condosWithDynamicCounts));
 
-      // 7. Estatísticas Consolidadas
+      // 8. Estatísticas Consolidadas
       const statsData = await parseJsonRes<DashboardStats>(statsRes);
       if (statsData) {
         setStats(statsData);
@@ -732,7 +253,7 @@ function NovaBrasilMain() {
           totalAgents: loadedAgents.length,
           agentsOnDuty: loadedAgents.filter((a) => a.status === 'em_servico').length,
           totalPatrolVehicles: loadedVehicles.length,
-          activePatrolVehicles: loadedVehicles.filter((v) => v.status === 'em_ronda').length,
+          activePatrolVehicles: loadedVehicles.filter((v) => v.status === 'em_ronda' || v.status === 'disponivel').length,
           totalAssets: loadedAssets.reduce((acc, a) => acc + (a.quantity || 1), 0),
           pendingMaintenances: loadedMaintenances.filter((m) => m.status !== 'concluida').length,
           completedMaintenances: loadedMaintenances.filter((m) => m.status === 'concluida').length,
@@ -746,62 +267,118 @@ function NovaBrasilMain() {
     }
   };
 
+  // 1. Inicia escuta em tempo real via Firebase Firestore (Zero Latência entre todos os dispositivos)
   useEffect(() => {
-    if (isAuthenticated) {
-      fetchAllData();
-    }
-  }, [isAuthenticated, selectedCondoId]);
+    if (!isAuthenticated) return;
 
-  // --- HANDLERS: AGENTES ---
+    const unsubCondos = subscribeToFirestoreCollection<Condominium>(COLLECTIONS.CONDOMINIUMS, (items) => {
+      if (items && items.length > 0) {
+        setCondominiums(items);
+        localStorage.setItem('novabrasil_condos', JSON.stringify(items));
+      }
+    });
+
+    const unsubAgents = subscribeToFirestoreCollection<SecurityAgent>(COLLECTIONS.AGENTS, (items) => {
+      if (items && items.length > 0) {
+        setAgents(items);
+        localStorage.setItem('novabrasil_agents', JSON.stringify(items));
+      }
+    });
+
+    const unsubVehicles = subscribeToFirestoreCollection<PatrolVehicle>(COLLECTIONS.VEHICLES, (items) => {
+      if (items && items.length > 0) {
+        setPatrolVehicles(items);
+        localStorage.setItem('novabrasil_patrol_vehicles', JSON.stringify(items));
+      }
+    });
+
+    const unsubAssets = subscribeToFirestoreCollection<CompanyAsset>(COLLECTIONS.ASSETS, (items) => {
+      if (items && items.length > 0) {
+        setCompanyAssets(items);
+        localStorage.setItem('novabrasil_company_assets', JSON.stringify(items));
+      }
+    });
+
+    const unsubMaintenances = subscribeToFirestoreCollection<MaintenanceOrder>(COLLECTIONS.MAINTENANCES, (items) => {
+      if (items && items.length > 0) {
+        setMaintenances(items);
+        localStorage.setItem('novabrasil_maintenances', JSON.stringify(items));
+      }
+    });
+
+    const unsubLogs = subscribeToFirestoreCollection<OperationalLog>(COLLECTIONS.LOGS, (items) => {
+      if (items && items.length > 0) {
+        setOperationalLogs(items);
+        localStorage.setItem('novabrasil_operational_logs', JSON.stringify(items));
+      }
+    });
+
+    const unsubCoverages = subscribeToFirestoreCollection<ShiftCoverage>(COLLECTIONS.COVERAGES, (items) => {
+      if (items && items.length > 0) {
+        setCoverages(items);
+        localStorage.setItem('novabrasil_shift_coverages', JSON.stringify(items));
+      }
+    });
+
+    // Carga inicial do servidor / cache
+    fetchAllData();
+
+    return () => {
+      unsubCondos();
+      unsubAgents();
+      unsubVehicles();
+      unsubAssets();
+      unsubMaintenances();
+      unsubLogs();
+      unsubCoverages();
+    };
+  }, [isAuthenticated]);
+
+  // 2. Atualiza estatísticas consolidadas sempre que os dados mudam
+  useEffect(() => {
+    const updatedStats: DashboardStats = {
+      totalCondos: condominiums.length,
+      totalAgents: agents.length,
+      agentsOnDuty: agents.filter((a) => a.status === 'em_servico').length,
+      totalPatrolVehicles: patrolVehicles.length,
+      activePatrolVehicles: patrolVehicles.filter((v) => v.status === 'em_ronda' || v.status === 'disponivel').length,
+      totalAssets: companyAssets.reduce((acc, a) => acc + (a.quantity || 1), 0),
+      pendingMaintenances: maintenances.filter((m) => m.status !== 'concluida').length,
+      completedMaintenances: maintenances.filter((m) => m.status === 'concluida').length,
+      todayLogs: operationalLogs.length,
+    };
+    setStats(updatedStats);
+  }, [condominiums.length, agents, patrolVehicles, companyAssets, maintenances, operationalLogs]);
+
+  // --- HANDLERS: AGENTES (FIRESTORE) ---
   const handleAddAgent = async (agentData: Omit<SecurityAgent, 'id' | 'createdAt'>): Promise<boolean> => {
     try {
-      const headers = await getAuthHeaders();
-      let created: any = null;
-      try {
-        const res = await fetch('/api/agents', {
-          method: 'POST',
-          headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify(agentData),
-        });
-        if (res.ok) {
-          const text = await res.text();
-          if (text) created = JSON.parse(text);
-        }
-      } catch {
-        // Fallback local
-      }
-
-      const newAgent: SecurityAgent = created || {
+      const newId = Date.now();
+      const newAgent: SecurityAgent = {
         ...agentData,
-        id: Date.now(),
+        id: newId,
         createdAt: new Date().toISOString(),
       };
 
+      // 1. Gravação no Firebase Firestore para sincronização multi-dispositivos
+      await saveToFirestore(COLLECTIONS.AGENTS, newAgent.id, newAgent);
+
+      // 2. Atualização otimista no estado local
       const updated = [newAgent, ...agents.filter((a) => a.id !== newAgent.id)];
       setAgents(updated);
       localStorage.setItem('novabrasil_agents', JSON.stringify(updated));
 
-      // Sincroniza dinamicamente as estatísticas do painel
-      setStats((prev) => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          totalAgents: updated.length,
-          agentsOnDuty: updated.filter((a) => a.status === 'em_servico').length,
-        };
-      });
+      // 3. Fallback/Sync backend em background
+      try {
+        const headers = await getAuthHeaders();
+        fetch('/api/agents', {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify(newAgent),
+        }).catch(() => {});
+      } catch {}
 
-      // Sincroniza as contagens dos condomínios
-      setCondominiums((prev) => {
-        const next = prev.map((c) => ({
-          ...c,
-          agentsCount: updated.filter((a) => Number(a.condoId) === Number(c.id)).length,
-        }));
-        localStorage.setItem('novabrasil_condos', JSON.stringify(next));
-        return next;
-      });
-
-      // Se foi solicitado gerar acesso ao sistema, adiciona automaticamente na Gestão de Usuários
+      // Se foi solicitado gerar acesso ao sistema, adiciona automaticamente na Gestão de Usuários e no Firestore
       const dataWithAccess = agentData as any;
       if (dataWithAccess.createAccess && dataWithAccess.accessEmail && dataWithAccess.accessPassword) {
         const cleanEmail = dataWithAccess.accessEmail.trim().toLowerCase();
@@ -812,9 +389,35 @@ function NovaBrasilMain() {
         const assignedNames = agentData.condoNames || (agentData.condoName ? [agentData.condoName] : []);
         const selectedCondo = condominiums.find((c) => c.id === Number(agentData.condoId));
 
-        // 1. Tenta cadastrar na API /api/users
+        const newUserObj = {
+          id: Date.now() + 1,
+          uid: `usr-agent-${Date.now()}`,
+          name: agentData.name,
+          email: cleanEmail,
+          password: cleanPassword,
+          role: 'portaria',
+          permissions: JSON.stringify(['portaria', 'ronda', 'materiais', 'ocorrencias']),
+          condoId: agentData.condoId ? Number(agentData.condoId) : null,
+          condoIds: assignedIds,
+          condoName: selectedCondo?.name || agentData.condoName || null,
+          condoNames: assignedNames,
+          isActive: true,
+          createdAt: new Date().toISOString(),
+        };
+
+        // Salva usuário no Firestore
+        await saveToFirestore(COLLECTIONS.USERS, newUserObj.id, newUserObj);
+
         try {
-          await fetch('/api/users', {
+          const savedUsers = localStorage.getItem('novabrasil_users_list');
+          const usersList = savedUsers ? JSON.parse(savedUsers) : [];
+          const filtered = usersList.filter((u: any) => u.email.toLowerCase() !== cleanEmail);
+          localStorage.setItem('novabrasil_users_list', JSON.stringify([newUserObj, ...filtered]));
+        } catch {}
+
+        try {
+          const headers = await getAuthHeaders();
+          fetch('/api/users', {
             method: 'POST',
             headers: { ...headers, 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -826,78 +429,36 @@ function NovaBrasilMain() {
               condoId: agentData.condoId ? Number(agentData.condoId) : null,
               condoIds: assignedIds,
             }),
-          });
-        } catch (uErr) {
-          console.warn('Aviso ao sincronizar usuário do agente:', uErr);
-        }
-
-        // 2. Salva em novabrasil_users_list para persistência e login imediato
-        try {
-          const savedUsers = localStorage.getItem('novabrasil_users_list');
-          const usersList = savedUsers ? JSON.parse(savedUsers) : [];
-          const filtered = usersList.filter((u: any) => u.email.toLowerCase() !== cleanEmail);
-          const newUserObj = {
-            id: Date.now() + 1,
-            uid: `usr-agent-${Date.now()}`,
-            name: agentData.name,
-            email: cleanEmail,
-            password: cleanPassword,
-            role: 'portaria',
-            permissions: JSON.stringify(['portaria', 'ronda', 'materiais', 'ocorrencias']),
-            condoId: agentData.condoId ? Number(agentData.condoId) : null,
-            condoIds: assignedIds,
-            condoName: selectedCondo?.name || agentData.condoName || null,
-            condoNames: assignedNames,
-            isActive: true,
-            createdAt: new Date().toISOString(),
-          };
-          localStorage.setItem('novabrasil_users_list', JSON.stringify([newUserObj, ...filtered]));
-        } catch (lsErr) {
-          console.warn('Erro ao salvar usuário no localStorage:', lsErr);
-        }
+          }).catch(() => {});
+        } catch {}
       }
 
       return true;
-    } catch {
+    } catch (err) {
+      console.warn('Erro ao salvar agente:', err);
       return false;
     }
   };
 
   const handleUpdateAgent = async (id: number, patch: Partial<SecurityAgent>): Promise<boolean> => {
     try {
-      const headers = await getAuthHeaders();
-      try {
-        await fetch(`/api/agents/${id}`, {
-          method: 'PUT',
-          headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify(patch),
-        });
-      } catch {
-        // Fallback local
-      }
+      // 1. Atualiza no Firestore
+      await updateInFirestore(COLLECTIONS.AGENTS, id, patch);
 
+      // 2. Atualiza estado local
       const updated = agents.map((a) => (a.id === id ? { ...a, ...patch } : a));
       setAgents(updated);
       localStorage.setItem('novabrasil_agents', JSON.stringify(updated));
 
-      // Sincroniza dinamicamente as estatísticas e condomínios
-      setStats((prev) => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          totalAgents: updated.length,
-          agentsOnDuty: updated.filter((a) => a.status === 'em_servico').length,
-        };
-      });
-
-      setCondominiums((prev) => {
-        const next = prev.map((c) => ({
-          ...c,
-          agentsCount: updated.filter((a) => Number(a.condoId) === Number(c.id)).length,
-        }));
-        localStorage.setItem('novabrasil_condos', JSON.stringify(next));
-        return next;
-      });
+      // 3. Sync API backend
+      try {
+        const headers = await getAuthHeaders();
+        fetch(`/api/agents/${id}`, {
+          method: 'PUT',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify(patch),
+        }).catch(() => {});
+      } catch {}
 
       // Se na edição foi solicitado gerar acesso que não existia
       const patchWithAccess = patch as any;
@@ -909,8 +470,32 @@ function NovaBrasilMain() {
         const condoIdVal = patch.condoId !== undefined ? patch.condoId : agentObj?.condoId;
         const selectedCondo = condominiums.find((c) => c.id === Number(condoIdVal));
 
+        const newUserObj = {
+          id: Date.now() + 1,
+          uid: `usr-agent-${Date.now()}`,
+          name: agentName,
+          email: cleanEmail,
+          password: cleanPassword,
+          role: 'portaria',
+          permissions: JSON.stringify(['portaria', 'ronda', 'materiais', 'ocorrencias']),
+          condoId: condoIdVal ? Number(condoIdVal) : null,
+          condoName: selectedCondo?.name || null,
+          isActive: true,
+          createdAt: new Date().toISOString(),
+        };
+
+        await saveToFirestore(COLLECTIONS.USERS, newUserObj.id, newUserObj);
+
         try {
-          await fetch('/api/users', {
+          const savedUsers = localStorage.getItem('novabrasil_users_list');
+          const usersList = savedUsers ? JSON.parse(savedUsers) : [];
+          const filtered = usersList.filter((u: any) => u.email.toLowerCase() !== cleanEmail);
+          localStorage.setItem('novabrasil_users_list', JSON.stringify([newUserObj, ...filtered]));
+        } catch {}
+
+        try {
+          const headers = await getAuthHeaders();
+          fetch('/api/users', {
             method: 'POST',
             headers: { ...headers, 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -921,357 +506,342 @@ function NovaBrasilMain() {
               permissions: ['portaria', 'ronda', 'materiais', 'ocorrencias'],
               condoId: condoIdVal ? Number(condoIdVal) : null,
             }),
-          });
-        } catch {}
-
-        try {
-          const savedUsers = localStorage.getItem('novabrasil_users_list');
-          const usersList = savedUsers ? JSON.parse(savedUsers) : [];
-          const filtered = usersList.filter((u: any) => u.email.toLowerCase() !== cleanEmail);
-          const newUserObj = {
-            id: Date.now() + 1,
-            uid: `usr-agent-${Date.now()}`,
-            name: agentName,
-            email: cleanEmail,
-            password: cleanPassword,
-            role: 'portaria',
-            permissions: JSON.stringify(['portaria', 'ronda', 'materiais', 'ocorrencias']),
-            condoId: condoIdVal ? Number(condoIdVal) : null,
-            condoName: selectedCondo?.name || null,
-            isActive: true,
-            createdAt: new Date().toISOString(),
-          };
-          localStorage.setItem('novabrasil_users_list', JSON.stringify([newUserObj, ...filtered]));
+          }).catch(() => {});
         } catch {}
       }
 
       return true;
-    } catch {
+    } catch (err) {
+      console.warn('Erro ao atualizar agente:', err);
       return false;
     }
   };
 
   const handleDeleteAgent = async (id: number): Promise<boolean> => {
     try {
-      const headers = await getAuthHeaders();
-      try {
-        await fetch(`/api/agents/${id}`, { method: 'DELETE', headers });
-      } catch {
-        // Fallback local
-      }
+      // 1. Remove do Firestore
+      await deleteFromFirestore(COLLECTIONS.AGENTS, id);
 
+      // 2. Atualiza estado local
       const updated = agents.filter((a) => a.id !== id);
       setAgents(updated);
       localStorage.setItem('novabrasil_agents', JSON.stringify(updated));
 
-      // Sincroniza dinamicamente as estatísticas e condomínios
-      setStats((prev) => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          totalAgents: updated.length,
-          agentsOnDuty: updated.filter((a) => a.status === 'em_servico').length,
-        };
-      });
-
-      setCondominiums((prev) => {
-        const next = prev.map((c) => ({
-          ...c,
-          agentsCount: updated.filter((a) => Number(a.condoId) === Number(c.id)).length,
-        }));
-        localStorage.setItem('novabrasil_condos', JSON.stringify(next));
-        return next;
-      });
+      // 3. Sync API backend
+      try {
+        const headers = await getAuthHeaders();
+        fetch(`/api/agents/${id}`, { method: 'DELETE', headers }).catch(() => {});
+      } catch {}
 
       return true;
-    } catch {
+    } catch (err) {
+      console.warn('Erro ao excluir agente:', err);
       return false;
     }
   };
 
-  // --- HANDLERS: VEÍCULOS DE RONDA ---
+  // --- HANDLERS: VEÍCULOS DE RONDA (FIRESTORE) ---
   const handleAddPatrolVehicle = async (vehData: Omit<PatrolVehicle, 'id' | 'createdAt'>): Promise<boolean> => {
     try {
-      const headers = await getAuthHeaders();
-      let created: any = null;
-      try {
-        const res = await fetch('/api/patrol-vehicles', {
-          method: 'POST',
-          headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify(vehData),
-        });
-        if (res.ok) created = await res.json();
-      } catch {
-        // Fallback local
-      }
-
-      const newVeh: PatrolVehicle = created || {
+      const newVeh: PatrolVehicle = {
         ...vehData,
         id: Date.now(),
         createdAt: new Date().toISOString(),
       };
 
-      const updated = [newVeh, ...patrolVehicles];
+      // Gravação no Firestore
+      await saveToFirestore(COLLECTIONS.VEHICLES, newVeh.id, newVeh);
+
+      const updated = [newVeh, ...patrolVehicles.filter((v) => v.id !== newVeh.id)];
       setPatrolVehicles(updated);
       localStorage.setItem('novabrasil_patrol_vehicles', JSON.stringify(updated));
+
+      try {
+        const headers = await getAuthHeaders();
+        fetch('/api/patrol-vehicles', {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify(newVeh),
+        }).catch(() => {});
+      } catch {}
+
       return true;
-    } catch {
+    } catch (err) {
+      console.warn('Erro ao adicionar veículo:', err);
       return false;
     }
   };
 
   const handleUpdatePatrolVehicle = async (id: number, patch: Partial<PatrolVehicle>): Promise<boolean> => {
     try {
-      const headers = await getAuthHeaders();
-      try {
-        await fetch(`/api/patrol-vehicles/${id}`, {
-          method: 'PUT',
-          headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify(patch),
-        });
-      } catch {
-        // Fallback local
-      }
+      await updateInFirestore(COLLECTIONS.VEHICLES, id, patch);
 
       const updated = patrolVehicles.map((v) => (v.id === id ? { ...v, ...patch } : v));
       setPatrolVehicles(updated);
       localStorage.setItem('novabrasil_patrol_vehicles', JSON.stringify(updated));
+
+      try {
+        const headers = await getAuthHeaders();
+        fetch(`/api/patrol-vehicles/${id}`, {
+          method: 'PUT',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify(patch),
+        }).catch(() => {});
+      } catch {}
+
       return true;
-    } catch {
+    } catch (err) {
+      console.warn('Erro ao atualizar veículo:', err);
       return false;
     }
   };
 
   const handleDeletePatrolVehicle = async (id: number): Promise<boolean> => {
     try {
-      const headers = await getAuthHeaders();
-      try {
-        await fetch(`/api/patrol-vehicles/${id}`, { method: 'DELETE', headers });
-      } catch {
-        // Fallback local
-      }
+      await deleteFromFirestore(COLLECTIONS.VEHICLES, id);
 
       const updated = patrolVehicles.filter((v) => v.id !== id);
       setPatrolVehicles(updated);
       localStorage.setItem('novabrasil_patrol_vehicles', JSON.stringify(updated));
+
+      try {
+        const headers = await getAuthHeaders();
+        fetch(`/api/patrol-vehicles/${id}`, { method: 'DELETE', headers }).catch(() => {});
+      } catch {}
+
       return true;
-    } catch {
+    } catch (err) {
+      console.warn('Erro ao excluir veículo:', err);
       return false;
     }
   };
 
-  // --- HANDLERS: MATERIAIS / PATRIMÔNIO ---
+  // --- HANDLERS: MATERIAIS / PATRIMÔNIO (FIRESTORE) ---
   const handleAddAsset = async (assetData: Omit<CompanyAsset, 'id' | 'createdAt'>): Promise<boolean> => {
     try {
-      const headers = await getAuthHeaders();
-      let created: any = null;
-      try {
-        const res = await fetch('/api/company-assets', {
-          method: 'POST',
-          headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify(assetData),
-        });
-        if (res.ok) created = await res.json();
-      } catch {
-        // Fallback local
-      }
-
-      const newAsset: CompanyAsset = created || {
+      const newAsset: CompanyAsset = {
         ...assetData,
         id: Date.now(),
         createdAt: new Date().toISOString(),
       };
 
-      const updated = [newAsset, ...companyAssets];
+      await saveToFirestore(COLLECTIONS.ASSETS, newAsset.id, newAsset);
+
+      const updated = [newAsset, ...companyAssets.filter((a) => a.id !== newAsset.id)];
       setCompanyAssets(updated);
       localStorage.setItem('novabrasil_company_assets', JSON.stringify(updated));
+
+      try {
+        const headers = await getAuthHeaders();
+        fetch('/api/company-assets', {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify(newAsset),
+        }).catch(() => {});
+      } catch {}
+
       return true;
-    } catch {
+    } catch (err) {
+      console.warn('Erro ao adicionar material:', err);
       return false;
     }
   };
 
   const handleUpdateAsset = async (id: number, patch: Partial<CompanyAsset>): Promise<boolean> => {
     try {
-      const headers = await getAuthHeaders();
-      try {
-        await fetch(`/api/company-assets/${id}`, {
-          method: 'PUT',
-          headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify(patch),
-        });
-      } catch {
-        // Fallback local
-      }
+      await updateInFirestore(COLLECTIONS.ASSETS, id, patch);
 
       const updated = companyAssets.map((a) => (a.id === id ? { ...a, ...patch } : a));
       setCompanyAssets(updated);
       localStorage.setItem('novabrasil_company_assets', JSON.stringify(updated));
+
+      try {
+        const headers = await getAuthHeaders();
+        fetch(`/api/company-assets/${id}`, {
+          method: 'PUT',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify(patch),
+        }).catch(() => {});
+      } catch {}
+
       return true;
-    } catch {
+    } catch (err) {
+      console.warn('Erro ao atualizar material:', err);
       return false;
     }
   };
 
   const handleDeleteAsset = async (id: number): Promise<boolean> => {
     try {
-      const headers = await getAuthHeaders();
-      try {
-        await fetch(`/api/company-assets/${id}`, { method: 'DELETE', headers });
-      } catch {
-        // Fallback local
-      }
+      await deleteFromFirestore(COLLECTIONS.ASSETS, id);
 
       const updated = companyAssets.filter((a) => a.id !== id);
       setCompanyAssets(updated);
       localStorage.setItem('novabrasil_company_assets', JSON.stringify(updated));
+
+      try {
+        const headers = await getAuthHeaders();
+        fetch(`/api/company-assets/${id}`, { method: 'DELETE', headers }).catch(() => {});
+      } catch {}
+
       return true;
-    } catch {
+    } catch (err) {
+      console.warn('Erro ao excluir material:', err);
       return false;
     }
   };
 
-  // --- HANDLERS: MANUTENÇÕES ---
+  // --- HANDLERS: MANUTENÇÕES (FIRESTORE) ---
   const handleAddMaintenance = async (maintData: Omit<MaintenanceOrder, 'id' | 'createdAt'>): Promise<boolean> => {
     try {
-      const headers = await getAuthHeaders();
-      let created: any = null;
-      try {
-        const res = await fetch('/api/maintenances', {
-          method: 'POST',
-          headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify(maintData),
-        });
-        if (res.ok) created = await res.json();
-      } catch {
-        // Fallback local
-      }
-
-      const newMaint: MaintenanceOrder = created || {
+      const newMaint: MaintenanceOrder = {
         ...maintData,
         id: Date.now(),
         createdAt: new Date().toISOString(),
       };
 
-      const updated = [newMaint, ...maintenances];
+      await saveToFirestore(COLLECTIONS.MAINTENANCES, newMaint.id, newMaint);
+
+      const updated = [newMaint, ...maintenances.filter((m) => m.id !== newMaint.id)];
       setMaintenances(updated);
       localStorage.setItem('novabrasil_maintenances', JSON.stringify(updated));
+
+      try {
+        const headers = await getAuthHeaders();
+        fetch('/api/maintenances', {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify(newMaint),
+        }).catch(() => {});
+      } catch {}
+
       return true;
-    } catch {
+    } catch (err) {
+      console.warn('Erro ao adicionar manutenção:', err);
       return false;
     }
   };
 
   const handleUpdateMaintenance = async (id: number, patch: Partial<MaintenanceOrder>): Promise<boolean> => {
     try {
-      const headers = await getAuthHeaders();
-      try {
-        await fetch(`/api/maintenances/${id}`, {
-          method: 'PUT',
-          headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify(patch),
-        });
-      } catch {
-        // Fallback local
-      }
+      await updateInFirestore(COLLECTIONS.MAINTENANCES, id, patch);
 
       const updated = maintenances.map((m) => (m.id === id ? { ...m, ...patch } : m));
       setMaintenances(updated);
       localStorage.setItem('novabrasil_maintenances', JSON.stringify(updated));
+
+      try {
+        const headers = await getAuthHeaders();
+        fetch(`/api/maintenances/${id}`, {
+          method: 'PUT',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify(patch),
+        }).catch(() => {});
+      } catch {}
+
       return true;
-    } catch {
+    } catch (err) {
+      console.warn('Erro ao atualizar manutenção:', err);
       return false;
     }
   };
 
   const handleDeleteMaintenance = async (id: number): Promise<boolean> => {
     try {
-      const headers = await getAuthHeaders();
-      try {
-        await fetch(`/api/maintenances/${id}`, { method: 'DELETE', headers });
-      } catch {
-        // Fallback local
-      }
+      await deleteFromFirestore(COLLECTIONS.MAINTENANCES, id);
 
       const updated = maintenances.filter((m) => m.id !== id);
       setMaintenances(updated);
       localStorage.setItem('novabrasil_maintenances', JSON.stringify(updated));
+
+      try {
+        const headers = await getAuthHeaders();
+        fetch(`/api/maintenances/${id}`, { method: 'DELETE', headers }).catch(() => {});
+      } catch {}
+
       return true;
-    } catch {
+    } catch (err) {
+      console.warn('Erro ao excluir manutenção:', err);
       return false;
     }
   };
 
-  // --- HANDLERS: LIVRO DE OCORRÊNCIAS ---
+  // --- HANDLERS: LIVRO DE OCORRÊNCIAS (FIRESTORE) ---
   const handleAddLog = async (logData: Omit<OperationalLog, 'id' | 'createdAt'>): Promise<boolean> => {
     try {
-      const headers = await getAuthHeaders();
-      let created: any = null;
-      try {
-        const res = await fetch('/api/operational-logs', {
-          method: 'POST',
-          headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify(logData),
-        });
-        if (res.ok) created = await res.json();
-      } catch {
-        // Fallback local
-      }
-
-      const newLog: OperationalLog = created || {
+      const newLog: OperationalLog = {
         ...logData,
         id: Date.now(),
         createdAt: new Date().toISOString(),
       };
 
-      const updated = [newLog, ...operationalLogs];
+      await saveToFirestore(COLLECTIONS.LOGS, newLog.id, newLog);
+
+      const updated = [newLog, ...operationalLogs.filter((l) => l.id !== newLog.id)];
       setOperationalLogs(updated);
       localStorage.setItem('novabrasil_operational_logs', JSON.stringify(updated));
+
+      try {
+        const headers = await getAuthHeaders();
+        fetch('/api/operational-logs', {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify(newLog),
+        }).catch(() => {});
+      } catch {}
+
       return true;
-    } catch {
+    } catch (err) {
+      console.warn('Erro ao registrar ocorrência:', err);
       return false;
     }
   };
 
   const handleUpdateLog = async (id: number, patch: Partial<OperationalLog>): Promise<boolean> => {
     try {
-      const headers = await getAuthHeaders();
-      try {
-        await fetch(`/api/operational-logs/${id}`, {
-          method: 'PUT',
-          headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify(patch),
-        });
-      } catch {}
+      await updateInFirestore(COLLECTIONS.LOGS, id, patch);
 
       const updated = operationalLogs.map((l) => (l.id === id ? { ...l, ...patch } : l));
       setOperationalLogs(updated);
       localStorage.setItem('novabrasil_operational_logs', JSON.stringify(updated));
+
+      try {
+        const headers = await getAuthHeaders();
+        fetch(`/api/operational-logs/${id}`, {
+          method: 'PUT',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify(patch),
+        }).catch(() => {});
+      } catch {}
+
       return true;
-    } catch {
+    } catch (err) {
+      console.warn('Erro ao atualizar ocorrência:', err);
       return false;
     }
   };
 
   const handleDeleteLog = async (id: number): Promise<boolean> => {
     try {
-      const headers = await getAuthHeaders();
-      try {
-        await fetch(`/api/operational-logs/${id}`, { method: 'DELETE', headers });
-      } catch {
-        // Fallback local
-      }
+      await deleteFromFirestore(COLLECTIONS.LOGS, id);
 
       const updated = operationalLogs.filter((l) => l.id !== id);
       setOperationalLogs(updated);
       localStorage.setItem('novabrasil_operational_logs', JSON.stringify(updated));
+
+      try {
+        const headers = await getAuthHeaders();
+        fetch(`/api/operational-logs/${id}`, { method: 'DELETE', headers }).catch(() => {});
+      } catch {}
+
       return true;
-    } catch {
+    } catch (err) {
+      console.warn('Erro ao excluir ocorrência:', err);
       return false;
     }
   };
 
-  // --- HANDLERS: ESCALA 12x36 & COBERTURAS ---
+  // --- HANDLERS: ESCALA 12x36 & COBERTURAS (FIRESTORE) ---
   const handleAddCoverage = async (coverageData: Omit<ShiftCoverage, 'id' | 'createdAt'>): Promise<boolean> => {
     try {
       const newCov: ShiftCoverage = {
@@ -1279,33 +849,69 @@ function NovaBrasilMain() {
         id: Date.now(),
         createdAt: new Date().toISOString(),
       };
-      const updated = [newCov, ...coverages];
+
+      await saveToFirestore(COLLECTIONS.COVERAGES, newCov.id, newCov);
+
+      const updated = [newCov, ...coverages.filter((c) => c.id !== newCov.id)];
       setCoverages(updated);
       localStorage.setItem('novabrasil_shift_coverages', JSON.stringify(updated));
+
+      try {
+        const headers = await getAuthHeaders();
+        fetch('/api/shift-coverages', {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify(newCov),
+        }).catch(() => {});
+      } catch {}
+
       return true;
-    } catch {
+    } catch (err) {
+      console.warn('Erro ao salvar escala:', err);
       return false;
     }
   };
 
   const handleUpdateCoverage = async (id: number, patch: Partial<ShiftCoverage>): Promise<boolean> => {
     try {
+      await updateInFirestore(COLLECTIONS.COVERAGES, id, patch);
+
       const updated = coverages.map((c) => (c.id === id ? { ...c, ...patch } : c));
       setCoverages(updated);
       localStorage.setItem('novabrasil_shift_coverages', JSON.stringify(updated));
+
+      try {
+        const headers = await getAuthHeaders();
+        fetch(`/api/shift-coverages/${id}`, {
+          method: 'PUT',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify(patch),
+        }).catch(() => {});
+      } catch {}
+
       return true;
-    } catch {
+    } catch (err) {
+      console.warn('Erro ao atualizar escala:', err);
       return false;
     }
   };
 
   const handleDeleteCoverage = async (id: number): Promise<boolean> => {
     try {
+      await deleteFromFirestore(COLLECTIONS.COVERAGES, id);
+
       const updated = coverages.filter((c) => c.id !== id);
       setCoverages(updated);
       localStorage.setItem('novabrasil_shift_coverages', JSON.stringify(updated));
+
+      try {
+        const headers = await getAuthHeaders();
+        fetch(`/api/shift-coverages/${id}`, { method: 'DELETE', headers }).catch(() => {});
+      } catch {}
+
       return true;
-    } catch {
+    } catch (err) {
+      console.warn('Erro ao excluir escala:', err);
       return false;
     }
   };

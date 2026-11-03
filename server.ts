@@ -58,6 +58,10 @@ import {
   getReservations,
   getResidents,
   getSecurityAgents,
+  getShiftCoverages,
+  createShiftCoverage,
+  updateShiftCoverage,
+  deleteShiftCoverage,
   getUnits,
   getUsersList,
   getVehicles,
@@ -68,6 +72,7 @@ import {
   updateCondominium,
   updateIncidentStatus,
   updateMaintenanceOrder,
+  updateOperationalLog,
   updatePatrolVehicle,
   updateResident,
   updateSecurityAgent,
@@ -468,10 +473,60 @@ app.post('/api/operational-logs', requireAuth, async (req, res) => {
   }
 });
 
+app.put('/api/operational-logs/:id', requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const log = await updateOperationalLog(id, req.body);
+    res.json(log);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
 app.delete('/api/operational-logs/:id', requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     await deleteOperationalLog(id);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// F. Escala 12x36 e Cobertura de Faltas
+app.get('/api/shift-coverages', requireAuth, async (req, res) => {
+  try {
+    const condoId = getRequestedCondoId(req);
+    const coverages = await getShiftCoverages(condoId);
+    res.json(coverages);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/shift-coverages', requireAuth, async (req, res) => {
+  try {
+    const coverage = await createShiftCoverage(req.body);
+    res.status(201).json(coverage);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.put('/api/shift-coverages/:id', requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const coverage = await updateShiftCoverage(id, req.body);
+    res.json(coverage);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.delete('/api/shift-coverages/:id', requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    await deleteShiftCoverage(id);
     res.json({ success: true });
   } catch (error: any) {
     res.status(400).json({ error: error.message });

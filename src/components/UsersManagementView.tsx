@@ -3,6 +3,13 @@ import { SystemUser, Condominium, UserRole, SecurityAgent } from '../types/index
 import { useAuth } from '../context/AuthContext.tsx';
 import { WhatsAppButton } from './WhatsAppButton.tsx';
 import {
+  COLLECTIONS,
+  saveToFirestore,
+  updateInFirestore,
+  deleteFromFirestore,
+  subscribeToFirestoreCollection,
+} from '../services/firestoreSync.ts';
+import {
   UserCheck,
   Plus,
   ShieldCheck,
@@ -235,6 +242,19 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
 
   useEffect(() => {
     fetchUsers();
+
+    // Escuta em tempo real da coleção appUsers no Firestore
+    const unsub = subscribeToFirestoreCollection<SystemUser>(COLLECTIONS.USERS, (items) => {
+      if (items && items.length > 0) {
+        setUsersList((prev) => {
+          const emailMap = new Set(items.map((u) => u.email.toLowerCase()));
+          const rest = prev.filter((u) => !emailMap.has(u.email.toLowerCase()));
+          return [...items, ...rest];
+        });
+      }
+    });
+
+    return () => unsub();
   }, [agents.length]);
 
   const openCreateModal = () => {
@@ -347,6 +367,16 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
         createdAt: new Date().toISOString(),
       };
 
+      // 1. Grava no Firebase Firestore com a senha para sincronizar login em todos os dispositivos
+      try {
+        await saveToFirestore(COLLECTIONS.USERS, newUserObj.id, {
+          ...newUserObj,
+          password: cleanPassword,
+        });
+      } catch (fErr) {
+        console.warn('Aviso ao sincronizar usuário no Firestore:', fErr);
+      }
+
       try {
         const saved = localStorage.getItem('novabrasil_users_list');
         const list = saved ? JSON.parse(saved) : [];
@@ -374,6 +404,15 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
     setErrorMsg('');
 
     try {
+      // 1. Atualiza no Firebase Firestore
+      try {
+        await updateInFirestore(COLLECTIONS.USERS, resetModalUser.id, {
+          password: newPassword.trim(),
+        });
+      } catch (fErr) {
+        console.warn('Aviso ao atualizar senha no Firestore:', fErr);
+      }
+
       const headers = await getAuthHeaders();
       try {
         await fetch(`/api/users/${resetModalUser.id}`, {
@@ -408,6 +447,15 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
 
   const handleToggleActive = async (u: SystemUser) => {
     try {
+      // 1. Atualiza no Firebase Firestore
+      try {
+        await updateInFirestore(COLLECTIONS.USERS, u.id, {
+          isActive: !u.isActive,
+        });
+      } catch (fErr) {
+        console.warn('Aviso ao alterar status no Firestore:', fErr);
+      }
+
       const headers = await getAuthHeaders();
       try {
         await fetch(`/api/users/${u.id}`, {
@@ -439,6 +487,13 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
   const handleDeleteUser = async (u: SystemUser) => {
     if (!confirm(`Deseja realmente excluir o acesso do usuário "${u.name}"?`)) return;
     try {
+      // 1. Remove do Firebase Firestore
+      try {
+        await deleteFromFirestore(COLLECTIONS.USERS, u.id);
+      } catch (fErr) {
+        console.warn('Aviso ao remover usuário no Firestore:', fErr);
+      }
+
       const headers = await getAuthHeaders();
       try {
         await fetch(`/api/users/${u.id}`, {
