@@ -325,31 +325,36 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
     }
 
     try {
-      const headers = await getAuthHeaders();
       let createdUser: any = null;
+      try {
+        const headers = await getAuthHeaders();
+        const res = await fetch('/api/users', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            name: cleanName,
+            email: cleanEmail,
+            password: cleanPassword,
+            role: selectedRole,
+            permissions,
+            condoId: primaryCondoId,
+            condoIds: userCondoIds,
+          }),
+        });
 
-      const res = await fetch('/api/users', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          name: cleanName,
-          email: cleanEmail,
-          password: cleanPassword,
-          role: selectedRole,
-          permissions,
-          condoId: primaryCondoId,
-          condoIds: userCondoIds,
-        }),
-      });
-
-      const text = await res.text();
-      if (text && text.trim()) {
-        try {
-          createdUser = JSON.parse(text);
-        } catch {}
-      }
-      if (!res.ok) {
-        throw new Error(createdUser?.error || `Erro ${res.status} ao cadastrar usuário no servidor.`);
+        const text = await res.text();
+        if (text && text.trim()) {
+          try {
+            createdUser = JSON.parse(text);
+          } catch {}
+        }
+        if (!res.ok && res.status !== 404 && res.status !== 405 && createdUser?.error) {
+          throw new Error(createdUser.error);
+        }
+      } catch (apiErr: any) {
+        if (apiErr.message && !apiErr.message.includes('405') && !apiErr.message.includes('404')) {
+          console.warn('API /api/users aviso:', apiErr.message);
+        }
       }
 
       const newUserObj: SystemUser = {

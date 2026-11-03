@@ -8,6 +8,7 @@ export interface ApiResponse<T = any> {
   data?: T;
   error?: string;
   status: number;
+  isStatic?: boolean;
 }
 
 export async function safeFetchJson<T = any>(
@@ -34,10 +35,11 @@ export async function safeFetchJson<T = any>(
       };
     }
 
-    // Caso de Vercel/ambiente estático que retorna HTML (ex: index.html ou 404)
+    // Caso de Vercel/ambiente estático que retorna HTML ou 405 Method Not Allowed
     return {
       success: false,
-      error: `Serviço de API estático (${res.status})`,
+      isStatic: true,
+      error: res.status === 405 ? 'Ambiente estático (Método não permitido)' : `Serviço de API estático (${res.status})`,
       status: res.status,
     };
   } catch (err: any) {

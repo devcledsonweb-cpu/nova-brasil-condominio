@@ -227,40 +227,35 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
         serviceStations: editingCondo?.serviceStations || [
           {
             id: `st-new-1`,
+            condoId: editingCondo?.id || 0,
             name: 'Portaria Principal (Social)',
-            type: 'portaria_principal',
+            type: 'portaria_principal' as const,
             shiftSchedule: '12x36 Diurno (06h às 18h)',
             assignedAgentName: null,
           },
           {
             id: `st-new-2`,
+            condoId: editingCondo?.id || 0,
             name: 'Área de Lazer / Piscina',
-            type: 'area_lazer',
+            type: 'area_lazer' as const,
             shiftSchedule: '12x36 Diurno',
             assignedAgentName: null,
           },
         ],
       };
 
-      const result = await safeFetchJson(url, {
-        method,
-        headers,
-        body: JSON.stringify(condoPayload),
-      });
+      // 1. Gravar prioritariamente no Firebase Firestore para sincronização imediata em todos os dispositivos
+      const condoId = editingCondo ? editingCondo.id : Date.now();
+      const resolvedStations: ServiceStation[] = condoPayload.serviceStations.map((s) => ({
+        ...s,
+        condoId,
+      }));
 
-      if (!result.success) {
-        throw new Error(result.error || 'Falha ao salvar condomínio no servidor.');
-      }
-
-      const savedCondo = result.data;
-
-      // 2. Gravar no Firebase Firestore para sincronização imediata em todos os dispositivos
-      const condoId = editingCondo ? editingCondo.id : (savedCondo?.id || Date.now());
       const condoToPersist: Condominium = {
         ...(editingCondo || {}),
-        ...(savedCondo || {}),
         id: condoId,
         ...condoPayload,
+        serviceStations: resolvedStations,
         status: (formData.status as any) || 'ativo',
         createdAt: editingCondo?.createdAt || new Date().toISOString(),
       };
@@ -269,6 +264,23 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
         await saveToFirestore(COLLECTIONS.CONDOMINIUMS, condoId, condoToPersist);
       } catch (fErr) {
         console.warn('Aviso ao sincronizar condomínio no Firestore:', fErr);
+      }
+
+      // 2. Sincroniza em background na API se disponível (não bloqueia em ambiente estático 405)
+      try {
+        const headers = await getAuthHeaders();
+        const url = editingCondo ? `/api/condominiums/${editingCondo.id}` : '/api/condominiums';
+        const method = editingCondo ? 'PUT' : 'POST';
+        const apiRes = await safeFetchJson(url, {
+          method,
+          headers,
+          body: JSON.stringify(condoPayload),
+        });
+        if (apiRes.success && apiRes.data?.id) {
+          condoToPersist.id = apiRes.data.id;
+        }
+      } catch (apiErr) {
+        console.warn('API em modo estático/offline (ignorado com Firestore ativo):', apiErr);
       }
 
       // 3. Sincronizar e salvar localmente para garantir persistência imediata
