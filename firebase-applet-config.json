@@ -1,11 +1,12 @@
 {
-  "projectId": "tanqueteambjj",
-  "appId": "1:410605992451:web:a00a807c26838f6d376c36",
-  "apiKey": "AIzaSyATGAxFHQ2l0VLlnk64eft4epz4A-cKXt4",
-  "authDomain": "tanqueteambjj.firebaseapp.com",
-  "storageBucket": "tanqueteambjj.firebasestorage.app",
-  "messagingSenderId": "410605992451",
+  "projectId": "nova-brasil-ac663",
+  "appId": "1:570026121357:web:df94e36e921717c298aac4",
+  "apiKey": "AIzaSyDGs3TIeLgHKYlOQgBTKFk0DmE2btZFTI8",
+  "authDomain": "nova-brasil-ac663.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-condosysgestocon-31165c33-1bc5-41d7-9bb0-614133b59af7",
+  "storageBucket": "nova-brasil-ac663.firebasestorage.app",
+  "messagingSenderId": "570026121357",
   "measurementId": "",
-  "oAuthClientId": "410605992451-mooa8bo98a2of4nsuc14crc8gldlr0up.apps.googleusercontent.com",
+  "oAuthClientId": "570026121357-n83tn1lbb4u2pmft64almq68t5so5mdf.apps.googleusercontent.com",
   "recaptchaSiteKey": ""
 }
