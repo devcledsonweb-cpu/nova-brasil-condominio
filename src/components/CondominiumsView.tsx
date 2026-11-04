@@ -442,27 +442,34 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
     );
     localStorage.setItem('novabrasil_condos', JSON.stringify(localCondos));
 
-    // Sincroniza postos de serviço no servidor backend para persistência multi-dispositivos
+    // Sincroniza postos de serviço no Firestore (nova-brasil-ac663) para persistência em tempo real
+    try {
+      await updateInFirestore(COLLECTIONS.CONDOMINIUMS, managingStationsCondo.id, {
+        serviceStations: updatedStations,
+      });
+    } catch (fErr) {
+      console.warn('Erro ao sincronizar postos de serviço no Firestore:', fErr);
+    }
+
     try {
       const headers = await getAuthHeaders();
-      await fetch(`/api/condominiums/${managingStationsCondo.id}`, {
+      fetch(`/api/condominiums/${managingStationsCondo.id}`, {
         method: 'PUT',
         headers: { ...headers, 'Content-Type': 'application/json' },
         body: JSON.stringify({ serviceStations: updatedStations }),
-      });
-      try {
-        const bc = new BroadcastChannel('novabrasil_sync');
-        bc.postMessage({ type: 'SYNC_UPDATE', entity: 'condominiums' });
-        bc.close();
-      } catch {
-        // BroadcastChannel optional
-      }
-    } catch (e) {
-      console.warn('Erro ao sincronizar postos de serviço no servidor:', e);
-    }
+      }).catch(() => {});
+    } catch {}
 
-    // Se um agente foi escalado, sincroniza no cadastro do agente
+    // Se um agente foi escalado, sincroniza no cadastro do agente no Firestore
     if (assignedAgent) {
+      try {
+        await updateInFirestore(COLLECTIONS.AGENTS, assignedAgent.id, {
+          assignedStation: newStation.name,
+          assignedStationId: newStation.id,
+        });
+      } catch (fErr) {
+        console.warn('Erro ao sincronizar posto do agente no Firestore:', fErr);
+      }
       const localAgentsStr = localStorage.getItem('novabrasil_agents');
       if (localAgentsStr) {
         const localAgents: SecurityAgent[] = JSON.parse(localAgentsStr);
@@ -503,24 +510,23 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
     );
     localStorage.setItem('novabrasil_condos', JSON.stringify(localCondos));
 
-    // Sincroniza remoção no servidor backend
+    // Sincroniza remoção no Firestore
+    try {
+      await updateInFirestore(COLLECTIONS.CONDOMINIUMS, managingStationsCondo.id, {
+        serviceStations: updatedStations,
+      });
+    } catch (fErr) {
+      console.warn('Erro ao atualizar postos no Firestore:', fErr);
+    }
+
     try {
       const headers = await getAuthHeaders();
-      await fetch(`/api/condominiums/${managingStationsCondo.id}`, {
+      fetch(`/api/condominiums/${managingStationsCondo.id}`, {
         method: 'PUT',
         headers: { ...headers, 'Content-Type': 'application/json' },
         body: JSON.stringify({ serviceStations: updatedStations }),
-      });
-      try {
-        const bc = new BroadcastChannel('novabrasil_sync');
-        bc.postMessage({ type: 'SYNC_UPDATE', entity: 'condominiums' });
-        bc.close();
-      } catch {
-        // BroadcastChannel optional
-      }
-    } catch (e) {
-      console.warn('Erro ao sincronizar remoção no servidor:', e);
-    }
+      }).catch(() => {});
+    } catch {}
 
     setManagingStationsCondo({ ...managingStationsCondo, serviceStations: updatedStations });
     setStationsFeedback('Posto de serviço removido.');
@@ -552,17 +558,23 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
     );
     localStorage.setItem('novabrasil_condos', JSON.stringify(localCondos));
 
-    // Sincroniza reatribuição no servidor backend
+    // Sincroniza reatribuição no Firestore
+    try {
+      await updateInFirestore(COLLECTIONS.CONDOMINIUMS, managingStationsCondo.id, {
+        serviceStations: updatedStations,
+      });
+    } catch (fErr) {
+      console.warn('Erro ao sincronizar escala no Firestore:', fErr);
+    }
+
     try {
       const headers = await getAuthHeaders();
-      await fetch(`/api/condominiums/${managingStationsCondo.id}`, {
+      fetch(`/api/condominiums/${managingStationsCondo.id}`, {
         method: 'PUT',
         headers: { ...headers, 'Content-Type': 'application/json' },
         body: JSON.stringify({ serviceStations: updatedStations }),
-      });
-    } catch (e) {
-      console.warn('Erro ao sincronizar escala no servidor:', e);
-    }
+      }).catch(() => {});
+    } catch {}
 
     // Sincroniza também no storage dos agentes
     if (assignedAgent) {

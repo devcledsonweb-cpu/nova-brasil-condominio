@@ -81,6 +81,28 @@ export function subscribeToFirestoreCollection<T>(
 }
 
 /**
+ * Lê todos os documentos de uma coleção do Firestore diretamente.
+ */
+export async function getFirestoreCollection<T>(collectionName: string): Promise<T[]> {
+  try {
+    const colRef = collection(db, collectionName);
+    const snapshot = await getDocs(colRef);
+    return snapshot.docs.map((docSnap) => {
+      const data = docSnap.data() as DocumentData;
+      const numericId = Number(docSnap.id);
+      const resolvedId = isNaN(numericId) ? docSnap.id : numericId;
+      return {
+        ...data,
+        id: data.id !== undefined ? data.id : resolvedId,
+      } as T;
+    });
+  } catch (err) {
+    console.warn(`[Firestore] Erro ao ler coleção "${collectionName}":`, err);
+    return [];
+  }
+}
+
+/**
  * Cria ou substitui um documento no Firestore.
  */
 export async function saveToFirestore<T extends { id?: string | number }>(

@@ -29,6 +29,7 @@ import { Loader2, Bell } from 'lucide-react';
 import {
   COLLECTIONS,
   subscribeToFirestoreCollection,
+  getFirestoreCollection,
   saveToFirestore,
   updateInFirestore,
   deleteFromFirestore,
@@ -90,186 +91,86 @@ function NovaBrasilMain() {
 
   const fetchAllData = async () => {
     try {
-      const headers = await getAuthHeaders();
-      const queryParam = selectedCondoId !== 'all' ? `?condoId=${selectedCondoId}` : '';
-
+      // 1. Carrega dados diretamente da nuvem compartilhada do Firestore (nova-brasil-ac663)
       const [
-        condosRes,
-        statsRes,
-        agentsRes,
-        vehiclesRes,
-        assetsRes,
-        maintenancesRes,
-        logsRes,
-        coveragesRes,
+        fsCondos,
+        fsAgents,
+        fsVehicles,
+        fsAssets,
+        fsMaintenances,
+        fsLogs,
+        fsCoverages,
       ] = await Promise.all([
-        fetch('/api/condominiums', { headers }),
-        fetch(`/api/dashboard/stats${queryParam}`, { headers }),
-        fetch('/api/agents', { headers }),
-        fetch('/api/patrol-vehicles', { headers }),
-        fetch('/api/company-assets', { headers }),
-        fetch('/api/maintenances', { headers }),
-        fetch('/api/operational-logs', { headers }),
-        fetch('/api/shift-coverages', { headers }),
+        getFirestoreCollection<Condominium>(COLLECTIONS.CONDOMINIUMS),
+        getFirestoreCollection<SecurityAgent>(COLLECTIONS.AGENTS),
+        getFirestoreCollection<PatrolVehicle>(COLLECTIONS.VEHICLES),
+        getFirestoreCollection<CompanyAsset>(COLLECTIONS.ASSETS),
+        getFirestoreCollection<MaintenanceOrder>(COLLECTIONS.MAINTENANCES),
+        getFirestoreCollection<OperationalLog>(COLLECTIONS.LOGS),
+        getFirestoreCollection<ShiftCoverage>(COLLECTIONS.COVERAGES),
       ]);
 
-      // Helper para ler JSON com segurança e prevenir erros de parse caso o host retorne HTML
-      const parseJsonRes = async <T,>(res: Response): Promise<T | null> => {
+      let loadedCondos: Condominium[] = fsCondos || [];
+
+      // Se houver algum condomínio no navegador local que ainda não existe no Firestore, sincroniza para a nuvem
+      const saved = localStorage.getItem('novabrasil_condos');
+      if (saved) {
         try {
-          const contentType = res.headers.get('content-type') || '';
-          if (res.ok && contentType.includes('application/json')) {
-            return (await res.json()) as T;
+          const localCondos: Condominium[] = JSON.parse(saved);
+          const existingIds = new Set(loadedCondos.map((c) => String(c.id)));
+          for (const c of localCondos) {
+            if (!existingIds.has(String(c.id))) {
+              await saveToFirestore(COLLECTIONS.CONDOMINIUMS, c.id, c);
+              loadedCondos.push(c);
+            }
           }
-        } catch {
-          // ignora erro de parse de HTML
-        }
-        return null;
-      };
-
-      // 1. Condomínios
-      let loadedCondos: Condominium[] = [];
-      const condosData = await parseJsonRes<Condominium[]>(condosRes);
-      if (condosData && Array.isArray(condosData)) {
-        loadedCondos = condosData.map((c: any) => ({
-          ...c,
-          imageUrl: c.imageUrl || c.photoUrl || 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=600&q=80',
-          photoUrl: c.photoUrl || c.imageUrl || null,
-          serviceStations: Array.isArray(c.serviceStations) && c.serviceStations.length > 0
-            ? c.serviceStations
-            : (Array.isArray(c.servicePosts)
-                ? c.servicePosts.map((p: string, idx: number) => ({
-                    id: `st-${c.id}-${idx + 1}`,
-                    condoId: c.id,
-                    name: p,
-                    type: idx === 0 ? 'portaria_principal' : 'posto_geral',
-                    shiftSchedule: '12x36 Diurno (06h às 18h)',
-                    assignedAgentName: null,
-                  }))
-                : []),
-        }));
-        localStorage.setItem('novabrasil_condos', JSON.stringify(loadedCondos));
-      } else {
-        const saved = localStorage.getItem('novabrasil_condos');
-        if (saved) {
-          try { loadedCondos = JSON.parse(saved); } catch {}
-        }
+        } catch {}
       }
-      setCondominiums(loadedCondos);
-
-      // 2. Agentes de Portaria
-      let loadedAgents: SecurityAgent[] = [];
-      const agentsData = await parseJsonRes<SecurityAgent[]>(agentsRes);
-      if (agentsData && Array.isArray(agentsData)) {
-        loadedAgents = agentsData;
-        localStorage.setItem('novabrasil_agents', JSON.stringify(loadedAgents));
-      } else {
-        const saved = localStorage.getItem('novabrasil_agents');
-        if (saved) {
-          try { loadedAgents = JSON.parse(saved); } catch {}
-        }
-      }
-      setAgents(loadedAgents);
-
-      // 3. Veículos de Ronda da Empresa
-      let loadedVehicles: PatrolVehicle[] = [];
-      const vehiclesData = await parseJsonRes<PatrolVehicle[]>(vehiclesRes);
-      if (vehiclesData && Array.isArray(vehiclesData)) {
-        loadedVehicles = vehiclesData;
-        localStorage.setItem('novabrasil_patrol_vehicles', JSON.stringify(loadedVehicles));
-      } else {
-        const saved = localStorage.getItem('novabrasil_patrol_vehicles');
-        if (saved) {
-          try { loadedVehicles = JSON.parse(saved); } catch {}
-        }
-      }
-      setPatrolVehicles(loadedVehicles);
-
-      // 4. Materiais e Patrimônio da Empresa
-      let loadedAssets: CompanyAsset[] = [];
-      const assetsData = await parseJsonRes<CompanyAsset[]>(assetsRes);
-      if (assetsData && Array.isArray(assetsData)) {
-        loadedAssets = assetsData;
-        localStorage.setItem('novabrasil_company_assets', JSON.stringify(loadedAssets));
-      } else {
-        const saved = localStorage.getItem('novabrasil_company_assets');
-        if (saved) {
-          try { loadedAssets = JSON.parse(saved); } catch {}
-        }
-      }
-      setCompanyAssets(loadedAssets);
-
-      // 5. Manutenções Realizadas pela Empresa
-      let loadedMaintenances: MaintenanceOrder[] = [];
-      const maintenancesData = await parseJsonRes<MaintenanceOrder[]>(maintenancesRes);
-      if (maintenancesData && Array.isArray(maintenancesData)) {
-        loadedMaintenances = maintenancesData;
-        localStorage.setItem('novabrasil_maintenances', JSON.stringify(loadedMaintenances));
-      } else {
-        const saved = localStorage.getItem('novabrasil_maintenances');
-        if (saved) {
-          try { loadedMaintenances = JSON.parse(saved); } catch {}
-        }
-      }
-      setMaintenances(loadedMaintenances);
-
-      // 6. Livro de Ocorrências e Turnos
-      let loadedLogs: OperationalLog[] = [];
-      const logsData = await parseJsonRes<OperationalLog[]>(logsRes);
-      if (logsData && Array.isArray(logsData)) {
-        loadedLogs = logsData;
-        localStorage.setItem('novabrasil_operational_logs', JSON.stringify(loadedLogs));
-      } else {
-        const saved = localStorage.getItem('novabrasil_operational_logs');
-        if (saved) {
-          try { loadedLogs = JSON.parse(saved); } catch {}
-        }
-      }
-      setOperationalLogs(loadedLogs);
-
-      // 7. Escala 12x36 e Cobertura de Faltas
-      let loadedCoverages: ShiftCoverage[] = [];
-      const coveragesData = await parseJsonRes<ShiftCoverage[]>(coveragesRes);
-      if (coveragesData && Array.isArray(coveragesData)) {
-        loadedCoverages = coveragesData;
-        localStorage.setItem('novabrasil_shift_coverages', JSON.stringify(loadedCoverages));
-      } else {
-        const saved = localStorage.getItem('novabrasil_shift_coverages');
-        if (saved) {
-          try { loadedCoverages = JSON.parse(saved); } catch {}
-        }
-      }
-      setCoverages(loadedCoverages);
 
       // Sincronizar dinamicamente as contagens de agentes, rondas, materiais e O.S. nos condomínios
-      const condosWithDynamicCounts = loadedCondos.map((c) => ({
+      const condosWithCounts = loadedCondos.map((c) => ({
         ...c,
-        agentsCount: loadedAgents.filter((a) => Number(a.condoId) === Number(c.id) || (Array.isArray(a.condoIds) && a.condoIds.includes(Number(c.id)))).length,
-        vehiclesCount: loadedVehicles.filter((v) => Number(v.condoId) === Number(c.id)).length,
-        assetsCount: loadedAssets.filter((a) => Number(a.condoId) === Number(c.id)).reduce((acc, a) => acc + (a.quantity || 1), 0),
-        maintenancesCount: loadedMaintenances.filter((m) => Number(m.condoId) === Number(c.id) && m.status !== 'concluida').length,
+        imageUrl: c.imageUrl || c.photoUrl || 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=600&q=80',
+        agentsCount: fsAgents.filter((a) => Number(a.condoId) === Number(c.id) || (Array.isArray(a.condoIds) && a.condoIds.includes(Number(c.id)))).length,
+        vehiclesCount: fsVehicles.filter((v) => Number(v.condoId) === Number(c.id)).length,
+        assetsCount: fsAssets.filter((a) => Number(a.condoId) === Number(c.id)).reduce((acc, a) => acc + (a.quantity || 1), 0),
+        maintenancesCount: fsMaintenances.filter((m) => Number(m.condoId) === Number(c.id) && m.status !== 'concluida').length,
       }));
-      setCondominiums(condosWithDynamicCounts);
-      localStorage.setItem('novabrasil_condos', JSON.stringify(condosWithDynamicCounts));
 
-      // 8. Estatísticas Consolidadas
-      const statsData = await parseJsonRes<DashboardStats>(statsRes);
-      if (statsData) {
-        setStats(statsData);
-      } else {
-        setStats({
-          totalCondos: condosWithDynamicCounts.length,
-          totalAgents: loadedAgents.length,
-          agentsOnDuty: loadedAgents.filter((a) => a.status === 'em_servico').length,
-          totalPatrolVehicles: loadedVehicles.length,
-          activePatrolVehicles: loadedVehicles.filter((v) => v.status === 'em_ronda' || v.status === 'disponivel').length,
-          totalAssets: loadedAssets.reduce((acc, a) => acc + (a.quantity || 1), 0),
-          pendingMaintenances: loadedMaintenances.filter((m) => m.status !== 'concluida').length,
-          completedMaintenances: loadedMaintenances.filter((m) => m.status === 'concluida').length,
-          todayLogs: loadedLogs.length,
-        });
-      }
+      setCondominiums(condosWithCounts);
+      localStorage.setItem('novabrasil_condos', JSON.stringify(condosWithCounts));
+
+      setAgents(fsAgents);
+      localStorage.setItem('novabrasil_agents', JSON.stringify(fsAgents));
+
+      setPatrolVehicles(fsVehicles);
+      localStorage.setItem('novabrasil_patrol_vehicles', JSON.stringify(fsVehicles));
+
+      setCompanyAssets(fsAssets);
+      localStorage.setItem('novabrasil_company_assets', JSON.stringify(fsAssets));
+
+      setMaintenances(fsMaintenances);
+      localStorage.setItem('novabrasil_maintenances', JSON.stringify(fsMaintenances));
+
+      setOperationalLogs(fsLogs);
+      localStorage.setItem('novabrasil_operational_logs', JSON.stringify(fsLogs));
+
+      setCoverages(fsCoverages);
+      localStorage.setItem('novabrasil_shift_coverages', JSON.stringify(fsCoverages));
+
+      setStats({
+        totalCondos: condosWithCounts.length,
+        totalAgents: fsAgents.length,
+        agentsOnDuty: fsAgents.filter((a) => a.status === 'em_servico').length,
+        totalPatrolVehicles: fsVehicles.length,
+        activePatrolVehicles: fsVehicles.filter((v) => v.status === 'em_ronda' || v.status === 'disponivel').length,
+        totalAssets: fsAssets.reduce((acc, a) => acc + (a.quantity || 1), 0),
+        pendingMaintenances: fsMaintenances.filter((m) => m.status !== 'concluida').length,
+        completedMaintenances: fsMaintenances.filter((m) => m.status === 'concluida').length,
+        todayLogs: fsLogs.length,
+      });
     } catch (error) {
-      console.warn('Erro ao carregar dados do servidor:', error);
+      console.warn('Erro ao carregar dados do Firestore:', error);
     } finally {
       setLoading(false);
     }
@@ -284,49 +185,49 @@ function NovaBrasilMain() {
 
     // Sincronização em tempo real via Firestore (Zero Latência entre celulares, PCs e Vercel)
     const unsubCondos = subscribeToFirestoreCollection<Condominium>(COLLECTIONS.CONDOMINIUMS, (items) => {
-      if (items && items.length > 0) {
+      if (items) {
         setCondominiums(items);
         localStorage.setItem('novabrasil_condos', JSON.stringify(items));
       }
     });
 
     const unsubAgents = subscribeToFirestoreCollection<SecurityAgent>(COLLECTIONS.AGENTS, (items) => {
-      if (items && items.length > 0) {
+      if (items) {
         setAgents(items);
         localStorage.setItem('novabrasil_agents', JSON.stringify(items));
       }
     });
 
     const unsubVehicles = subscribeToFirestoreCollection<PatrolVehicle>(COLLECTIONS.VEHICLES, (items) => {
-      if (items && items.length > 0) {
+      if (items) {
         setPatrolVehicles(items);
         localStorage.setItem('novabrasil_patrol_vehicles', JSON.stringify(items));
       }
     });
 
     const unsubAssets = subscribeToFirestoreCollection<CompanyAsset>(COLLECTIONS.ASSETS, (items) => {
-      if (items && items.length > 0) {
+      if (items) {
         setCompanyAssets(items);
         localStorage.setItem('novabrasil_company_assets', JSON.stringify(items));
       }
     });
 
     const unsubMaintenances = subscribeToFirestoreCollection<MaintenanceOrder>(COLLECTIONS.MAINTENANCES, (items) => {
-      if (items && items.length > 0) {
+      if (items) {
         setMaintenances(items);
         localStorage.setItem('novabrasil_maintenances', JSON.stringify(items));
       }
     });
 
     const unsubLogs = subscribeToFirestoreCollection<OperationalLog>(COLLECTIONS.LOGS, (items) => {
-      if (items && items.length > 0) {
+      if (items) {
         setOperationalLogs(items);
         localStorage.setItem('novabrasil_operational_logs', JSON.stringify(items));
       }
     });
 
     const unsubCoverages = subscribeToFirestoreCollection<ShiftCoverage>(COLLECTIONS.COVERAGES, (items) => {
-      if (items && items.length > 0) {
+      if (items) {
         setCoverages(items);
         localStorage.setItem('novabrasil_shift_coverages', JSON.stringify(items));
       }
@@ -340,11 +241,6 @@ function NovaBrasilMain() {
         fetchAllData();
       };
     } catch {}
-
-    // Polling de fallback caso necessário
-    const pollInterval = setInterval(() => {
-      fetchAllData();
-    }, 5000);
 
     // Atualização imediata ao reabrir a janela ou retornar ao navegador no celular
     const handleFocus = () => {
@@ -361,7 +257,6 @@ function NovaBrasilMain() {
       unsubMaintenances();
       unsubLogs();
       unsubCoverages();
-      clearInterval(pollInterval);
       if (bc) bc.close();
       window.removeEventListener('focus', handleFocus);
       document.removeEventListener('visibilitychange', handleFocus);
