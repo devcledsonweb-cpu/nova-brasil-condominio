@@ -2,6 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { SystemUser, Condominium, UserRole, SecurityAgent } from '../types/index.ts';
 import { useAuth } from '../context/AuthContext.tsx';
 import { WhatsAppButton } from './WhatsAppButton.tsx';
+import {
+  COLLECTIONS,
+  saveToFirestore,
+  updateInFirestore,
+  deleteFromFirestore,
+  subscribeToFirestoreCollection,
+} from '../services/firestoreSync.ts';
 
 import {
   UserCheck,
@@ -237,6 +244,17 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
   useEffect(() => {
     fetchUsers();
 
+    // Sincronização em tempo real de usuários via Firestore (nova-brasil-ac663)
+    const unsub = subscribeToFirestoreCollection<SystemUser>(COLLECTIONS.USERS, (items) => {
+      if (items && items.length > 0) {
+        setUsersList((prev) => {
+          const emailMap = new Set(items.map((u) => u.email.toLowerCase()));
+          const rest = prev.filter((u) => !emailMap.has(u.email.toLowerCase()));
+          return [...items, ...rest];
+        });
+      }
+    });
+
     let bc: BroadcastChannel | null = null;
     try {
       bc = new BroadcastChannel('novabrasil_sync');
@@ -247,9 +265,10 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
 
     const interval = setInterval(() => {
       fetchUsers();
-    }, 3000);
+    }, 4000);
 
     return () => {
+      unsub();
       clearInterval(interval);
       if (bc) bc.close();
     };
@@ -370,6 +389,16 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
         createdAt: new Date().toISOString(),
       };
 
+      // 1. Grava no Firestore (nova-brasil-ac663) para login imediato em qualquer celular ou Vercel
+      try {
+        await saveToFirestore(COLLECTIONS.USERS, newUserObj.id, {
+          ...newUserObj,
+          password: cleanPassword,
+        });
+      } catch (fErr) {
+        console.warn('Aviso ao sincronizar usuário no Firestore:', fErr);
+      }
+
       try {
         const bc = new BroadcastChannel('novabrasil_sync');
         bc.postMessage({ type: 'SYNC_UPDATE', entity: 'users' });
@@ -403,10 +432,17 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
     setErrorMsg('');
 
     try {
-
-
-      const headers = await getAuthHeaders();
+      // 1. Atualiza no Firestore
       try {
+        await updateInFirestore(COLLECTIONS.USERS, resetModalUser.id, {
+          password: newPassword.trim(),
+        });
+      } catch (fErr) {
+        console.warn('Aviso ao atualizar senha no Firestore:', fErr);
+      }
+
+      try {
+        const headers = await getAuthHeaders();
         await fetch(`/api/users/${resetModalUser.id}`, {
           method: 'PUT',
           headers,
@@ -439,10 +475,16 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
 
   const handleToggleActive = async (u: SystemUser) => {
     try {
-
-
-      const headers = await getAuthHeaders();
       try {
+        await updateInFirestore(COLLECTIONS.USERS, u.id, {
+          isActive: !u.isActive,
+        });
+      } catch (fErr) {
+        console.warn('Aviso ao alterar status no Firestore:', fErr);
+      }
+
+      try {
+        const headers = await getAuthHeaders();
         await fetch(`/api/users/${u.id}`, {
           method: 'PUT',
           headers,
@@ -472,10 +514,14 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
   const handleDeleteUser = async (u: SystemUser) => {
     if (!confirm(`Deseja realmente excluir o acesso do usuário "${u.name}"?`)) return;
     try {
-
-
-      const headers = await getAuthHeaders();
       try {
+        await deleteFromFirestore(COLLECTIONS.USERS, u.id);
+      } catch (fErr) {
+        console.warn('Aviso ao remover usuário no Firestore:', fErr);
+      }
+
+      try {
+        const headers = await getAuthHeaders();
         await fetch(`/api/users/${u.id}`, {
           method: 'DELETE',
           headers,

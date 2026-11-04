@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, signInWithPopup, signOut as fbSignOut, User } from 'firebase/auth';
-import { auth, googleAuthProvider } from '../lib/firebase.ts';
+import { collection, getDocs } from 'firebase/firestore';
+import { auth, db, googleAuthProvider } from '../lib/firebase.ts';
 import { UserProfile, UserRole } from '../types/index.ts';
 
 interface AuthContextType {
@@ -205,7 +206,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
     } catch (e: any) {
-      if (e.message) throw e;
+      if (e.message && e.message !== 'E-mail ou senha incorretos.') throw e;
+    }
+
+    // 5. Verificar usuários no Firestore (para múltiplos dispositivos / Vercel)
+    try {
+      const snap = await getDocs(collection(db, 'appUsers'));
+      const firestoreUsers = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+      const match = firestoreUsers.find((u: any) => u.email && u.email.toLowerCase() === cleanEmail);
+      if (match) {
+        if (match.password === cleanPassword) {
+          const assignedIds: number[] = Array.isArray(match.condoIds) && match.condoIds.length > 0
+            ? match.condoIds
+            : (match.condoId ? [match.condoId] : []);
+          const assignedNames: string[] = Array.isArray(match.condoNames) && match.condoNames.length > 0
+            ? match.condoNames
+            : (match.condoName ? [match.condoName] : []);
+
+          const userProfile: UserProfile = {
+            id: match.id || Date.now(),
+            uid: `firestore-${match.id}`,
+            email: match.email,
+            name: match.name,
+            role: match.role || 'portaria',
+            originalRole: match.role || 'portaria',
+            permissions: typeof match.permissions === 'string' ? match.permissions : JSON.stringify(match.permissions || []),
+            condoId: match.condoId || null,
+            condoIds: assignedIds,
+            condoName: match.condoName || null,
+            condoNames: assignedNames,
+            isActive: match.isActive !== false,
+          };
+          setUser(userProfile);
+          localStorage.setItem('novabrasil_user', JSON.stringify(userProfile));
+          return userProfile;
+        } else {
+          throw new Error('Senha incorreta.');
+        }
+      }
+    } catch (e: any) {
+      if (e.message && e.message !== 'E-mail ou senha incorretos.') throw e;
     }
 
     throw new Error('E-mail ou senha incorretos.');

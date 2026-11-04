@@ -4,6 +4,12 @@ import { Condominium, ServiceStation, SecurityAgent } from '../types/index.ts';
 import { maskCNPJ, maskCEP, maskPhone, cleanDigits } from '../utils/masks.ts';
 import { fetchAddressByCep } from '../services/cep.ts';
 import { safeFetchJson } from '../services/api.ts';
+import {
+  COLLECTIONS,
+  saveToFirestore,
+  updateInFirestore,
+  deleteFromFirestore,
+} from '../services/firestoreSync.ts';
 import { PhotoField } from './PhotoField.tsx';
 import { WhatsAppButton } from './WhatsAppButton.tsx';
 import {
@@ -215,7 +221,7 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
         sindicoName: formData.supervisorName?.trim() || formData.sindicoName?.trim() || 'Supervisor Regional',
         sindicoPhone: formData.supervisorPhone?.trim() || formData.sindicoPhone?.trim() || '',
         sindicoEmail: formData.contractType?.trim() || 'Portaria 24h + Ronda Noturna',
-        status: formData.status || 'ativo',
+        status: (formData.status as 'ativo' | 'inativo' | 'implantacao') || 'ativo',
         photoUrl: formData.imageUrl?.trim() || null,
         imageUrl: formData.imageUrl?.trim() || null,
         serviceStations: editingCondo?.serviceStations || [
@@ -238,41 +244,50 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
         ],
       };
 
-      // 1. Gravar de forma definitiva e imediata no PostgreSQL
-      const res = await fetch(url, {
-        method,
-        headers,
-        body: JSON.stringify(condoPayload),
-      });
+      const targetId = editingCondo ? editingCondo.id : Date.now();
+      const condoToSave: Condominium = {
+        ...condoPayload,
+        id: targetId,
+        createdAt: editingCondo?.createdAt || new Date().toISOString(),
+      };
 
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.error || `Erro ${res.status} ao salvar condomínio.`);
+      // 1. Gravar de forma imediata no Firestore (nova-brasil-ac663 - funciona no Vercel e multi-dispositivo)
+      try {
+        await saveToFirestore(COLLECTIONS.CONDOMINIUMS, targetId, condoToSave);
+      } catch (fErr) {
+        console.warn('Aviso ao sincronizar condomínio no Firestore:', fErr);
       }
 
-      const savedCondo: Condominium = await res.json();
+      // 2. Se houver backend local / PostgreSQL ativo, envia também
+      try {
+        fetch(url, {
+          method,
+          headers,
+          body: JSON.stringify(condoPayload),
+        }).catch(() => {});
+      } catch {}
 
-      // 2. Atualizar estado local e cache
+      // 3. Atualizar estado local e cache para resposta em 0ms
       const localCondosStr = localStorage.getItem('novabrasil_condos');
       let localCondos: Condominium[] = localCondosStr
         ? JSON.parse(localCondosStr)
         : [...condominiums];
 
       if (editingCondo) {
-        localCondos = localCondos.map((c) => (c.id === editingCondo.id ? { ...c, ...savedCondo } : c));
+        localCondos = localCondos.map((c) => (c.id === editingCondo.id ? { ...c, ...condoToSave } : c));
       } else {
-        localCondos = [savedCondo, ...localCondos.filter((c) => c.id !== savedCondo.id)];
+        localCondos = [condoToSave, ...localCondos.filter((c) => c.id !== targetId)];
       }
       localStorage.setItem('novabrasil_condos', JSON.stringify(localCondos));
 
-      // 3. Notificar sincronização para outras abas e dispositivos
+      // 4. Notificar sincronização para outras abas e dispositivos
       try {
         const bc = new BroadcastChannel('novabrasil_sync');
         bc.postMessage({ type: 'SYNC_UPDATE', entity: 'condominiums' });
         bc.close();
       } catch {}
 
-      // 4. Fechar modal imediatamente para feedback instantâneo
+      // 5. Fechar modal imediatamente para feedback instantâneo ao usuário
       setIsAddModalOpen(false);
       setEditingCondo(null);
       setFormData({
@@ -293,7 +308,7 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
         imageUrl: '',
       });
 
-      // 5. Atualizar lista de condomínios da aplicação
+      // 6. Atualizar lista de condomínios
       await onRefresh().catch(() => {});
     } catch (err: any) {
       console.error('Erro ao salvar condomínio:', err);
@@ -306,42 +321,53 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
   const handleDelete = async (condo: Condominium) => {
     if (
       !confirm(
-        `Tem certeza que deseja excluir o condomínio "${condo.name}"? Todos os blocos, apartamentos, moradores e dados vinculados serão excluídos permanentemente.`
+        `Tem certeza que deseja excluir o condomínio "${condo.name}"? Todos os postos e dados vinculados serão excluídos.`
       )
     ) {
       return;
     }
 
     try {
-      const headers = await getAuthHeaders();
-      const res = await fetch(`/api/condominiums/${condo.id}`, {
-        method: 'DELETE',
-        headers,
-      });
-
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.error || 'Falha ao excluir condomínio no servidor.');
+      // 1. Exclui no Firestore (projeto nova-brasil-ac663 - funciona no Vercel e em todos os dispositivos)
+      try {
+        await deleteFromFirestore(COLLECTIONS.CONDOMINIUMS, condo.id);
+      } catch (fErr) {
+        console.warn('Aviso ao excluir condomínio no Firestore:', fErr);
       }
 
-      // Remover do localStorage
+      // 2. Se houver backend local ativo, envia também
+      try {
+        const headers = await getAuthHeaders();
+        await fetch(`/api/condominiums/${condo.id}`, {
+          method: 'DELETE',
+          headers,
+        });
+      } catch (apiErr) {
+        // No Vercel ou caso o backend não esteja ativo, não interrompe a exclusão
+        console.warn('Backend indisponível:', apiErr);
+      }
+
+      // 3. Remover do cache local
       const localCondosStr = localStorage.getItem('novabrasil_condos');
       if (localCondosStr) {
         const localCondos = JSON.parse(localCondosStr).filter((c: any) => c.id !== condo.id);
         localStorage.setItem('novabrasil_condos', JSON.stringify(localCondos));
       }
 
+      // 4. Notificar outras abas
       try {
         const bc = new BroadcastChannel('novabrasil_sync');
-        bc.postMessage({ type: 'CONDOMINIUMS_UPDATED' });
+        bc.postMessage({ type: 'SYNC_UPDATE', entity: 'condominiums' });
         bc.close();
       } catch {}
 
       if (selectedCondoId === condo.id) {
         onSelectCondo('all');
       }
-      await onRefresh();
+
+      await onRefresh().catch(() => {});
     } catch (err: any) {
+      console.warn('Erro ao excluir condomínio:', err);
       alert(err.message || 'Erro ao excluir condomínio.');
     }
   };
