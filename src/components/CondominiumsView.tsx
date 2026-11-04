@@ -34,6 +34,8 @@ import {
   X,
   AlertCircle,
   FileText,
+  Loader2,
+  Database,
 } from 'lucide-react';
 
 interface CondominiumsViewProps {
@@ -76,6 +78,10 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
   const [editingCondo, setEditingCondo] = useState<Condominium | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+
+  // Estado de salvamento global e feedback visual imediato após escrita no Firestore
+  const [globalSaveStatus, setGlobalSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+  const [globalSaveMessage, setGlobalSaveMessage] = useState<string>('');
 
   // Postos de Serviço Modal State
   const [managingStationsCondo, setManagingStationsCondo] = useState<Condominium | null>(null);
@@ -201,6 +207,12 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
 
     setIsSubmitting(true);
     setErrorMsg('');
+    setGlobalSaveStatus('saving');
+    setGlobalSaveMessage(
+      editingCondo
+        ? `Gravando alterações de "${formData.name.trim()}" no Firestore... Aguarde confirmação do banco.`
+        : `Registrando condomínio "${formData.name.trim()}" no Firestore... Aguarde confirmação do banco.`
+    );
 
     try {
       const headers = await getAuthHeaders();
@@ -251,23 +263,11 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
         createdAt: editingCondo?.createdAt || new Date().toISOString(),
       };
 
-      // 1. Gravar de forma imediata no Firestore (nova-brasil-ac663 - funciona no Vercel e multi-dispositivo)
-      try {
-        await saveToFirestore(COLLECTIONS.CONDOMINIUMS, targetId, condoToSave);
-      } catch (fErr) {
-        console.warn('Aviso ao sincronizar condomínio no Firestore:', fErr);
-      }
+      // 1. GRAVAÇÃO NO FIRESTORE COM CONFIRMAÇÃO OBRIGATÓRIA
+      // O estado local NÃO é alterado se o banco de dados falhar ou for recusado
+      await saveToFirestore(COLLECTIONS.CONDOMINIUMS, targetId, condoToSave);
 
-      // 2. Se houver backend local / PostgreSQL ativo, envia também
-      try {
-        fetch(url, {
-          method,
-          headers,
-          body: JSON.stringify(condoPayload),
-        }).catch(() => {});
-      } catch {}
-
-      // 3. Atualizar estado local e cache para resposta em 0ms
+      // 2. APENAS APÓS CONFIRMAÇÃO DO BANCO: Atualiza cache local e estado
       const localCondosStr = localStorage.getItem('novabrasil_condos');
       let localCondos: Condominium[] = localCondosStr
         ? JSON.parse(localCondosStr)
@@ -280,14 +280,34 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
       }
       localStorage.setItem('novabrasil_condos', JSON.stringify(localCondos));
 
-      // 4. Notificar sincronização para outras abas e dispositivos
+      // Sincronização em segundo plano para PostgreSQL local / Express
+      try {
+        fetch(url, {
+          method,
+          headers,
+          body: JSON.stringify(condoPayload),
+        }).catch(() => {});
+      } catch {}
+
+      // Notificar abas e outros navegadores
       try {
         const bc = new BroadcastChannel('novabrasil_sync');
         bc.postMessage({ type: 'SYNC_UPDATE', entity: 'condominiums' });
         bc.close();
       } catch {}
 
-      // 5. Fechar modal imediatamente para feedback instantâneo ao usuário
+      // Atualizar lista de condomínios
+      await onRefresh().catch(() => {});
+
+      // 3. FEEDBACK VISUAL IMEDIATO APÓS CONFIRMAÇÃO DO BANCO
+      setGlobalSaveStatus('success');
+      setGlobalSaveMessage(
+        editingCondo
+          ? `Condomínio "${condoToSave.name}" atualizado e confirmado com sucesso no Firestore (nova-brasil-ac663)!`
+          : `Condomínio "${condoToSave.name}" gravado e confirmado com sucesso no Firestore (nova-brasil-ac663)!`
+      );
+
+      // 4. Fechar modal e resetar formulário
       setIsAddModalOpen(false);
       setEditingCondo(null);
       setFormData({
@@ -308,11 +328,16 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
         imageUrl: '',
       });
 
-      // 6. Atualizar lista de condomínios
-      await onRefresh().catch(() => {});
+      // Auto-ocultar feedback de sucesso após 6 segundos
+      setTimeout(() => {
+        setGlobalSaveStatus((cur) => (cur === 'success' ? 'idle' : cur));
+      }, 6000);
     } catch (err: any) {
-      console.error('Erro ao salvar condomínio:', err);
-      setErrorMsg(err.message || 'Erro inesperado ao salvar condomínio.');
+      console.error('Erro ao salvar condomínio no Firestore:', err);
+      const msg = err?.message || 'Falha ao confirmar gravação no Firestore.';
+      setErrorMsg(msg);
+      setGlobalSaveStatus('error');
+      setGlobalSaveMessage(`Erro na confirmação do Firestore: ${msg}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -575,6 +600,55 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
 
   return (
     <div className="space-y-5 sm:space-y-6">
+      {/* Feedback Visual Global de Salvamento e Status do Banco Firestore */}
+      {globalSaveStatus !== 'idle' && (
+        <div
+          role="status"
+          aria-live="polite"
+          className={`sticky top-0 z-40 p-3 sm:p-4 rounded-xl border transition-all duration-300 shadow-md flex items-center justify-between gap-3 ${
+            globalSaveStatus === 'saving'
+              ? 'bg-blue-50 dark:bg-blue-950/80 border-blue-300 dark:border-blue-800 text-blue-900 dark:text-blue-100 animate-pulse'
+              : globalSaveStatus === 'success'
+              ? 'bg-emerald-50 dark:bg-emerald-950/80 border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-100'
+              : 'bg-rose-50 dark:bg-rose-950/80 border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-100'
+          }`}
+        >
+          <div className="flex items-center gap-3 min-w-0">
+            {globalSaveStatus === 'saving' && (
+              <Loader2 className="w-5 h-5 text-blue-600 dark:text-blue-400 animate-spin shrink-0" />
+            )}
+            {globalSaveStatus === 'success' && (
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            )}
+            {globalSaveStatus === 'error' && (
+              <AlertCircle className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0" />
+            )}
+            <div className="min-w-0">
+              <p className="text-xs sm:text-sm font-semibold truncate">
+                {globalSaveStatus === 'saving' && 'Gravando no Banco de Dados Firestore...'}
+                {globalSaveStatus === 'success' && 'Confirmado pelo Firestore!'}
+                {globalSaveStatus === 'error' && 'Erro de Gravação'}
+              </p>
+              <p className="text-[11px] sm:text-xs opacity-90 truncate">{globalSaveMessage}</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-white/70 dark:bg-slate-800/80 border border-current text-slate-700 dark:text-slate-300">
+              <Database className="w-3 h-3 text-blue-600" />
+              nova-brasil-ac663
+            </span>
+            <button
+              onClick={() => setGlobalSaveStatus('idle')}
+              className="p-1 rounded-md hover:bg-black/5 dark:hover:bg-white/10 transition-colors text-xs cursor-pointer"
+              title="Fechar aviso"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Top Banner / Actions */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 sm:p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4 transition-colors">
         <div>
@@ -1224,9 +1298,18 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold disabled:opacity-50 cursor-pointer flex items-center gap-2 shadow-xs min-h-[38px]"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold disabled:opacity-60 cursor-pointer flex items-center gap-2 shadow-xs min-h-[38px] transition-all"
                 >
-                  {isSubmitting ? 'Salvando...' : editingCondo ? 'Atualizar Dados' : 'Cadastrar Condomínio'}
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Confirmando no Firestore...</span>
+                    </>
+                  ) : editingCondo ? (
+                    'Atualizar Dados'
+                  ) : (
+                    'Cadastrar Condomínio'
+                  )}
                 </button>
               </div>
             </form>

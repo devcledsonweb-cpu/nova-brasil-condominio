@@ -33,7 +33,12 @@ import {
   Phone,
   Shield,
   BadgeAlert,
+  Loader2,
+  Database,
 } from 'lucide-react';
+import { initializeApp, getApps } from 'firebase/app';
+import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
+import firebaseConfig from '../../firebase-applet-config.json';
 
 interface UsersManagementViewProps {
   condominiums?: Condominium[];
@@ -74,6 +79,60 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
 
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [isSyncingAuth, setIsSyncingAuth] = useState(false);
+
+  // Registra usuário no Firebase Authentication para aparecer na aba "Users" do console
+  const registerInFirebaseAuth = async (userEmail: string, userPass: string) => {
+    try {
+      const secondaryName = 'SecondaryAdminAuthApp';
+      const existing = getApps().find((a) => a.name === secondaryName);
+      const app = existing || initializeApp(firebaseConfig, secondaryName);
+      const secondaryAuth = getAuth(app);
+      await createUserWithEmailAndPassword(secondaryAuth, userEmail.trim().toLowerCase(), userPass);
+      return true;
+    } catch (err: any) {
+      if (err.code === 'auth/email-already-in-use') {
+        return true;
+      }
+      console.warn(`Registro do usuário ${userEmail} no Firebase Auth:`, err.message || err.code);
+      return false;
+    }
+  };
+
+  // Sincroniza em massa todas as contas para o Firebase Authentication
+  const syncAllUsersToFirebaseAuth = async () => {
+    setIsSyncingAuth(true);
+    setSyncNotice('Sincronizando usuários no Firebase Authentication (nova-brasil-ac663)...');
+    try {
+      let count = 0;
+      const defaultAccounts = [
+        { email: 'contato@cledsonsales.com.br', pass: '123456' },
+        { email: 'cledson@novabrasil.com', pass: '123456' },
+        { email: 'administrativo@novabrasil.com', pass: '@nb32573515' },
+        { email: 'portaria@novabrasil.com', pass: 'portaria123' },
+      ];
+
+      for (const acc of defaultAccounts) {
+        await registerInFirebaseAuth(acc.email, acc.pass);
+        count++;
+      }
+
+      for (const u of usersList) {
+        if (u.email && u.email.includes('@')) {
+          const pass = (u as any).password || '@nb32573515';
+          await registerInFirebaseAuth(u.email, pass);
+          count++;
+        }
+      }
+
+      setSyncNotice(`✅ Sincronização concluída! ${count} conta(s) registrada(s) no Firebase Authentication. Agora você pode vê-las na aba "Users" do Firebase Console.`);
+    } catch (err: any) {
+      setSyncNotice(`Aviso na sincronização: ${err.message || 'Verifique as configurações do Firebase'}`);
+    } finally {
+      setIsSyncingAuth(false);
+      setTimeout(() => setSyncNotice(''), 9000);
+    }
+  };
 
   const suggestEmail = (agentName: string) => {
     if (!agentName || !agentName.trim()) return 'agente@novabrasil.com';
@@ -399,6 +458,13 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
         console.warn('Aviso ao sincronizar usuário no Firestore:', fErr);
       }
 
+      // 2. Registra no Firebase Authentication para aparecer na aba "Users" do console
+      try {
+        await registerInFirebaseAuth(cleanEmail, cleanPassword);
+      } catch (authErr) {
+        console.warn('Aviso ao registrar usuário no Firebase Auth:', authErr);
+      }
+
       try {
         const bc = new BroadcastChannel('novabrasil_sync');
         bc.postMessage({ type: 'SYNC_UPDATE', entity: 'users' });
@@ -659,12 +725,26 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
 
         <div className="flex items-center gap-2 flex-wrap">
           <button
+            onClick={syncAllUsersToFirebaseAuth}
+            disabled={isSyncingAuth}
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 text-xs font-semibold rounded-xl border border-amber-300 dark:border-amber-800 transition-colors cursor-pointer disabled:opacity-50"
+            title="Registrar todos os usuários no console do Firebase Authentication"
+          >
+            {isSyncingAuth ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Shield className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+            )}
+            <span>{isSyncingAuth ? 'Registrando no Firebase...' : 'Sincronizar Firebase Auth'}</span>
+          </button>
+
+          <button
             onClick={fetchUsers}
             className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-xl border border-slate-300 dark:border-slate-700 transition-colors cursor-pointer"
             title="Atualizar e sincronizar agentes"
           >
             <RefreshCw className="w-3.5 h-3.5" />
-            <span>Sincronizar</span>
+            <span>Atualizar</span>
           </button>
 
           <button

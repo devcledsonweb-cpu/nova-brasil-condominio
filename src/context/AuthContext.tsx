@@ -1,5 +1,12 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { onAuthStateChanged, signInWithPopup, signOut as fbSignOut, User } from 'firebase/auth';
+import {
+  onAuthStateChanged,
+  signInWithPopup,
+  signOut as fbSignOut,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  User,
+} from 'firebase/auth';
 import { collection, getDocs } from 'firebase/firestore';
 import { auth, db, googleAuthProvider } from '../lib/firebase.ts';
 import { UserProfile, UserRole } from '../types/index.ts';
@@ -63,10 +70,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => unsubscribe();
   }, [user]);
 
+  // Registra ou autentica automaticamente a conta no Firebase Authentication para aparecer no console do Firebase
+  const syncSessionToFirebaseAuth = async (email: string, pass: string) => {
+    try {
+      await signInWithEmailAndPassword(auth, email, pass);
+    } catch (err: any) {
+      if (
+        err.code === 'auth/user-not-found' ||
+        err.code === 'auth/invalid-credential' ||
+        err.code === 'auth/invalid-login-credentials'
+      ) {
+        try {
+          await createUserWithEmailAndPassword(auth, email, pass);
+        } catch (cErr) {
+          console.warn('Registro no Firebase Auth:', cErr);
+        }
+      }
+    }
+  };
+
   // Login com e-mail e senha no banco de dados com fallback resiliente para Vercel / offline
   const loginWithCredentials = async (email: string, password: string): Promise<UserProfile> => {
     const cleanEmail = email.trim().toLowerCase();
     const cleanPassword = password.trim();
+
+    // Sincroniza em segundo plano com o Firebase Authentication
+    syncSessionToFirebaseAuth(cleanEmail, cleanPassword).catch(() => {});
 
     // 1. Tenta autenticar primeiro no backend / PostgreSQL se disponível
     try {
