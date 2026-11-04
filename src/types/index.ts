@@ -125,12 +125,37 @@ export interface MaintenanceOrder {
   createdAt?: string;
 }
 
+export interface PostChecklistItem {
+  id: string;
+  condoId?: number | null; // null ou indefinido = todos os condomínios
+  condoName?: string | null;
+  title: string;
+  description?: string | null;
+  category: 'equipamentos' | 'chaves_documentos' | 'instalacoes' | 'procedimentos' | 'outro';
+  isRequired: boolean;
+  isActive: boolean;
+  orderIndex?: number;
+  createdAt?: string;
+}
+
+export interface OperationalLogChangeRequest {
+  requestedBy: string;
+  requestedAt: string;
+  requestType: 'alteracao' | 'exclusao';
+  reason: string;
+  status: 'pendente' | 'aprovada' | 'rejeitada';
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
+  reviewNotes?: string | null;
+}
+
 export interface IncomingShiftChecklist {
   keysReceived: boolean;
   radiosOk: boolean;
   stationClean: boolean;
   patrolStickOk: boolean;
   noPendingIssues: boolean;
+  [customKey: string]: boolean;
 }
 
 export interface OperationalLog {
@@ -156,7 +181,10 @@ export interface OperationalLog {
   incomingAgentName?: string | null;
   incomingAcceptedAt?: string | null;
   incomingChecklist?: IncomingShiftChecklist;
+  incomingDynamicChecklist?: Record<string, boolean>;
   incomingNotes?: string | null;
+  // Solicitação de Alteração ou Exclusão feita pelo Agente (apenas gestor aprova)
+  changeRequest?: OperationalLogChangeRequest | null;
 }
 
 export interface ShiftCoverage {

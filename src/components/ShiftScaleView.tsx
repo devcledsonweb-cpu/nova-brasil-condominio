@@ -20,6 +20,11 @@ import {
   Zap,
   FileText,
   UserPlus,
+  ChevronLeft,
+  ChevronRight,
+  Sun,
+  Moon,
+  Eye,
 } from 'lucide-react';
 import {
   ShiftCoverage,
@@ -59,6 +64,41 @@ export const ShiftScaleView: React.FC<ShiftScaleViewProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isCoverModalOpen, setIsCoverModalOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<'calendario' | 'postos' | 'ocorrencias'>('calendario');
+  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
+  const [selectedCalendarDay, setSelectedCalendarDay] = useState<Date | null>(null);
+
+  const handlePrevMonth = () => {
+    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
+  };
+
+  const handleNextMonth = () => {
+    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
+  };
+
+  const handleCurrentMonth = () => {
+    setCurrentMonth(new Date());
+  };
+
+  const formatBRDate = (d: Date): string => {
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  };
+
+  const normalizeDateStr = (dateStr?: string): string => {
+    if (!dateStr) return '';
+    if (dateStr.includes('/')) return dateStr;
+    if (dateStr.includes('-')) {
+      const parts = dateStr.split('-');
+      if (parts.length === 3) {
+        return `${parts[2].padStart(2, '0')}/${parts[1].padStart(2, '0')}/${parts[0]}`;
+      }
+    }
+    return dateStr;
+  };
+
   const [selectedRecordToCover, setSelectedRecordToCover] = useState<ShiftCoverage | null>(null);
 
   // Form State: Registro de Falta / Afastamento
@@ -310,7 +350,260 @@ export const ShiftScaleView: React.FC<ShiftScaleViewProps> = ({
         </div>
       </div>
 
-      {/* Visão Rápida dos Postos de Serviço (Guarnecidos vs Descobertos) */}
+      {/* Seletor de Modo: Calendário Dinâmico | Postos de Serviço | Histórico de Faltas */}
+      <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-2xl border border-slate-200/80 dark:border-slate-800 w-full sm:w-auto self-start">
+        <button
+          onClick={() => setViewMode('calendario')}
+          className={`flex-1 sm:flex-none py-2 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+            viewMode === 'calendario'
+              ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+          }`}
+        >
+          <Calendar className="w-4 h-4" />
+          <span>Calendário Mensal Dinâmico</span>
+        </button>
+
+        <button
+          onClick={() => setViewMode('postos')}
+          className={`flex-1 sm:flex-none py-2 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+            viewMode === 'postos'
+              ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+          }`}
+        >
+          <ShieldCheck className="w-4 h-4" />
+          <span>Painel dos Postos (Guarnições)</span>
+        </button>
+
+        <button
+          onClick={() => setViewMode('ocorrencias')}
+          className={`flex-1 sm:flex-none py-2 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+            viewMode === 'ocorrencias'
+              ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+          }`}
+        >
+          <AlertCircle className="w-4 h-4" />
+          <span>Registro de Faltas & Coberturas ({filteredCoverages.length})</span>
+        </button>
+      </div>
+
+      {/* MODO 1: CALENDÁRIO MENSAL DINÂMICO DE ESCALAS */}
+      {viewMode === 'calendario' && (() => {
+        const monthNames = [
+          'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+          'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+        ];
+        const weekdayNames = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+        const weekdayShorts = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+
+        const currentYear = currentMonth.getFullYear();
+        const currentMonthIdx = currentMonth.getMonth();
+        const currentMonthLabel = `${monthNames[currentMonthIdx]} de ${currentYear}`;
+
+        const daysInCurrentMonth = new Date(currentYear, currentMonthIdx + 1, 0).getDate();
+        const firstWeekday = new Date(currentYear, currentMonthIdx, 1).getDay();
+        const daysInPrevMonth = new Date(currentYear, currentMonthIdx, 0).getDate();
+
+        const leadingDays = [];
+        for (let i = firstWeekday - 1; i >= 0; i--) {
+          leadingDays.push({
+            day: daysInPrevMonth - i,
+            isCurrentMonth: false,
+            date: new Date(currentYear, currentMonthIdx - 1, daysInPrevMonth - i),
+          });
+        }
+
+        const monthDays = [];
+        for (let d = 1; d <= daysInCurrentMonth; d++) {
+          monthDays.push({
+            day: d,
+            isCurrentMonth: true,
+            date: new Date(currentYear, currentMonthIdx, d),
+          });
+        }
+
+        const totalCells = leadingDays.length + monthDays.length;
+        const trailingCount = (7 - (totalCells % 7)) % 7;
+        const trailingDays = [];
+        for (let d = 1; d <= trailingCount; d++) {
+          trailingDays.push({
+            day: d,
+            isCurrentMonth: false,
+            date: new Date(currentYear, currentMonthIdx + 1, d),
+          });
+        }
+
+        const calendarCells = [...leadingDays, ...monthDays, ...trailingDays];
+
+        return (
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 shadow-2xs space-y-4">
+            {/* Controles do Calendário: Navegação e Estatísticas do Mês */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-xl p-1 border border-slate-200 dark:border-slate-700">
+                  <button
+                    onClick={handlePrevMonth}
+                    className="p-1.5 hover:bg-white dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg transition-colors cursor-pointer"
+                    title="Mês anterior"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={handleCurrentMonth}
+                    className="px-3 py-1 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:bg-white dark:hover:bg-slate-700 rounded-lg transition-colors cursor-pointer"
+                  >
+                    Hoje
+                  </button>
+                  <button
+                    onClick={handleNextMonth}
+                    className="p-1.5 hover:bg-white dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg transition-colors cursor-pointer"
+                    title="Próximo mês"
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white capitalize">
+                  {currentMonthLabel}
+                </h2>
+              </div>
+
+              {/* Legendas Rápidas */}
+              <div className="flex items-center gap-3 flex-wrap text-xs">
+                <span className="flex items-center gap-1.5 font-medium text-slate-600 dark:text-slate-400">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                  Guarnecido
+                </span>
+                <span className="flex items-center gap-1.5 font-medium text-amber-600 dark:text-amber-400">
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+                  Coberto (Substituto)
+                </span>
+                <span className="flex items-center gap-1.5 font-medium text-rose-600 dark:text-rose-400">
+                  <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse"></span>
+                  Descoberto
+                </span>
+                <span className="flex items-center gap-1.5 font-medium text-indigo-600 dark:text-indigo-400">
+                  <span className="w-2.5 h-2.5 rounded-full bg-indigo-500"></span>
+                  Postos Ativos: {allStations.length}
+                </span>
+              </div>
+            </div>
+
+            {/* Cabeçalho dos Dias da Semana */}
+            <div className="grid grid-cols-7 gap-1.5 sm:gap-2 text-center text-xs font-bold text-slate-500 dark:text-slate-400">
+              {weekdayShorts.map((w, idx) => (
+                <div
+                  key={w}
+                  className={`py-2 rounded-lg ${
+                    idx === 0 || idx === 6
+                      ? 'bg-slate-50/70 dark:bg-slate-800/40 text-indigo-600 dark:text-indigo-400'
+                      : 'bg-slate-50/40 dark:bg-slate-800/20'
+                  }`}
+                >
+                  <span className="hidden sm:inline">{weekdayNames[idx]}</span>
+                  <span className="sm:hidden">{w}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Grade dos Dias do Mês */}
+            <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
+              {calendarCells.map((cell, idx) => {
+                const cellDateStr = formatBRDate(cell.date);
+                const isToday = cell.date.toDateString() === new Date().toDateString();
+
+                // Busca ocorrências / faltas nesta data específica
+                const dayAbsences = coverages.filter((c) => {
+                  const normalized = normalizeDateStr(c.date);
+                  const matchDate = normalized === cellDateStr;
+                  const matchCondo = selectedCondoId === 'all' || c.condoId === selectedCondoId;
+                  return matchDate && matchCondo;
+                });
+
+                const uncoveredCount = dayAbsences.filter((c) => c.coverageStatus === 'descoberto').length;
+                const coveredCount = dayAbsences.filter((c) => c.coverageStatus === 'coberto').length;
+                const totalStations = allStations.length;
+
+                return (
+                  <div
+                    key={`${cellDateStr}-${idx}`}
+                    onClick={() => setSelectedCalendarDay(cell.date)}
+                    className={`min-h-[92px] sm:min-h-[115px] p-2 sm:p-2.5 rounded-xl border transition-all cursor-pointer flex flex-col justify-between group ${
+                      !cell.isCurrentMonth
+                        ? 'opacity-40 bg-slate-50/40 dark:bg-slate-900/40 border-slate-100 dark:border-slate-800/40'
+                        : isToday
+                        ? 'bg-indigo-50/50 dark:bg-indigo-950/20 border-indigo-500 dark:border-indigo-500 ring-2 ring-indigo-500/20 shadow-xs'
+                        : uncoveredCount > 0
+                        ? 'bg-rose-50/60 dark:bg-rose-950/20 border-rose-300 dark:border-rose-900/60 hover:border-rose-400'
+                        : coveredCount > 0
+                        ? 'bg-amber-50/40 dark:bg-amber-950/15 border-amber-300 dark:border-amber-900/60 hover:border-amber-400'
+                        : 'bg-white dark:bg-slate-800/60 border-slate-200 dark:border-slate-800 hover:border-indigo-400 dark:hover:border-indigo-600'
+                    }`}
+                  >
+                    {/* Topo da Célula: Número do Dia + Indicador de Hoje */}
+                    <div className="flex items-center justify-between">
+                      <span
+                        className={`text-xs sm:text-sm font-black w-6 h-6 rounded-full flex items-center justify-center transition-transform group-hover:scale-110 ${
+                          isToday
+                            ? 'bg-indigo-600 text-white shadow-xs'
+                            : 'text-slate-700 dark:text-slate-300'
+                        }`}
+                      >
+                        {cell.day}
+                      </span>
+
+                      {isToday && (
+                        <span className="hidden sm:inline-block text-[9px] font-extrabold uppercase bg-indigo-600 text-white px-1.5 py-0.5 rounded-md">
+                          Hoje
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Indicadores Visuais da Escala no Dia */}
+                    <div className="space-y-1 my-1">
+                      {uncoveredCount > 0 && (
+                        <div className="flex items-center gap-1 text-[10px] font-extrabold text-white bg-rose-600 px-1.5 py-0.5 rounded-md shadow-xs animate-pulse">
+                          <AlertTriangle className="w-3 h-3 shrink-0" />
+                          <span className="truncate">{uncoveredCount} Descoberto{uncoveredCount > 1 ? 's' : ''}</span>
+                        </div>
+                      )}
+
+                      {coveredCount > 0 && (
+                        <div className="flex items-center gap-1 text-[10px] font-bold text-amber-900 dark:text-amber-200 bg-amber-100 dark:bg-amber-950/80 px-1.5 py-0.5 rounded-md border border-amber-300 dark:border-amber-800">
+                          <UserCheck className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0" />
+                          <span className="truncate">{coveredCount} Coberto{coveredCount > 1 ? 's' : ''}</span>
+                        </div>
+                      )}
+
+                      {uncoveredCount === 0 && coveredCount === 0 && totalStations > 0 && cell.isCurrentMonth && (
+                        <div className="hidden sm:flex items-center gap-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded-md">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />
+                          <span className="truncate">{totalStations} Guarnecidos</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Rodapé da Célula com Postos 12x36 */}
+                    <div className="text-[9px] text-slate-400 dark:text-slate-500 flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-800/60">
+                      <span className="flex items-center gap-0.5 text-slate-600 dark:text-slate-400 font-semibold">
+                        ☀️ 12x36
+                      </span>
+                      <span className="group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors font-bold text-[10px]">
+                        Ver →
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* MODO 2: VISÃO DOS POSTOS DE SERVIÇO */}
+      {viewMode === 'postos' && (
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 shadow-2xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
           <div>
@@ -436,8 +729,10 @@ export const ShiftScaleView: React.FC<ShiftScaleViewProps> = ({
           </div>
         )}
       </div>
+      )}
 
-      {/* Tabela de Registro de Ocorrências de Escala (Faltas, Atestados, Folgas) */}
+      {/* MODO 3: TABELA DE OCORRÊNCIAS DE ESCALA (Faltas, Atestados, Folgas) */}
+      {(viewMode === 'postos' || viewMode === 'ocorrencias') && (
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xs overflow-hidden">
         {/* Barra de Filtros */}
         <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
@@ -619,6 +914,203 @@ export const ShiftScaleView: React.FC<ShiftScaleViewProps> = ({
           </table>
         </div>
       </div>
+      )}
+
+      {/* Modal Interativo: Escala Detalhada do Dia Selecionado no Calendário */}
+      {selectedCalendarDay && (() => {
+        const dayStr = formatBRDate(selectedCalendarDay);
+        const dayName = selectedCalendarDay.toLocaleDateString('pt-BR', { weekday: 'long' });
+        const dayAbsences = coverages.filter((c) => {
+          const matchDate = normalizeDateStr(c.date) === dayStr;
+          const matchCondo = selectedCondoId === 'all' || c.condoId === selectedCondoId;
+          return matchDate && matchCondo;
+        });
+
+        const openAddForThisDay = () => {
+          setDate(dayStr);
+          setSelectedCalendarDay(null);
+          setIsAddModalOpen(true);
+        };
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-2xl w-full p-5 sm:p-6 shadow-2xl border border-slate-200 dark:border-slate-800 max-h-[90vh] overflow-y-auto space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs">
+                    <Calendar className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-slate-900 dark:text-white text-base sm:text-lg capitalize">
+                      Escala do Dia: {dayName}, {dayStr}
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Guarnições, escalas 12x36 e coberturas ativas
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setSelectedCalendarDay(null)}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Botão de Ação Rápida para este dia */}
+              <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700/60">
+                <span className="text-xs text-slate-600 dark:text-slate-400">
+                  Deseja lançar falta, atestado ou troca para esta data?
+                </span>
+                {isManager && (
+                  <button
+                    onClick={openAddForThisDay}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Lançar Ocorrência em {dayStr}</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Ocorrências / Faltas cadastradas no dia */}
+              <div className="space-y-2">
+                <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                  <AlertTriangle className="w-4 h-4 text-amber-500" />
+                  <span>Ocorrências de Escala no Dia ({dayAbsences.length})</span>
+                </h4>
+
+                {dayAbsences.length === 0 ? (
+                  <div className="p-3 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/60 rounded-xl text-xs text-emerald-800 dark:text-emerald-300 flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>Nenhuma ausência ou falta registrada. Todos os postos estão guarnecidos normalmente.</span>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {dayAbsences.map((ab) => (
+                      <div
+                        key={ab.id}
+                        className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs ${
+                          ab.coverageStatus === 'descoberto'
+                            ? 'bg-rose-50/80 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800'
+                            : 'bg-amber-50/70 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800'
+                        }`}
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-slate-900 dark:text-white">
+                              {ab.stationName} ({ab.condoName || 'Posto'})
+                            </span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-black/10 dark:bg-white/10">
+                              {ab.shiftType === '12x36_dia' ? '☀️ Diurno' : '🌙 Noturno'}
+                            </span>
+                            <span
+                              className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full ${
+                                ab.coverageStatus === 'descoberto'
+                                  ? 'bg-rose-600 text-white'
+                                  : 'bg-emerald-600 text-white'
+                              }`}
+                            >
+                              {ab.coverageStatus === 'descoberto' ? 'DESCOBERTO' : 'COBERTO'}
+                            </span>
+                          </div>
+                          <p className="text-slate-600 dark:text-slate-400">
+                            Ausência: <strong>{ab.scheduledAgentName}</strong> ({ab.absenceType.replace('_', ' ')})
+                            {ab.absenceReason && ` — "${ab.absenceReason}"`}
+                          </p>
+                          {ab.coverageStatus === 'coberto' && ab.coveringAgentName && (
+                            <p className="text-emerald-700 dark:text-emerald-300 font-semibold flex items-center gap-1">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              Substituto escalado: {ab.coveringAgentName}
+                            </p>
+                          )}
+                        </div>
+
+                        {ab.coverageStatus === 'descoberto' && isManager && (
+                          <button
+                            onClick={() => {
+                              setSelectedCalendarDay(null);
+                              openCoverModal(ab);
+                            }}
+                            className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-bold text-xs shrink-0 cursor-pointer shadow-xs"
+                          >
+                            Escalar Cobertura
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Guarnições e Postos Operacionais da Escala */}
+              <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                  <span>Guarnições dos Postos de Serviço</span>
+                </h4>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {allStations.map((st) => {
+                    const matchedAbsence = dayAbsences.find((a) => a.stationName === st.name);
+                    const isCovered = matchedAbsence && matchedAbsence.coverageStatus === 'coberto';
+                    const isUncovered = matchedAbsence && matchedAbsence.coverageStatus === 'descoberto';
+
+                    return (
+                      <div
+                        key={st.id}
+                        className={`p-3 rounded-xl border text-xs ${
+                          isUncovered
+                            ? 'bg-rose-50/60 dark:bg-rose-950/20 border-rose-300 dark:border-rose-800'
+                            : isCovered
+                            ? 'bg-amber-50/60 dark:bg-amber-950/20 border-amber-300 dark:border-amber-800'
+                            : 'bg-slate-50/80 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700/60'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-1">
+                          <strong className="text-slate-900 dark:text-white truncate">{st.name}</strong>
+                          <span
+                            className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md ${
+                              isUncovered
+                                ? 'bg-rose-500 text-white'
+                                : isCovered
+                                ? 'bg-amber-500 text-white'
+                                : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300'
+                            }`}
+                          >
+                            {isUncovered ? 'DESCOBERTO' : isCovered ? 'SUBSTITUTO' : 'GUARNECIDO'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                          📍 {st.condoName}
+                        </p>
+                        <p className="text-[11px] text-slate-700 dark:text-slate-300 mt-1.5 pt-1 border-t border-slate-200/50 dark:border-slate-700/50">
+                          Agente em Serviço:{' '}
+                          <strong>
+                            {isCovered
+                              ? `${matchedAbsence.coveringAgentName} (Substituto)`
+                              : (st.assignedAgentName || 'Escala 12x36 Regular')}
+                          </strong>
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-end">
+                <button
+                  onClick={() => setSelectedCalendarDay(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-xl cursor-pointer"
+                >
+                  Fechar Visualização
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Modal: Registrar Falta / Atestado */}
       {isAddModalOpen && (

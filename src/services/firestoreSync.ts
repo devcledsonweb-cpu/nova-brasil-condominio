@@ -30,6 +30,7 @@ export const COLLECTIONS = {
   LOGS: 'operationalLogs',
   COVERAGES: 'shiftCoverages',
   USERS: 'appUsers',
+  POST_CHECKLIST: 'postChecklistItems',
 } as const;
 
 /**

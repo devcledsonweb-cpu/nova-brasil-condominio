@@ -23,20 +23,36 @@ import {
   Check,
   Bell,
   BellRing,
+  FileEdit,
+  Edit2,
+  ListChecks,
 } from 'lucide-react';
-import { OperationalLog, Condominium, SecurityAgent, IncomingShiftChecklist } from '../types/index.ts';
+import {
+  OperationalLog,
+  Condominium,
+  SecurityAgent,
+  IncomingShiftChecklist,
+  PostChecklistItem,
+  OperationalLogChangeRequest,
+} from '../types/index.ts';
 import { maskDate } from '../utils/masks.ts';
 import { exportOperationalLogsPDF } from '../utils/pdfExport.ts';
 import { WhatsAppButton } from './WhatsAppButton.tsx';
+import { PostChecklistManagementModal } from './PostChecklistManagementModal.tsx';
 
 interface OperationalLogsViewProps {
   logs: OperationalLog[];
   condominiums: Condominium[];
   agents: SecurityAgent[];
   selectedCondoId: number | 'all';
+  checklistItems?: PostChecklistItem[];
   onAddLog: (log: Omit<OperationalLog, 'id' | 'createdAt'>) => Promise<boolean>;
   onUpdateLog?: (id: number, patch: Partial<OperationalLog>) => Promise<boolean>;
   onDeleteLog: (id: number) => Promise<boolean>;
+  onSaveChecklistItem?: (item: Omit<PostChecklistItem, 'id' | 'createdAt'> & { id?: string }) => Promise<boolean>;
+  onDeleteChecklistItem?: (id: string) => Promise<boolean>;
+  onToggleChecklistActive?: (id: string, currentActive: boolean) => Promise<boolean>;
+  onResetDefaultChecklist?: () => Promise<void>;
 }
 
 export const OperationalLogsView: React.FC<OperationalLogsViewProps> = ({
@@ -44,9 +60,14 @@ export const OperationalLogsView: React.FC<OperationalLogsViewProps> = ({
   condominiums,
   agents,
   selectedCondoId,
+  checklistItems = [],
   onAddLog,
   onUpdateLog,
   onDeleteLog,
+  onSaveChecklistItem,
+  onDeleteChecklistItem,
+  onToggleChecklistActive,
+  onResetDefaultChecklist,
 }) => {
   const { user, role } = useAuth();
   const isManager = role === 'sindico' || role === 'admin' || role === 'supervisor';
@@ -68,8 +89,23 @@ export const OperationalLogsView: React.FC<OperationalLogsViewProps> = ({
     patrolStickOk: true,
     noPendingIssues: true,
   });
+  const [dynamicChecklistResponses, setDynamicChecklistResponses] = useState<Record<string, boolean>>({});
   const [incomingNotes, setIncomingNotes] = useState('');
   const [isAcceptingSubmitting, setIsAcceptingSubmitting] = useState(false);
+
+  // Gestão de Itens do Checklist pelo Gestor (CRUD)
+  const [isChecklistModalOpen, setIsChecklistModalOpen] = useState(false);
+
+  // Solicitação de Alteração ou Exclusão pelo Agente
+  const [requestChangeModalLog, setRequestChangeModalLog] = useState<OperationalLog | null>(null);
+  const [requestType, setRequestType] = useState<'alteracao' | 'exclusao'>('alteracao');
+  const [requestReason, setRequestReason] = useState('');
+  const [isRequestSubmitting, setIsRequestSubmitting] = useState(false);
+  const [requestFeedback, setRequestFeedback] = useState('');
+
+  // Edição Direta de Registros pelo Gestor
+  const [editingLog, setEditingLog] = useState<OperationalLog | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   // Form State Novo Registro
   const [condoId, setCondoId] = useState<number | ''>(
@@ -137,6 +173,14 @@ export const OperationalLogsView: React.FC<OperationalLogsViewProps> = ({
 
   const openAcceptModal = (log: OperationalLog) => {
     setAcceptingLog(log);
+    const relevantItems = checklistItems.filter(
+      (item) => item.isActive && (!item.condoId || item.condoId === log.condoId)
+    );
+    const initialMap: Record<string, boolean> = {};
+    relevantItems.forEach((it) => {
+      initialMap[it.id] = false;
+    });
+    setDynamicChecklistResponses(initialMap);
     setChecklist({
       keysReceived: true,
       radiosOk: true,
@@ -152,6 +196,24 @@ export const OperationalLogsView: React.FC<OperationalLogsViewProps> = ({
     e.preventDefault();
     if (!acceptingLog || !onUpdateLog) return;
 
+    const relevantItems = checklistItems.filter(
+      (item) => item.isActive && (!item.condoId || item.condoId === acceptingLog.condoId)
+    );
+
+    // Valida itens obrigatórios
+    const missingRequired = relevantItems.filter(
+      (it) => it.isRequired && !dynamicChecklistResponses[it.id]
+    );
+
+    if (missingRequired.length > 0) {
+      alert(
+        `Atenção: Os seguintes itens obrigatórios do posto devem ser conferidos e marcados antes de assinar:\n\n• ${missingRequired
+          .map((i) => i.title)
+          .join('\n• ')}`
+      );
+      return;
+    }
+
     setIsAcceptingSubmitting(true);
     const nowStr = `${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} - ${new Date().toLocaleDateString('pt-BR')}`;
 
@@ -161,6 +223,7 @@ export const OperationalLogsView: React.FC<OperationalLogsViewProps> = ({
         incomingAgentName: user?.name || acceptingLog.designatedIncomingAgentName || 'Agente Entrante',
         incomingAcceptedAt: nowStr,
         incomingChecklist: checklist,
+        incomingDynamicChecklist: dynamicChecklistResponses,
         incomingNotes: incomingNotes.trim() || undefined,
         status: 'resolvida',
       });
@@ -169,6 +232,122 @@ export const OperationalLogsView: React.FC<OperationalLogsViewProps> = ({
       console.error('Erro ao aceitar turno:', err);
     } finally {
       setIsAcceptingSubmitting(false);
+    }
+  };
+
+  // --- SOLICITAÇÃO DE ALTERAÇÃO / EXCLUSÃO PELO AGENTE ---
+  const handleOpenRequestModal = (log: OperationalLog) => {
+    setRequestChangeModalLog(log);
+    setRequestType('alteracao');
+    setRequestReason('');
+    setRequestFeedback('');
+  };
+
+  const handleSubmitChangeRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!requestChangeModalLog || !onUpdateLog) return;
+    if (!requestReason.trim()) {
+      setRequestFeedback('Informe o que deseja alterar e a justificativa operacional.');
+      return;
+    }
+
+    setIsRequestSubmitting(true);
+    setRequestFeedback('');
+
+    try {
+      const changeReq: OperationalLogChangeRequest = {
+        requestedBy: user?.name || 'Agente de Portaria',
+        requestedAt: `${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} - ${new Date().toLocaleDateString('pt-BR')}`,
+        requestType,
+        reason: requestReason.trim(),
+        status: 'pendente',
+      };
+
+      const success = await onUpdateLog(requestChangeModalLog.id, {
+        changeRequest: changeReq,
+      });
+
+      if (success) {
+        setRequestChangeModalLog(null);
+      } else {
+        setRequestFeedback('Erro ao enviar solicitação ao gestor. Tente novamente.');
+      }
+    } catch (err: any) {
+      setRequestFeedback(err.message || 'Erro ao processar solicitação.');
+    } finally {
+      setIsRequestSubmitting(false);
+    }
+  };
+
+  const handleApproveExclusion = async (log: OperationalLog) => {
+    if (
+      window.confirm(
+        `Tem certeza que deseja autorizar a EXCLUSÃO deste registro conforme solicitação de ${log.changeRequest?.requestedBy}?`
+      )
+    ) {
+      await onDeleteLog(log.id);
+    }
+  };
+
+  const handleRejectChangeRequest = async (log: OperationalLog) => {
+    if (!onUpdateLog || !log.changeRequest) return;
+    const reason = window.prompt('Motivo da recusa (opcional):') || undefined;
+    await onUpdateLog(log.id, {
+      changeRequest: {
+        ...log.changeRequest,
+        status: 'rejeitada',
+        reviewedBy: user?.name || 'Gestor Operacional',
+        reviewedAt: new Date().toLocaleDateString('pt-BR'),
+        reviewNotes: reason,
+      },
+    });
+  };
+
+  const handleOpenEditAsManager = (log: OperationalLog) => {
+    setEditingLog(log);
+    setTitle(log.title);
+    setDescription(log.description);
+    setActionTaken(log.actionTaken || '');
+    setSeverity(log.severity);
+    setStatus(log.status);
+    setLogDate(log.logDate);
+    setLogTime(log.logTime);
+    setAgentName(log.agentName);
+    setCondoId(log.condoId || '');
+    setIsEditModalOpen(true);
+  };
+
+  const handleSaveEditAsManager = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingLog || !onUpdateLog) return;
+    setIsSubmitting(true);
+    try {
+      const patch: Partial<OperationalLog> = {
+        title: title.trim(),
+        description: description.trim(),
+        actionTaken: actionTaken.trim() || null,
+        severity,
+        status,
+        logDate,
+        logTime,
+      };
+
+      if (editingLog.changeRequest && editingLog.changeRequest.status === 'pendente') {
+        patch.changeRequest = {
+          ...editingLog.changeRequest,
+          status: 'aprovada',
+          reviewedBy: user?.name || 'Gestor Operacional',
+          reviewedAt: new Date().toLocaleDateString('pt-BR'),
+        };
+      }
+
+      const success = await onUpdateLog(editingLog.id, patch);
+      if (success) {
+        setIsEditModalOpen(false);
+        setEditingLog(null);
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -320,6 +499,17 @@ export const OperationalLogsView: React.FC<OperationalLogsViewProps> = ({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap shrink-0">
+          {isManager && (
+            <button
+              onClick={() => setIsChecklistModalOpen(true)}
+              className="inline-flex items-center justify-center gap-2 px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/80 text-indigo-700 dark:text-indigo-300 text-xs font-bold rounded-xl border border-indigo-200 dark:border-indigo-800 transition-colors cursor-pointer"
+              title="Gerenciar itens obrigatórios de conferência do posto"
+            >
+              <ListChecks className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              <span>Checklist do Posto ({checklistItems.length})</span>
+            </button>
+          )}
+
           {isManager && (
             <button
               onClick={handleExportPDF}
@@ -483,6 +673,59 @@ export const OperationalLogsView: React.FC<OperationalLogsViewProps> = ({
                 </div>
               </div>
 
+              {/* Banner de Solicitação de Alteração / Exclusão do Agente */}
+              {log.changeRequest && log.changeRequest.status === 'pendente' && (
+                <div className="mt-3 p-3.5 bg-amber-50/90 dark:bg-amber-950/40 border-2 border-amber-400 dark:border-amber-600 rounded-xl text-xs space-y-2">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <span className="font-extrabold text-amber-900 dark:text-amber-200 flex items-center gap-1.5 uppercase text-[10px] tracking-wider">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                      SOLICITAÇÃO DE {log.changeRequest.requestType === 'exclusao' ? 'EXCLUSÃO' : 'ALTERAÇÃO'} ENVIADA PELO AGENTE
+                    </span>
+                    <span className="text-[10px] font-mono text-amber-700 dark:text-amber-400 font-bold">
+                      {log.changeRequest.requestedAt}
+                    </span>
+                  </div>
+
+                  <div className="text-slate-800 dark:text-slate-200">
+                    <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                      Solicitante: <strong>{log.changeRequest.requestedBy}</strong>
+                    </p>
+                    <div className="mt-1 p-2 bg-white/90 dark:bg-slate-900/90 rounded-lg border border-amber-200 dark:border-amber-800 text-[11px] italic text-slate-700 dark:text-slate-300">
+                      Justificativa: "{log.changeRequest.reason}"
+                    </div>
+                  </div>
+
+                  {isManager && (
+                    <div className="pt-2 border-t border-amber-200 dark:border-amber-800/80 flex items-center gap-2 flex-wrap">
+                      {log.changeRequest.requestType === 'exclusao' ? (
+                        <button
+                          onClick={() => handleApproveExclusion(log)}
+                          className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Aprovar Exclusão do Registro</span>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleOpenEditAsManager(log)}
+                          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs"
+                        >
+                          <FileEdit className="w-3.5 h-3.5" />
+                          <span>Editar Registro Conforme Solicitado</span>
+                        </button>
+                      )}
+
+                      <button
+                        onClick={() => handleRejectChangeRequest(log)}
+                        className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg font-semibold text-xs cursor-pointer"
+                      >
+                        Rejeitar Solicitação
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Descrição / Relato */}
               <div className="mt-3 text-xs sm:text-sm text-slate-700 dark:text-slate-300 whitespace-pre-line leading-relaxed">
                 {log.description}
@@ -625,15 +868,46 @@ export const OperationalLogsView: React.FC<OperationalLogsViewProps> = ({
                   </span>
                 </div>
 
-                {(isManager || log.agentName?.trim().toLowerCase() === user?.name?.trim().toLowerCase()) && (
-                  <button
-                    onClick={() => setDeleteConfirmId(log.id)}
-                    className="p-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
-                    title="Excluir Registro"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                )}
+                <div className="flex items-center gap-2">
+                  {/* Gestor: pode editar e excluir diretamente */}
+                  {isManager && (
+                    <>
+                      <button
+                        onClick={() => handleOpenEditAsManager(log)}
+                        className="p-1.5 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg text-slate-400 hover:text-blue-600 transition-colors cursor-pointer"
+                        title="Editar Registro"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => setDeleteConfirmId(log.id)}
+                        className="p-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                        title="Excluir Registro"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </>
+                  )}
+
+                  {/* Agente: NÃO PODE APAGAR DIRETAMENTE! Pode apenas solicitar alteração ou exclusão ao gestor */}
+                  {!isManager && log.agentName?.trim().toLowerCase() === user?.name?.trim().toLowerCase() && (
+                    log.changeRequest?.status === 'pendente' ? (
+                      <span className="text-[11px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/60 px-2.5 py-1 rounded-lg border border-amber-300 dark:border-amber-800 flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-amber-500 animate-spin" />
+                        <span>Solicitação ({log.changeRequest.requestType}) enviada ao gestor</span>
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => handleOpenRequestModal(log)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 rounded-lg border border-blue-200 dark:border-blue-800 text-xs font-bold transition-colors cursor-pointer"
+                        title="Solicitar alteração ou exclusão ao gestor"
+                      >
+                        <FileEdit className="w-3.5 h-3.5" />
+                        <span>Solicitar Alteração / Exclusão</span>
+                      </button>
+                    )
+                  )}
+                </div>
               </div>
             </div>
           ))}
@@ -697,65 +971,115 @@ export const OperationalLogsView: React.FC<OperationalLogsViewProps> = ({
             {/* Checklist de Conferência do Agente Entrante */}
             <form onSubmit={handleConfirmAcceptance} className="space-y-3.5 mt-4 text-xs">
               <div>
-                <p className="font-bold text-slate-900 dark:text-white uppercase text-[10px] tracking-wider mb-2">
-                  Checklist Obrigatório de Conferência do Posto
-                </p>
-                <div className="space-y-2 bg-slate-50 dark:bg-slate-800/40 p-3 rounded-xl border border-slate-200 dark:border-slate-700/60">
-                  <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-800 dark:text-slate-200">
-                    <input
-                      type="checkbox"
-                      checked={checklist.keysReceived}
-                      onChange={(e) => setChecklist({ ...checklist, keysReceived: e.target.checked })}
-                      className="w-4 h-4 text-blue-600 rounded"
-                      required
-                    />
-                    <span>1. Chaves da portaria e claviculário conferidos na íntegra</span>
-                  </label>
-
-                  <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-800 dark:text-slate-200">
-                    <input
-                      type="checkbox"
-                      checked={checklist.radiosOk}
-                      onChange={(e) => setChecklist({ ...checklist, radiosOk: e.target.checked })}
-                      className="w-4 h-4 text-blue-600 rounded"
-                      required
-                    />
-                    <span>2. Rádios comunicadores HT testados com áudio nítido e baterias ok</span>
-                  </label>
-
-                  <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-800 dark:text-slate-200">
-                    <input
-                      type="checkbox"
-                      checked={checklist.patrolStickOk}
-                      onChange={(e) => setChecklist({ ...checklist, patrolStickOk: e.target.checked })}
-                      className="w-4 h-4 text-blue-600 rounded"
-                      required
-                    />
-                    <span>3. Bastão de ronda e leitor eletrônico iButton recebidos em ordem</span>
-                  </label>
-
-                  <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-800 dark:text-slate-200">
-                    <input
-                      type="checkbox"
-                      checked={checklist.stationClean}
-                      onChange={(e) => setChecklist({ ...checklist, stationClean: e.target.checked })}
-                      className="w-4 h-4 text-blue-600 rounded"
-                      required
-                    />
-                    <span>4. Guarita / posto de trabalho limpo, organizado e livros em dia</span>
-                  </label>
-
-                  <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-800 dark:text-slate-200">
-                    <input
-                      type="checkbox"
-                      checked={checklist.noPendingIssues}
-                      onChange={(e) => setChecklist({ ...checklist, noPendingIssues: e.target.checked })}
-                      className="w-4 h-4 text-blue-600 rounded"
-                      required
-                    />
-                    <span>5. Ciente de encomendas pendentes e orientações do turno anterior</span>
-                  </label>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="font-bold text-slate-900 dark:text-white uppercase text-[10px] tracking-wider">
+                    Checklist Obrigatório de Conferência do Posto
+                  </p>
+                  <span className="text-[10px] text-slate-400">
+                    * Itens obrigatórios para validação
+                  </span>
                 </div>
+
+                {(() => {
+                  const relevantItems = checklistItems.filter(
+                    (it) => it.isActive && (!it.condoId || it.condoId === acceptingLog.condoId)
+                  );
+
+                  if (relevantItems.length > 0) {
+                    return (
+                      <div className="space-y-2 bg-slate-50 dark:bg-slate-800/40 p-3 rounded-xl border border-slate-200 dark:border-slate-700/60 max-h-60 overflow-y-auto">
+                        {relevantItems.map((item, index) => (
+                          <label
+                            key={item.id}
+                            className="flex items-start gap-2.5 p-2 bg-white dark:bg-slate-900/60 rounded-lg border border-slate-200/80 dark:border-slate-800 cursor-pointer hover:border-blue-400 transition-colors"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={Boolean(dynamicChecklistResponses[item.id])}
+                              onChange={(e) =>
+                                setDynamicChecklistResponses((prev) => ({
+                                  ...prev,
+                                  [item.id]: e.target.checked,
+                                }))
+                              }
+                              className="w-4 h-4 text-blue-600 rounded mt-0.5"
+                            />
+                            <div className="flex-1">
+                              <span className="font-bold text-slate-800 dark:text-slate-200 block">
+                                {index + 1}. {item.title}{' '}
+                                {item.isRequired && <span className="text-rose-500 font-bold">*</span>}
+                              </span>
+                              {item.description && (
+                                <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">
+                                  {item.description}
+                                </span>
+                              )}
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-2 bg-slate-50 dark:bg-slate-800/40 p-3 rounded-xl border border-slate-200 dark:border-slate-700/60">
+                      <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-800 dark:text-slate-200">
+                        <input
+                          type="checkbox"
+                          checked={checklist.keysReceived}
+                          onChange={(e) => setChecklist({ ...checklist, keysReceived: e.target.checked })}
+                          className="w-4 h-4 text-blue-600 rounded"
+                          required
+                        />
+                        <span>1. Chaves da portaria e claviculário conferidos na íntegra *</span>
+                      </label>
+
+                      <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-800 dark:text-slate-200">
+                        <input
+                          type="checkbox"
+                          checked={checklist.radiosOk}
+                          onChange={(e) => setChecklist({ ...checklist, radiosOk: e.target.checked })}
+                          className="w-4 h-4 text-blue-600 rounded"
+                          required
+                        />
+                        <span>2. Rádios comunicadores HT testados com áudio nítido e baterias ok *</span>
+                      </label>
+
+                      <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-800 dark:text-slate-200">
+                        <input
+                          type="checkbox"
+                          checked={checklist.patrolStickOk}
+                          onChange={(e) => setChecklist({ ...checklist, patrolStickOk: e.target.checked })}
+                          className="w-4 h-4 text-blue-600 rounded"
+                          required
+                        />
+                        <span>3. Bastão de ronda e leitor eletrônico iButton recebidos em ordem *</span>
+                      </label>
+
+                      <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-800 dark:text-slate-200">
+                        <input
+                          type="checkbox"
+                          checked={checklist.stationClean}
+                          onChange={(e) => setChecklist({ ...checklist, stationClean: e.target.checked })}
+                          className="w-4 h-4 text-blue-600 rounded"
+                          required
+                        />
+                        <span>4. Guarita / posto de trabalho limpo, organizado e livros em dia *</span>
+                      </label>
+
+                      <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-800 dark:text-slate-200">
+                        <input
+                          type="checkbox"
+                          checked={checklist.noPendingIssues}
+                          onChange={(e) => setChecklist({ ...checklist, noPendingIssues: e.target.checked })}
+                          className="w-4 h-4 text-blue-600 rounded"
+                          required
+                        />
+                        <span>5. Ciente de encomendas pendentes e orientações do turno anterior *</span>
+                      </label>
+                    </div>
+                  );
+                })()}
               </div>
 
               <div>
@@ -1076,6 +1400,266 @@ export const OperationalLogsView: React.FC<OperationalLogsViewProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {/* Modal: Solicitação de Alteração ou Exclusão pelo Agente */}
+      {requestChangeModalLog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full p-5 sm:p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shadow-xs">
+                  <FileEdit className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 dark:text-white text-base">
+                    Solicitar Alteração / Exclusão
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    O livro de ocorrências é um documento oficial. Seu pedido será analisado pela gestão.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setRequestChangeModalLog(null)}
+                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Informações do Registro Atual */}
+            <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700/60 text-xs space-y-1">
+              <p className="font-bold text-slate-900 dark:text-white">
+                Registro: {requestChangeModalLog.title}
+              </p>
+              <p className="text-slate-500">
+                Posto: {requestChangeModalLog.condoName || 'Posto Geral'} · Data: {requestChangeModalLog.logDate} às {requestChangeModalLog.logTime}
+              </p>
+              <p className="text-slate-600 dark:text-slate-400 italic line-clamp-2 mt-1">
+                "{requestChangeModalLog.description}"
+              </p>
+            </div>
+
+            {requestFeedback && (
+              <div className="p-2.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-xl text-xs">
+                {requestFeedback}
+              </div>
+            )}
+
+            <form onSubmit={handleSubmitChangeRequest} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block font-bold text-slate-800 dark:text-slate-200 mb-1.5">
+                  Tipo de Solicitação *
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setRequestType('alteracao')}
+                    className={`p-2.5 rounded-xl border text-left font-bold transition-all cursor-pointer ${
+                      requestType === 'alteracao'
+                        ? 'bg-blue-50 dark:bg-blue-950/60 border-blue-600 text-blue-700 dark:text-blue-300'
+                        : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    ✏️ Solicitar Correção / Edição
+                    <span className="block text-[10px] font-normal text-slate-500 mt-0.5">
+                      Para corrigir dados ou relatar fatos adicionais
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setRequestType('exclusao')}
+                    className={`p-2.5 rounded-xl border text-left font-bold transition-all cursor-pointer ${
+                      requestType === 'exclusao'
+                        ? 'bg-rose-50 dark:bg-rose-950/60 border-rose-600 text-rose-700 dark:text-rose-300'
+                        : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    🗑️ Solicitar Exclusão do Registro
+                    <span className="block text-[10px] font-normal text-slate-500 mt-0.5">
+                      Para registros lançados em duplicidade ou incorretos
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-800 dark:text-slate-200 mb-1">
+                  O que deve ser alterado e qual o motivo? *
+                </label>
+                <textarea
+                  rows={4}
+                  value={requestReason}
+                  onChange={(e) => setRequestReason(e.target.value)}
+                  placeholder="Descreva detalhadamente o que precisa ser corrigido (ex: 'O horário correto foi 14:30 e não 15:30', ou 'Registro duplicado com o anterior')..."
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white"
+                  required
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRequestChangeModalLog(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold rounded-xl cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isRequestSubmitting}
+                  className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl shadow-xs cursor-pointer disabled:opacity-50"
+                >
+                  {isRequestSubmitting ? 'Enviando...' : 'Enviar Solicitação ao Gestor'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Edição de Registro pelo Gestor */}
+      {isEditModalOpen && editingLog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full p-5 sm:p-6 shadow-2xl border border-slate-200 dark:border-slate-800 max-h-[90vh] overflow-y-auto space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center">
+                  <Edit2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 dark:text-white text-base">
+                    Editar Registro (Painel do Gestor)
+                  </h3>
+                  <p className="text-xs text-slate-400">Correção e aprovação de apontamentos do posto</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setIsEditModalOpen(false);
+                  setEditingLog(null);
+                }}
+                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {editingLog.changeRequest && (
+              <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-xl text-xs space-y-1">
+                <p className="font-bold text-amber-900 dark:text-amber-200">
+                  Solicitação do Agente ({editingLog.changeRequest.requestedBy}):
+                </p>
+                <p className="text-slate-700 dark:text-slate-300 italic">
+                  "{editingLog.changeRequest.reason}"
+                </p>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveEditAsManager} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Título do Registro *
+                </label>
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Relato Operacional *
+                </label>
+                <textarea
+                  rows={4}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Providências Adotadas
+                </label>
+                <input
+                  type="text"
+                  value={actionTaken}
+                  onChange={(e) => setActionTaken(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Data
+                  </label>
+                  <input
+                    type="text"
+                    value={logDate}
+                    onChange={(e) => setLogDate(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Horário
+                  </label>
+                  <input
+                    type="text"
+                    value={logTime}
+                    onChange={(e) => setLogTime(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditModalOpen(false);
+                    setEditingLog(null);
+                  }}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold rounded-xl cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-xs cursor-pointer disabled:opacity-50"
+                >
+                  {isSubmitting ? 'Salvando...' : 'Salvar Alterações'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: CRUD do Checklist Obrigatório de Conferência do Posto */}
+      {isChecklistModalOpen && (
+        <PostChecklistManagementModal
+          isOpen={isChecklistModalOpen}
+          onClose={() => setIsChecklistModalOpen(false)}
+          condominiums={condominiums}
+          items={checklistItems}
+          onSaveItem={onSaveChecklistItem || (async () => false)}
+          onDeleteItem={onDeleteChecklistItem || (async () => false)}
+          onToggleActive={onToggleChecklistActive || (async () => false)}
+          onResetDefaults={onResetDefaultChecklist}
+        />
       )}
 
       {/* Delete Confirmation Modal */}

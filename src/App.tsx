@@ -24,6 +24,7 @@ import {
   MaintenanceOrder,
   OperationalLog,
   ShiftCoverage,
+  PostChecklistItem,
 } from './types/index.ts';
 import { Loader2, Bell } from 'lucide-react';
 import {
@@ -36,6 +37,79 @@ import {
   seedIfEmpty,
 } from './services/firestoreSync.ts';
 import { registerOrSyncUserInFirebaseAuth } from './services/firebaseAuthAdmin.ts';
+
+const DEFAULT_CHECKLIST_ITEMS: PostChecklistItem[] = [
+  {
+    id: 'chk-1',
+    title: 'Chaves da portaria e claviculário conferidos na íntegra',
+    description: 'Verificar todas as chaves mestre, áreas comuns, portões e acessos técnicos.',
+    category: 'chaves_documentos',
+    isRequired: true,
+    isActive: true,
+    orderIndex: 1,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'chk-2',
+    title: 'Rádios comunicadores HT testados com áudio nítido e baterias ok',
+    description: 'Realizar teste de modulação entre guaritas e bases móveis.',
+    category: 'equipamentos',
+    isRequired: true,
+    isActive: true,
+    orderIndex: 2,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'chk-3',
+    title: 'Bastão de ronda e leitor eletrônico iButton recebidos em ordem',
+    description: 'Conferir integridade física e descarregar histórico de rondas se aplicável.',
+    category: 'equipamentos',
+    isRequired: true,
+    isActive: true,
+    orderIndex: 3,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'chk-4',
+    title: 'Guarita / posto de trabalho limpo, organizado e livros em dia',
+    description: 'Posto higienizado, sem resíduos e com registros anteriores devidamente rubricados.',
+    category: 'instalacoes',
+    isRequired: true,
+    isActive: true,
+    orderIndex: 4,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'chk-5',
+    title: 'Ciente de encomendas pendentes e orientações do turno anterior',
+    description: 'Leitura das últimas ocorrências e conferência física de pacotes sob custódia.',
+    category: 'procedimentos',
+    isRequired: true,
+    isActive: true,
+    orderIndex: 5,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'chk-6',
+    title: 'Monitores do CFTV e câmeras perimetrais operando normalmente',
+    description: 'Verificar se todas as câmeras exibem imagem sem perda de sinal de rede.',
+    category: 'equipamentos',
+    isRequired: false,
+    isActive: true,
+    orderIndex: 6,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'chk-7',
+    title: 'Portões automáticos de veículos e clausuras de pedestres testados',
+    description: 'Verificar fechamento magnético, fotocélulas e tempo de travamento das eclusas.',
+    category: 'instalacoes',
+    isRequired: true,
+    isActive: true,
+    orderIndex: 7,
+    createdAt: new Date().toISOString(),
+  },
+];
 
 const notifySync = (entity?: string) => {
   try {
@@ -63,6 +137,7 @@ function NovaBrasilMain() {
   const [companyAssets, setCompanyAssets] = useState<CompanyAsset[]>([]);
   const [maintenances, setMaintenances] = useState<MaintenanceOrder[]>([]);
   const [operationalLogs, setOperationalLogs] = useState<OperationalLog[]>([]);
+  const [checklistItems, setChecklistItems] = useState<PostChecklistItem[]>([]);
 
   // Sincronizar condomínio padrão se o usuário for restrito a um condomínio específico
   useEffect(() => {
@@ -101,6 +176,7 @@ function NovaBrasilMain() {
         fsMaintenances,
         fsLogs,
         fsCoverages,
+        fsChecklist,
       ] = await Promise.all([
         getFirestoreCollection<Condominium>(COLLECTIONS.CONDOMINIUMS),
         getFirestoreCollection<SecurityAgent>(COLLECTIONS.AGENTS),
@@ -109,7 +185,26 @@ function NovaBrasilMain() {
         getFirestoreCollection<MaintenanceOrder>(COLLECTIONS.MAINTENANCES),
         getFirestoreCollection<OperationalLog>(COLLECTIONS.LOGS),
         getFirestoreCollection<ShiftCoverage>(COLLECTIONS.COVERAGES),
+        getFirestoreCollection<PostChecklistItem>(COLLECTIONS.POST_CHECKLIST),
       ]);
+
+      let loadedChecklist: PostChecklistItem[] = fsChecklist || [];
+      if (loadedChecklist.length === 0) {
+        const localSaved = localStorage.getItem('novabrasil_post_checklist');
+        if (localSaved) {
+          try {
+            loadedChecklist = JSON.parse(localSaved);
+          } catch {}
+        }
+      }
+      if (loadedChecklist.length === 0) {
+        loadedChecklist = DEFAULT_CHECKLIST_ITEMS;
+        for (const item of DEFAULT_CHECKLIST_ITEMS) {
+          saveToFirestore(COLLECTIONS.POST_CHECKLIST, item.id, item).catch(() => {});
+        }
+      }
+      setChecklistItems(loadedChecklist);
+      localStorage.setItem('novabrasil_post_checklist', JSON.stringify(loadedChecklist));
 
       let loadedCondos: Condominium[] = fsCondos || [];
 
@@ -234,6 +329,13 @@ function NovaBrasilMain() {
       }
     });
 
+    const unsubChecklist = subscribeToFirestoreCollection<PostChecklistItem>(COLLECTIONS.POST_CHECKLIST, (items) => {
+      if (items && items.length > 0) {
+        setChecklistItems(items);
+        localStorage.setItem('novabrasil_post_checklist', JSON.stringify(items));
+      }
+    });
+
     // Sincronização instantânea no mesmo dispositivo (outras abas)
     let bc: BroadcastChannel | null = null;
     try {
@@ -258,6 +360,7 @@ function NovaBrasilMain() {
       unsubMaintenances();
       unsubLogs();
       unsubCoverages();
+      unsubChecklist();
       if (bc) bc.close();
       window.removeEventListener('focus', handleFocus);
       document.removeEventListener('visibilitychange', handleFocus);
@@ -898,6 +1001,83 @@ function NovaBrasilMain() {
     }
   };
 
+  // --- HANDLERS: CHECKLIST OBRIGATÓRIO DO POSTO (CRUD DE GESTORES) ---
+  const handleSaveChecklistItem = async (
+    itemData: Omit<PostChecklistItem, 'id' | 'createdAt'> & { id?: string }
+  ): Promise<boolean> => {
+    try {
+      const id = itemData.id || `chk-${Date.now()}`;
+      const fullItem: PostChecklistItem = {
+        ...itemData,
+        id,
+        createdAt: new Date().toISOString(),
+      };
+
+      try {
+        await saveToFirestore(COLLECTIONS.POST_CHECKLIST, id, fullItem);
+      } catch (fErr) {
+        console.warn('Erro ao salvar item do checklist no Firestore:', fErr);
+      }
+
+      const updated = [fullItem, ...checklistItems.filter((i) => i.id !== id)];
+      setChecklistItems(updated);
+      localStorage.setItem('novabrasil_post_checklist', JSON.stringify(updated));
+      notifySync('checklist');
+      return true;
+    } catch (err) {
+      console.warn('Erro ao salvar item do checklist:', err);
+      return false;
+    }
+  };
+
+  const handleDeleteChecklistItem = async (id: string): Promise<boolean> => {
+    try {
+      try {
+        await deleteFromFirestore(COLLECTIONS.POST_CHECKLIST, id);
+      } catch {}
+
+      const updated = checklistItems.filter((i) => i.id !== id);
+      setChecklistItems(updated);
+      localStorage.setItem('novabrasil_post_checklist', JSON.stringify(updated));
+      notifySync('checklist');
+      return true;
+    } catch (err) {
+      console.warn('Erro ao excluir item do checklist:', err);
+      return false;
+    }
+  };
+
+  const handleToggleChecklistActive = async (id: string, currentActive: boolean): Promise<boolean> => {
+    try {
+      const newActive = !currentActive;
+      try {
+        await updateInFirestore(COLLECTIONS.POST_CHECKLIST, id, { isActive: newActive });
+      } catch {}
+
+      const updated = checklistItems.map((i) => (i.id === id ? { ...i, isActive: newActive } : i));
+      setChecklistItems(updated);
+      localStorage.setItem('novabrasil_post_checklist', JSON.stringify(updated));
+      notifySync('checklist');
+      return true;
+    } catch (err) {
+      console.warn('Erro ao alterar status do item:', err);
+      return false;
+    }
+  };
+
+  const handleResetDefaultChecklist = async () => {
+    try {
+      for (const item of DEFAULT_CHECKLIST_ITEMS) {
+        await saveToFirestore(COLLECTIONS.POST_CHECKLIST, item.id, item).catch(() => {});
+      }
+      setChecklistItems(DEFAULT_CHECKLIST_ITEMS);
+      localStorage.setItem('novabrasil_post_checklist', JSON.stringify(DEFAULT_CHECKLIST_ITEMS));
+      notifySync('checklist');
+    } catch (err) {
+      console.warn('Erro ao restaurar checklist padrão:', err);
+    }
+  };
+
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 transition-colors">
@@ -1059,9 +1239,14 @@ function NovaBrasilMain() {
               condominiums={condominiums}
               agents={agents}
               selectedCondoId={selectedCondoId}
+              checklistItems={checklistItems}
               onAddLog={handleAddLog}
               onUpdateLog={handleUpdateLog}
               onDeleteLog={handleDeleteLog}
+              onSaveChecklistItem={handleSaveChecklistItem}
+              onDeleteChecklistItem={handleDeleteChecklistItem}
+              onToggleChecklistActive={handleToggleChecklistActive}
+              onResetDefaultChecklist={handleResetDefaultChecklist}
             />
           )}
 

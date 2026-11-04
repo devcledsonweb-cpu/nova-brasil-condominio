@@ -721,7 +721,7 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
           return (
             <div
               key={condo.id}
-              className={`bg-white dark:bg-slate-900 border rounded-xl overflow-hidden transition-all shadow-xs flex flex-col justify-between group ${
+              className={`bg-white dark:bg-slate-900 border rounded-xl overflow-hidden transition-all shadow-xs flex flex-col h-full group ${
                 isSelected
                   ? 'border-blue-600 dark:border-blue-500 ring-2 ring-blue-600/20 dark:ring-blue-500/30'
                   : 'border-slate-200/90 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
@@ -731,7 +731,7 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
               {(() => {
                 const condoPhoto = condo.imageUrl || condo.photoUrl;
                 return (
-                  <div className="h-32 w-full overflow-hidden relative bg-gradient-to-br from-slate-800 via-slate-900 to-blue-950">
+                  <div className="h-32 w-full overflow-hidden relative bg-gradient-to-br from-slate-800 via-slate-900 to-blue-950 shrink-0">
                     {condoPhoto ? (
                       <img
                         src={condoPhoto}
@@ -772,17 +772,18 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
                 );
               })()}
 
-              <div className="p-4 sm:p-5 space-y-3.5">
-                {/* Header do Card com Alinhamento Perfeito de Título e CNPJ */}
-                <div className="space-y-1">
-                  <div className="min-h-[44px] flex flex-col justify-center">
-                    <h3
-                      className="text-sm sm:text-base font-bold text-slate-900 dark:text-white leading-snug line-clamp-2"
-                      title={condo.name}
-                    >
-                      {condo.name}
-                    </h3>
-                  </div>
+              <div className="p-4 sm:p-5 flex-1 flex flex-col justify-between space-y-3.5">
+                <div className="space-y-3.5">
+                  {/* Header do Card com Alinhamento Perfeito de Título e CNPJ */}
+                  <div className="space-y-1">
+                    <div className="min-h-[44px] flex flex-col justify-start">
+                      <h3
+                        className="text-sm sm:text-base font-bold text-slate-900 dark:text-white leading-snug line-clamp-2"
+                        title={condo.name}
+                      >
+                        {condo.name}
+                      </h3>
+                    </div>
 
                   <div className="h-4 flex items-center">
                     {condo.cnpj ? (
@@ -901,9 +902,12 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
                     </div>
                   )}
                 </div>
+              </div>
 
+              {/* Seção Inferior: Métricas e Contato */}
+              <div className="space-y-2 pt-2">
                 {/* Métricas Operacionais do Condomínio */}
-                <div className="grid grid-cols-4 gap-2 pt-1 text-center">
+                <div className="grid grid-cols-4 gap-2 text-center">
                   <div
                     onClick={() => {
                       onSelectCondo(condo.id);
@@ -971,8 +975,9 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
                   </div>
                 )}
               </div>
+            </div>
 
-              {/* Ações do Card */}
+            {/* Ações do Card */}
               <div className="p-3.5 sm:p-4 bg-slate-50/80 dark:bg-slate-850 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1">
                   {(isSuperAdmin || isSupervisor) && (
