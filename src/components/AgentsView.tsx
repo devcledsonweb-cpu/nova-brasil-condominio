@@ -138,12 +138,12 @@ export const AgentsView: React.FC<AgentsViewProps> = ({
     setShift(agent.shift);
     setStatus(agent.status);
     setAdmissionDate(agent.admissionDate ? maskDate(agent.admissionDate) : '');
-    setNotes(agent.notes || '');
-    setCreateAccess(false);
+    const hasAccess = Boolean(agent.createAccess || agent.accessEmail);
+    setCreateAccess(hasAccess);
     setAccessEmail(agent.accessEmail || suggestEmail(agent.name));
-    setAccessPassword('Portaria@123');
+    setAccessPassword(agent.accessPassword || 'Portaria@123');
     setShowAccessPassword(false);
-    setIsEmailManuallyEdited(false);
+    setIsEmailManuallyEdited(Boolean(agent.accessEmail));
     setErrorMessage('');
     setIsModalOpen(true);
   };

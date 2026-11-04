@@ -727,93 +727,90 @@ export const CondominiumsView: React.FC<CondominiumsViewProps> = ({
                   : 'border-slate-200/90 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
               }`}
             >
-              {/* Foto da Fachada do Condomínio (visível a todos) */}
-              {condo.imageUrl ? (
-                <div className="h-32 w-full overflow-hidden relative bg-slate-100 dark:bg-slate-800">
-                  <img
-                    src={condo.imageUrl}
-                    alt={condo.name}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/20 to-transparent" />
-                  <div className="absolute bottom-2 left-3 right-3 flex items-center justify-between text-white">
-                    <span className="text-[10px] font-semibold bg-black/40 backdrop-blur-xs px-2 py-0.5 rounded-md flex items-center gap-1">
-                      <Building2 className="w-3 h-3 text-blue-300" />
-                      {condo.contractType || 'Posto Operacional'}
-                    </span>
-                    <span
-                      className={`text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full ${
-                        condo.status === 'ativo'
-                          ? 'bg-emerald-500/90 text-white'
-                          : condo.status === 'implantacao'
-                          ? 'bg-amber-500/90 text-white'
-                          : 'bg-slate-600 text-white'
-                      }`}
-                    >
-                      {condo.status === 'ativo' ? 'Ativo' : condo.status === 'implantacao' ? 'Implantação' : 'Inativo'}
-                    </span>
-                  </div>
-                </div>
-              ) : null}
-
-              <div className="p-4 sm:p-5 space-y-3.5">
-                {/* Header do Card (quando não tem foto ou título) */}
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      {!condo.imageUrl && (
-                        <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/80 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
-                          <Building2 className="w-4 h-4" />
-                        </div>
-                      )}
-                      <div className="min-w-0">
-                        <h3 className="text-sm font-bold text-slate-900 dark:text-white leading-tight truncate">
-                          {condo.name}
-                        </h3>
-                        {condo.cnpj && (
-                          <p className="text-[11px] text-slate-400 dark:text-slate-500 font-mono">
-                            CNPJ: {maskCNPJ(condo.cnpj)}
-                          </p>
-                        )}
+              {/* Banner do Condomínio com Altura Padrão Unificada */}
+              {(() => {
+                const condoPhoto = condo.imageUrl || condo.photoUrl;
+                return (
+                  <div className="h-32 w-full overflow-hidden relative bg-gradient-to-br from-slate-800 via-slate-900 to-blue-950">
+                    {condoPhoto ? (
+                      <img
+                        src={condoPhoto}
+                        alt={condo.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        onError={(e) => {
+                          // Se falhar o carregamento, oculta a imagem para exibir o banner padrão
+                          (e.target as HTMLElement).style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      <div className="w-full h-full flex flex-col items-center justify-center text-slate-500/30">
+                        <Building2 className="w-12 h-12 text-blue-400/25 mb-1" />
+                        <span className="text-[10px] uppercase font-bold tracking-widest text-slate-400/40 font-mono">
+                          NOVA BRASIL FACILITIES
+                        </span>
                       </div>
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-950/25 to-transparent pointer-events-none" />
+                    <div className="absolute bottom-2 left-3 right-3 flex items-center justify-between text-white pointer-events-none">
+                      <span className="text-[10px] font-semibold bg-black/50 backdrop-blur-xs px-2 py-0.5 rounded-md flex items-center gap-1 border border-white/10">
+                        <Building2 className="w-3 h-3 text-blue-300" />
+                        <span className="truncate max-w-[150px]">{condo.contractType || 'Posto Operacional'}</span>
+                      </span>
+                      <span
+                        className={`text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full shadow-xs ${
+                          condo.status === 'ativo'
+                            ? 'bg-emerald-500/90 text-white'
+                            : condo.status === 'implantacao'
+                            ? 'bg-amber-500/90 text-white'
+                            : 'bg-slate-600 text-white'
+                        }`}
+                      >
+                        {condo.status === 'ativo' ? 'Ativo' : condo.status === 'implantacao' ? 'Implantação' : 'Inativo'}
+                      </span>
                     </div>
                   </div>
+                );
+              })()}
 
-                  {!condo.imageUrl && (
-                    <span
-                      className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full shrink-0 ${
-                        condo.status === 'ativo'
-                          ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900'
-                          : condo.status === 'implantacao'
-                          ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-900'
-                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'
-                      }`}
+              <div className="p-4 sm:p-5 space-y-3.5">
+                {/* Header do Card com Alinhamento Perfeito de Título e CNPJ */}
+                <div className="space-y-1">
+                  <div className="min-h-[44px] flex flex-col justify-center">
+                    <h3
+                      className="text-sm sm:text-base font-bold text-slate-900 dark:text-white leading-snug line-clamp-2"
+                      title={condo.name}
                     >
-                      {condo.status === 'ativo'
-                        ? 'Ativo'
-                        : condo.status === 'implantacao'
-                        ? 'Implantação'
-                        : 'Inativo'}
-                    </span>
-                  )}
+                      {condo.name}
+                    </h3>
+                  </div>
+
+                  <div className="h-4 flex items-center">
+                    {condo.cnpj ? (
+                      <p className="text-[11px] text-slate-400 dark:text-slate-500 font-mono truncate">
+                        CNPJ: {maskCNPJ(condo.cnpj)}
+                      </p>
+                    ) : (
+                      <p className="text-[11px] text-slate-300 dark:text-slate-600 font-mono italic">
+                        Posto sem CNPJ cadastrado
+                      </p>
+                    )}
+                  </div>
                 </div>
 
-                {/* Endereço */}
-                {(condo.address || condo.city) && (
-                  <div className="flex items-start gap-1.5 text-xs text-slate-600 dark:text-slate-400">
-                    <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
-                    <span className="line-clamp-2">
-                      {[
-                        condo.address,
-                        condo.city,
-                        condo.state,
-                        condo.zipCode ? `CEP ${maskCEP(condo.zipCode)}` : '',
-                      ]
-                        .filter(Boolean)
-                        .join(' - ')}
-                    </span>
-                  </div>
-                )}
+                {/* Endereço com Altura Mínima Uniforme */}
+                <div className="min-h-[36px] flex items-start gap-1.5 text-xs text-slate-600 dark:text-slate-400">
+                  <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                  <span className="line-clamp-2">
+                    {[
+                      condo.address,
+                      condo.city,
+                      condo.state,
+                      condo.zipCode ? `CEP ${maskCEP(condo.zipCode)}` : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' - ') || 'Endereço operacional padrão'}
+                  </span>
+                </div>
 
                 {/* Postos de Serviço do Condomínio (Portaria Principal, Lazer, etc.) */}
                 <div className="p-2.5 sm:p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700/80 space-y-2">

@@ -35,6 +35,7 @@ import {
   deleteFromFirestore,
   seedIfEmpty,
 } from './services/firestoreSync.ts';
+import { registerOrSyncUserInFirebaseAuth } from './services/firebaseAuthAdmin.ts';
 
 const notifySync = (entity?: string) => {
   try {
@@ -342,6 +343,9 @@ function NovaBrasilMain() {
           await saveToFirestore(COLLECTIONS.USERS, newUserObj.id, newUserObj);
         } catch {}
 
+        // Registra automaticamente no Firebase Authentication para aparecer na aba Users do Firebase Console
+        registerOrSyncUserInFirebaseAuth(cleanEmail, cleanPassword, agentData.name).catch(() => {});
+
         try {
           const headers = await getAuthHeaders();
           fetch('/api/users', {
@@ -376,10 +380,45 @@ function NovaBrasilMain() {
         console.warn('Aviso ao atualizar agente no Firestore:', fErr);
       }
 
+      const existingAgent = agents.find((a) => a.id === id);
       const updated = agents.map((a) => (a.id === id ? { ...a, ...patch } : a));
       setAgents(updated);
       localStorage.setItem('novabrasil_agents', JSON.stringify(updated));
       notifySync('agents');
+
+      // Se atualizou ou ativou acesso do agente
+      const patchAny = patch as any;
+      if (patchAny.createAccess && patchAny.accessEmail) {
+        const cleanEmail = patchAny.accessEmail.trim().toLowerCase();
+        const cleanPassword = (patchAny.accessPassword || existingAgent?.accessPassword || 'Portaria@123').trim();
+        const agentName = patch.name || existingAgent?.name || 'Agente de Portaria';
+
+        const assignedIds = Array.isArray(patch.condoIds) && patch.condoIds.length > 0
+          ? patch.condoIds
+          : (patch.condoId ? [Number(patch.condoId)] : (existingAgent?.condoIds || []));
+
+        const userObj = {
+          id: id + 10000,
+          uid: `usr-agent-${id}`,
+          name: agentName,
+          email: cleanEmail,
+          password: cleanPassword,
+          role: 'portaria',
+          permissions: JSON.stringify(['portaria', 'ronda', 'materiais', 'ocorrencias']),
+          condoId: assignedIds[0] || null,
+          condoIds: assignedIds,
+          condoName: patch.condoName || existingAgent?.condoName || null,
+          condoNames: patch.condoNames || existingAgent?.condoNames || [],
+          isActive: patch.status !== 'afastado',
+          updatedAt: new Date().toISOString(),
+        };
+
+        try {
+          await saveToFirestore(COLLECTIONS.USERS, userObj.id, userObj);
+        } catch {}
+
+        registerOrSyncUserInFirebaseAuth(cleanEmail, cleanPassword, agentName).catch(() => {});
+      }
 
       try {
         const headers = await getAuthHeaders();

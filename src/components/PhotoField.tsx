@@ -9,10 +9,12 @@ import {
   Sliders,
   RotateCw,
   ZoomIn,
+  ZoomOut,
   Move,
   Maximize2,
   Sparkles,
   Info,
+  RefreshCw,
 } from 'lucide-react';
 
 interface PhotoFieldProps {
@@ -119,9 +121,108 @@ export const PhotoField: React.FC<PhotoFieldProps> = ({
   const [rotation, setRotation] = useState<number>(0);
   const [quality, setQuality] = useState<number>(0.75); // 0.6 = leve, 0.75 = recomendado, 0.9 = alta
   const [compressedSizeKb, setCompressedSizeKb] = useState<number>(0);
+  const [isDragging, setIsDragging] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const imageElementRef = useRef<HTMLImageElement | null>(null);
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+  const dragStartRef = useRef<{ x: number; y: number; initialPanX: number; initialPanY: number }>({
+    x: 0,
+    y: 0,
+    initialPanX: 0,
+    initialPanY: 0,
+  });
+  const touchDistanceRef = useRef<number | null>(null);
+  const initialZoomRef = useRef<number>(1);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    setIsDragging(true);
+    dragStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      initialPanX: panX,
+      initialPanY: panY,
+    };
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging || !viewportRef.current) return;
+    const rect = viewportRef.current.getBoundingClientRect();
+    const deltaX = e.clientX - dragStartRef.current.x;
+    const deltaY = e.clientY - dragStartRef.current.y;
+
+    const percentX = (deltaX / rect.width) * 100;
+    const percentY = (deltaY / rect.height) * 100;
+
+    const newX = Math.min(100, Math.max(-100, dragStartRef.current.initialPanX + percentX));
+    const newY = Math.min(100, Math.max(-100, dragStartRef.current.initialPanY + percentY));
+
+    setPanX(Math.round(newX));
+    setPanY(Math.round(newY));
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    const delta = e.deltaY < 0 ? 0.1 : -0.1;
+    setZoom((prev) => {
+      const next = Math.min(4.0, Math.max(0.5, prev + delta));
+      return parseFloat(next.toFixed(2));
+    });
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      setIsDragging(true);
+      dragStartRef.current = {
+        x: e.touches[0].clientX,
+        y: e.touches[0].clientY,
+        initialPanX: panX,
+        initialPanY: panY,
+      };
+      touchDistanceRef.current = null;
+    } else if (e.touches.length === 2) {
+      setIsDragging(false);
+      touchDistanceRef.current = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      initialZoomRef.current = zoom;
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length === 1 && isDragging && viewportRef.current) {
+      const rect = viewportRef.current.getBoundingClientRect();
+      const deltaX = e.touches[0].clientX - dragStartRef.current.x;
+      const deltaY = e.touches[0].clientY - dragStartRef.current.y;
+
+      const percentX = (deltaX / rect.width) * 100;
+      const percentY = (deltaY / rect.height) * 100;
+
+      const newX = Math.min(100, Math.max(-100, dragStartRef.current.initialPanX + percentX));
+      const newY = Math.min(100, Math.max(-100, dragStartRef.current.initialPanY + percentY));
+
+      setPanX(Math.round(newX));
+      setPanY(Math.round(newY));
+    } else if (e.touches.length === 2 && touchDistanceRef.current) {
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      const factor = dist / touchDistanceRef.current;
+      const next = Math.min(4.0, Math.max(0.5, initialZoomRef.current * factor));
+      setZoom(parseFloat(next.toFixed(2)));
+    }
+  };
+
+  const handleTouchEnd = () => {
+    setIsDragging(false);
+    touchDistanceRef.current = null;
+  };
 
   // Manipulador de upload de arquivo
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -449,11 +550,25 @@ export const PhotoField: React.FC<PhotoFieldProps> = ({
               </button>
             </div>
 
-            {/* Viewport de Prévia / Crop Frame */}
-            <div className="relative w-full aspect-square bg-slate-950 rounded-xl overflow-hidden flex items-center justify-center border border-slate-800 shadow-inner">
+            {/* Viewport de Prévia / Crop Frame Interativo com Arraste Livre e Zoom */}
+            <div
+              ref={viewportRef}
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+              onWheel={handleWheel}
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+              className={`relative w-full aspect-square bg-slate-950 rounded-xl overflow-hidden flex items-center justify-center border border-slate-800 shadow-inner select-none transition-shadow ${
+                isDragging ? 'cursor-grabbing ring-2 ring-blue-500' : 'cursor-grab hover:border-slate-700'
+              }`}
+              title="Clique e arraste para reposicionar livremente • Use a roda do mouse para dar zoom"
+            >
               <canvas
                 ref={canvasRef}
-                className={`max-w-full max-h-full object-contain ${
+                className={`max-w-full max-h-full object-contain pointer-events-none transition-transform ${
                   type === 'agent' ? 'rounded-full' : 'rounded-lg'
                 }`}
               />
@@ -461,7 +576,7 @@ export const PhotoField: React.FC<PhotoFieldProps> = ({
               {/* Guia visual do enquadramento */}
               <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
                 <div
-                  className={`border-2 border-white/60 shadow-2xl pointer-events-none ${
+                  className={`border-2 border-white/60 shadow-2xl pointer-events-none transition-all ${
                     type === 'agent'
                       ? 'w-4/5 h-4/5 rounded-full ring-4 ring-black/40'
                       : 'w-[90%] h-[90%] rounded-xl ring-4 ring-black/40'
@@ -469,8 +584,57 @@ export const PhotoField: React.FC<PhotoFieldProps> = ({
                 />
               </div>
 
+              {/* Dica de Interatividade Flutuante */}
+              <div className="absolute top-2 left-2 right-2 flex items-center justify-between pointer-events-none">
+                <span className="text-[10px] bg-black/60 backdrop-blur-xs text-white/90 px-2 py-0.5 rounded-md font-medium shadow-xs">
+                  🖱️ Arraste livremente • Roda do mouse / pinça para zoom
+                </span>
+                <span className="text-[10px] bg-blue-600/90 text-white font-mono px-2 py-0.5 rounded-md font-bold shadow-xs">
+                  {Math.round(zoom * 100)}%
+                </span>
+              </div>
+
+              {/* Botões Rápidos de Zoom Sobrepostos */}
+              <div className="absolute bottom-10 right-2 flex flex-col gap-1.5 z-10">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setZoom((prev) => Math.min(4.0, parseFloat((prev + 0.2).toFixed(2))));
+                  }}
+                  className="w-8 h-8 rounded-lg bg-black/75 hover:bg-blue-600 text-white flex items-center justify-center text-xs font-bold backdrop-blur-xs shadow-md transition-colors cursor-pointer"
+                  title="Aumentar Zoom (+)"
+                >
+                  <ZoomIn className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setZoom((prev) => Math.max(0.5, parseFloat((prev - 0.2).toFixed(2))));
+                  }}
+                  className="w-8 h-8 rounded-lg bg-black/75 hover:bg-blue-600 text-white flex items-center justify-center text-xs font-bold backdrop-blur-xs shadow-md transition-colors cursor-pointer"
+                  title="Diminuir Zoom (-)"
+                >
+                  <ZoomOut className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setZoom(1);
+                    setPanX(0);
+                    setPanY(0);
+                  }}
+                  className="w-8 h-8 rounded-lg bg-black/75 hover:bg-slate-700 text-white flex items-center justify-center text-xs font-bold backdrop-blur-xs shadow-md transition-colors cursor-pointer"
+                  title="Enquadrar Foto (100% / Centralizar)"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
               {/* Badges de Comparação de Peso */}
-              <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between px-2.5 py-1 bg-black/70 backdrop-blur-xs rounded-lg text-[10px] text-white">
+              <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between px-2.5 py-1 bg-black/70 backdrop-blur-xs rounded-lg text-[10px] text-white pointer-events-none">
                 <span>
                   {rawFileSizeKb > 0 ? `Original: ${rawFileSizeKb} KB` : 'Foto Carregada'}
                 </span>
@@ -483,19 +647,21 @@ export const PhotoField: React.FC<PhotoFieldProps> = ({
 
             {/* Controles de Posição e Zoom */}
             <div className="space-y-3 bg-slate-50 dark:bg-slate-800/50 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700/60 text-xs">
-              {/* Zoom Slider */}
+              {/* Zoom Slider com Botões Rápidos */}
               <div className="space-y-1">
                 <div className="flex justify-between font-semibold text-slate-700 dark:text-slate-300">
                   <span className="flex items-center gap-1.5">
                     <ZoomIn className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                    Zoom / Escala:
+                    Zoom / Escala Livre:
                   </span>
-                  <span className="font-mono text-blue-600 dark:text-blue-400">{Math.round(zoom * 100)}%</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-blue-600 dark:text-blue-400 font-bold">{Math.round(zoom * 100)}%</span>
+                  </div>
                 </div>
                 <input
                   type="range"
                   min="0.5"
-                  max="2.5"
+                  max="4.0"
                   step="0.05"
                   value={zoom}
                   onChange={(e) => setZoom(parseFloat(e.target.value))}
@@ -514,8 +680,8 @@ export const PhotoField: React.FC<PhotoFieldProps> = ({
                 </div>
                 <input
                   type="range"
-                  min="-60"
-                  max="60"
+                  min="-100"
+                  max="100"
                   step="1"
                   value={panX}
                   onChange={(e) => setPanX(parseInt(e.target.value, 10))}
@@ -534,8 +700,8 @@ export const PhotoField: React.FC<PhotoFieldProps> = ({
                 </div>
                 <input
                   type="range"
-                  min="-60"
-                  max="60"
+                  min="-100"
+                  max="100"
                   step="1"
                   value={panY}
                   onChange={(e) => setPanY(parseInt(e.target.value, 10))}

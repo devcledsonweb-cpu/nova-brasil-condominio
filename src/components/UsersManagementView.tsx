@@ -8,8 +8,9 @@ import {
   updateInFirestore,
   deleteFromFirestore,
   subscribeToFirestoreCollection,
+  getFirestoreCollection,
 } from '../services/firestoreSync.ts';
-
+import { registerOrSyncUserInFirebaseAuth } from '../services/firebaseAuthAdmin.ts';
 import {
   UserCheck,
   Plus,
@@ -36,9 +37,6 @@ import {
   Loader2,
   Database,
 } from 'lucide-react';
-import { initializeApp, getApps } from 'firebase/app';
-import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
-import firebaseConfig from '../../firebase-applet-config.json';
 
 interface UsersManagementViewProps {
   condominiums?: Condominium[];
@@ -79,61 +77,6 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
 
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  const [isSyncingAuth, setIsSyncingAuth] = useState(false);
-
-  // Registra usuário no Firebase Authentication para aparecer na aba "Users" do console
-  const registerInFirebaseAuth = async (userEmail: string, userPass: string) => {
-    try {
-      const secondaryName = 'SecondaryAdminAuthApp';
-      const existing = getApps().find((a) => a.name === secondaryName);
-      const app = existing || initializeApp(firebaseConfig, secondaryName);
-      const secondaryAuth = getAuth(app);
-      await createUserWithEmailAndPassword(secondaryAuth, userEmail.trim().toLowerCase(), userPass);
-      return true;
-    } catch (err: any) {
-      if (err.code === 'auth/email-already-in-use') {
-        return true;
-      }
-      console.warn(`Registro do usuário ${userEmail} no Firebase Auth:`, err.message || err.code);
-      return false;
-    }
-  };
-
-  // Sincroniza em massa todas as contas para o Firebase Authentication
-  const syncAllUsersToFirebaseAuth = async () => {
-    setIsSyncingAuth(true);
-    setSyncNotice('Sincronizando usuários no Firebase Authentication (nova-brasil-ac663)...');
-    try {
-      let count = 0;
-      const defaultAccounts = [
-        { email: 'contato@cledsonsales.com.br', pass: '123456' },
-        { email: 'cledson@novabrasil.com', pass: '123456' },
-        { email: 'administrativo@novabrasil.com', pass: '@nb32573515' },
-        { email: 'portaria@novabrasil.com', pass: 'portaria123' },
-      ];
-
-      for (const acc of defaultAccounts) {
-        await registerInFirebaseAuth(acc.email, acc.pass);
-        count++;
-      }
-
-      for (const u of usersList) {
-        if (u.email && u.email.includes('@')) {
-          const pass = (u as any).password || '@nb32573515';
-          await registerInFirebaseAuth(u.email, pass);
-          count++;
-        }
-      }
-
-      setSyncNotice(`✅ Sincronização concluída! ${count} conta(s) registrada(s) no Firebase Authentication. Agora você pode vê-las na aba "Users" do Firebase Console.`);
-    } catch (err: any) {
-      setSyncNotice(`Aviso na sincronização: ${err.message || 'Verifique as configurações do Firebase'}`);
-    } finally {
-      setIsSyncingAuth(false);
-      setTimeout(() => setSyncNotice(''), 9000);
-    }
-  };
-
   const suggestEmail = (agentName: string) => {
     if (!agentName || !agentName.trim()) return 'agente@novabrasil.com';
     const clean = agentName
@@ -151,29 +94,15 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
 
   const fetchUsers = async () => {
     try {
-      const headers = await getAuthHeaders();
-      let serverUsers: SystemUser[] = [];
-
+      // 1. Carrega usuários registrados no Firestore
+      let firestoreUsers: SystemUser[] = [];
       try {
-        const res = await fetch('/api/users', { headers });
-        if (res.ok) {
-          const text = await res.text();
-          if (text && text.trim()) {
-            serverUsers = JSON.parse(text);
-          }
-        }
-      } catch (netErr) {
-        console.warn('API /api/users inacessível no momento:', netErr);
+        firestoreUsers = await getFirestoreCollection<SystemUser>(COLLECTIONS.USERS);
+      } catch (err) {
+        console.warn('Aviso ao carregar usuários do Firestore:', err);
       }
 
-      // 1. Usuários salvos localmente
-      let localUsers: any[] = [];
-      try {
-        const saved = localStorage.getItem('novabrasil_users_list');
-        if (saved) localUsers = JSON.parse(saved);
-      } catch {}
-
-      // 2. Coletar todos os agentes disponíveis (prop ou localStorage)
+      // 2. Coletar agentes disponíveis (da prop oficial ou localStorage)
       let allAgents: SecurityAgent[] = agents.length > 0 ? agents : [];
       if (allAgents.length === 0) {
         try {
@@ -182,16 +111,18 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
         } catch {}
       }
 
-      const emailMap = new Set<string>();
-      const nameMap = new Set<string>();
       const combined: SystemUser[] = [];
+      const emailMap = new Set<string>();
+      const agentMatchedNames = new Set<string>();
 
-      // A. Adiciona usuários do servidor
-      for (const u of serverUsers) {
-        const cleanEmail = u.email.toLowerCase();
-        if (!emailMap.has(cleanEmail)) {
+      // A. Adiciona Gestores Gerais e Supervisores cadastrados
+      for (const u of firestoreUsers) {
+        const cleanEmail = (u.email || '').toLowerCase().trim();
+        if (!cleanEmail || emailMap.has(cleanEmail)) continue;
+
+        const isManager = u.role === 'sindico' || u.role === 'admin' || u.role === 'supervisor';
+        if (isManager) {
           emailMap.add(cleanEmail);
-          nameMap.add(u.name.toLowerCase().trim());
           combined.push({
             ...u,
             condoIds: Array.isArray(u.condoIds) && u.condoIds.length > 0 ? u.condoIds : (u.condoId ? [u.condoId] : []),
@@ -200,99 +131,72 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
         }
       }
 
-      // B. Adiciona usuários locais existentes
-      for (const u of localUsers) {
-        const cleanEmail = u.email.toLowerCase();
-        if (!emailMap.has(cleanEmail)) {
-          emailMap.add(cleanEmail);
-          nameMap.add(u.name.toLowerCase().trim());
-          const ids = Array.isArray(u.condoIds) && u.condoIds.length > 0 ? u.condoIds : (u.condoId ? [u.condoId] : []);
-          const names = u.condoNames || (u.condoName ? [u.condoName] : []);
-          combined.push({
-            id: u.id,
-            uid: u.uid || `local-${u.id}`,
-            name: u.name,
-            email: u.email,
-            role: u.role || 'portaria',
-            permissions: typeof u.permissions === 'string' ? u.permissions : JSON.stringify(u.permissions || []),
-            condoId: ids[0] || u.condoId || null,
-            condoIds: ids,
-            condoName: u.condoName || (names[0] ?? null),
-            condoNames: names,
-            isActive: u.isActive ?? true,
-            createdAt: u.createdAt || new Date().toISOString(),
-            phone: u.phone,
-            badgeNumber: u.badgeNumber,
-            assignedStation: u.assignedStation,
-            photoUrl: u.photoUrl,
-            isAgent: u.role === 'portaria',
-          });
-        }
-      }
-
-      // C. GARANTIR QUE 100% DOS AGENTES APAREÇAM NA GESTÃO DE USUÁRIOS
-      let newSyncedCount = 0;
+      // B. Unifica agentes da empresa: CADA agente da lista é representado exatamente UMA vez
       for (const ag of allAgents) {
         const cleanAgentName = ag.name.toLowerCase().trim();
         const candidateEmail = (ag.accessEmail || suggestEmail(ag.name)).toLowerCase().trim();
 
-        // Se o agente já foi adicionado pelo e-mail ou nome
-        const existingIdx = combined.findIndex(
-          (u) => u.email.toLowerCase() === candidateEmail || u.name.toLowerCase().trim() === cleanAgentName
+        // Procura se já existe correspondência no Firestore
+        const matchedInFirestore = firestoreUsers.find(
+          (u) =>
+            (u.email && u.email.toLowerCase().trim() === candidateEmail) ||
+            (u.name && u.name.toLowerCase().trim() === cleanAgentName) ||
+            u.id === ag.id ||
+            u.id === ag.id + 10000 ||
+            u.id === 20000 + ag.id
         );
 
-        if (existingIdx !== -1) {
-          // Enriquece com dados cadastrais do agente (telefone, crachá, foto, posto)
-          combined[existingIdx].phone = combined[existingIdx].phone || ag.phone;
-          combined[existingIdx].badgeNumber = combined[existingIdx].badgeNumber || ag.badgeNumber;
-          combined[existingIdx].assignedStation = combined[existingIdx].assignedStation || ag.assignedStation;
-          combined[existingIdx].photoUrl = combined[existingIdx].photoUrl || ag.photoUrl;
-          combined[existingIdx].isAgent = true;
-        } else {
-          // Cria o registro unificado do agente no quadro de usuários
-          const agentCondoIds = Array.isArray(ag.condoIds) && ag.condoIds.length > 0
-            ? ag.condoIds
-            : (ag.condoId ? [Number(ag.condoId)] : []);
-          const agentCondo = condominiums.find((c) => c.id === Number(ag.condoId));
-          const agentCondoNames = ag.condoNames || (agentCondo ? [agentCondo.name] : []);
+        const agentCondoIds = Array.isArray(ag.condoIds) && ag.condoIds.length > 0
+          ? ag.condoIds
+          : (ag.condoId ? [Number(ag.condoId)] : []);
+        const agentCondo = condominiums.find((c) => c.id === Number(ag.condoId));
+        const agentCondoNames = ag.condoNames || (agentCondo ? [agentCondo.name] : []);
 
-          const newAgentUser: SystemUser = {
-            id: 20000 + ag.id,
-            uid: `usr-agent-${ag.id}`,
-            name: ag.name,
-            email: candidateEmail,
-            role: 'portaria',
-            permissions: JSON.stringify(['portaria', 'ronda', 'materiais', 'ocorrencias']),
-            condoId: agentCondoIds[0] || null,
-            condoIds: agentCondoIds,
-            condoName: agentCondoNames[0] || ag.condoName || 'Posto Geral',
-            condoNames: agentCondoNames,
-            isActive: ag.status !== 'afastado',
-            createdAt: ag.admissionDate || ag.createdAt || new Date().toISOString(),
-            phone: ag.phone,
-            badgeNumber: ag.badgeNumber,
-            assignedStation: ag.assignedStation,
-            photoUrl: ag.photoUrl,
-            isAgent: true,
-          };
+        const unifiedAgentUser: SystemUser = {
+          id: matchedInFirestore?.id || ag.id,
+          uid: matchedInFirestore?.uid || `usr-agent-${ag.id}`,
+          name: ag.name,
+          email: matchedInFirestore?.email || candidateEmail,
+          role: 'portaria',
+          permissions: JSON.stringify(['portaria', 'ronda', 'materiais', 'ocorrencias']),
+          condoId: agentCondoIds[0] || null,
+          condoIds: agentCondoIds,
+          condoName: agentCondoNames[0] || ag.condoName || 'Posto Geral',
+          condoNames: agentCondoNames,
+          isActive: ag.status !== 'afastado',
+          createdAt: ag.admissionDate || ag.createdAt || new Date().toISOString(),
+          phone: ag.phone,
+          badgeNumber: ag.badgeNumber,
+          assignedStation: ag.assignedStation,
+          photoUrl: ag.photoUrl,
+          isAgent: true,
+        };
 
-          combined.push(newAgentUser);
-          emailMap.add(candidateEmail);
-          nameMap.add(cleanAgentName);
-          newSyncedCount++;
+        combined.push(unifiedAgentUser);
+        emailMap.add(unifiedAgentUser.email.toLowerCase());
+        agentMatchedNames.add(cleanAgentName);
+      }
+
+      // C. Usuários extras de portaria (ex: Portaria Central genérica portaria@novabrasil.com)
+      for (const u of firestoreUsers) {
+        const cleanEmail = (u.email || '').toLowerCase().trim();
+        const cleanName = (u.name || '').toLowerCase().trim();
+        if (cleanEmail && !emailMap.has(cleanEmail) && !agentMatchedNames.has(cleanName)) {
+          emailMap.add(cleanEmail);
+          combined.push({
+            ...u,
+            condoIds: Array.isArray(u.condoIds) && u.condoIds.length > 0 ? u.condoIds : (u.condoId ? [u.condoId] : []),
+            condoNames: u.condoNames || (u.condoName ? [u.condoName] : []),
+          });
         }
       }
 
-      // Persistir lista unificada para permitir login imediato de qualquer agente
+      // Salva a lista limpa e unificada no localStorage, eliminando registros duplicados
       try {
         localStorage.setItem('novabrasil_users_list', JSON.stringify(combined));
       } catch {}
 
       setUsersList(combined);
-      if (newSyncedCount > 0) {
-        setSyncNotice(`${newSyncedCount} agente(s) sincronizado(s) com sucesso na Gestão de Usuários.`);
-        setTimeout(() => setSyncNotice(''), 4000);
-      }
     } catch (err) {
       console.error('Erro ao buscar lista de usuários:', err);
     } finally {
@@ -458,9 +362,9 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
         console.warn('Aviso ao sincronizar usuário no Firestore:', fErr);
       }
 
-      // 2. Registra no Firebase Authentication para aparecer na aba "Users" do console
+      // 2. Registra automaticamente no Firebase Authentication para aparecer no console
       try {
-        await registerInFirebaseAuth(cleanEmail, cleanPassword);
+        await registerOrSyncUserInFirebaseAuth(cleanEmail, cleanPassword, name.trim());
       } catch (authErr) {
         console.warn('Aviso ao registrar usuário no Firebase Auth:', authErr);
       }
@@ -506,6 +410,9 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
       } catch (fErr) {
         console.warn('Aviso ao atualizar senha no Firestore:', fErr);
       }
+
+      // 2. Sincroniza senha no Firebase Auth
+      registerOrSyncUserInFirebaseAuth(resetModalUser.email, newPassword.trim(), resetModalUser.name).catch(() => {});
 
       try {
         const headers = await getAuthHeaders();
@@ -724,20 +631,6 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={syncAllUsersToFirebaseAuth}
-            disabled={isSyncingAuth}
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 text-xs font-semibold rounded-xl border border-amber-300 dark:border-amber-800 transition-colors cursor-pointer disabled:opacity-50"
-            title="Registrar todos os usuários no console do Firebase Authentication"
-          >
-            {isSyncingAuth ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <Shield className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-            )}
-            <span>{isSyncingAuth ? 'Registrando no Firebase...' : 'Sincronizar Firebase Auth'}</span>
-          </button>
-
           <button
             onClick={fetchUsers}
             className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-xl border border-slate-300 dark:border-slate-700 transition-colors cursor-pointer"
